@@ -213,6 +213,8 @@ public sealed record EtaSettings
             ? (DurationLimitHours > 0 ? DurationLimitHours : Math.Max(1, PracticalMaxVoyageHours))
             : DurationLimitHours;
 
+    public bool EffectiveOptimizeExpPerHour => EtaModel != EtaModel.PracticalLeveling && OptimizeExpPerHour;
+
     public static EtaSettings CreateDefault() => new()
     {
         BuildProfile =

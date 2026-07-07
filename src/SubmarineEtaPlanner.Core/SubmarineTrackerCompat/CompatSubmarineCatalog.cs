@@ -127,7 +127,7 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
 
         return candidates
             .OrderByDescending(c => mustInclude.Count > 0 && c.Route.Any(mustInclude.Contains))
-            .ThenByDescending(c => settings.OptimizeExpPerHour ? c.ExpPerHour : c.Exp)
+            .ThenByDescending(c => settings.EffectiveOptimizeExpPerHour ? c.ExpPerHour : c.Exp)
             .ThenBy(c => c.Duration)
             .ToArray();
     }

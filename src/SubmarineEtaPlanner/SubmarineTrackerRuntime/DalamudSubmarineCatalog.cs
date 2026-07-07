@@ -242,7 +242,7 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
         EtaSettings settings)
         => candidates
             .OrderByDescending(route => mustInclude.Count > 0 && route.Route.Any(mustInclude.Contains))
-            .ThenByDescending(route => settings.OptimizeExpPerHour ? route.ExpPerHour : route.Exp)
+            .ThenByDescending(route => settings.EffectiveOptimizeExpPerHour ? route.ExpPerHour : route.Exp)
             .ThenBy(route => route.Duration);
 
     private static bool IsTimedOut(DateTimeOffset? deadlineUtc)
@@ -763,7 +763,7 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
                 settings.EtaModel,
                 settings.EffectiveExpMode,
                 settings.EffectiveDurationLimitHours,
-                settings.OptimizeExpPerHour,
+                settings.EffectiveOptimizeExpPerHour,
                 CreateSetKey(unlockedPoints),
                 CreateSetKey(mustInclude));
 

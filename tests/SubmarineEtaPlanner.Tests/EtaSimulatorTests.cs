@@ -302,6 +302,48 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
+    public void PracticalModeOptimizesRouteExpInsteadOfExpPerHour()
+    {
+        var catalog = new MultiRouteCatalog(
+        [
+            new RouteCandidate([32u, 34u], 100, TimeSpan.FromHours(2), 50, [], EtaModel.PracticalLeveling, true),
+            new RouteCandidate([61u], 1_000, TimeSpan.FromHours(24), 41.7, [], EtaModel.PracticalLeveling, true),
+        ]);
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            EtaModel = EtaModel.PracticalLeveling,
+            OptimizeExpPerHour = true,
+        };
+        var state = new UnlockState([32, 34, 61], [32, 34, 61], [], []);
+
+        var route = selector.SelectNextRoute(CreateSub(rank: 75), state, catalog.ResolveBuild("SSUW", 75), settings, fleetMode: false);
+
+        Assert.Equal([61u], route.Route);
+    }
+
+    [Fact]
+    public void ExactModeCanStillOptimizeExpPerHour()
+    {
+        var catalog = new MultiRouteCatalog(
+        [
+            new RouteCandidate([32u, 34u], 100, TimeSpan.FromHours(2), 50, [], EtaModel.ExactRouteSearch, false),
+            new RouteCandidate([61u], 1_000, TimeSpan.FromHours(24), 41.7, [], EtaModel.ExactRouteSearch, false),
+        ]);
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            EtaModel = EtaModel.ExactRouteSearch,
+            OptimizeExpPerHour = true,
+        };
+        var state = new UnlockState([32, 34, 61], [32, 34, 61], [], []);
+
+        var route = selector.SelectNextRoute(CreateSub(rank: 75), state, catalog.ResolveBuild("SSUW", 75), settings, fleetMode: false);
+
+        Assert.Equal([32u, 34u], route.Route);
+    }
+
+    [Fact]
     public void PracticalOptimisticSimulationBatchesIdenticalVoyages()
     {
         var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 25, routeDuration: TimeSpan.FromHours(1)));
@@ -352,7 +394,7 @@ public sealed class EtaSimulatorTests
         var repoJson = File.ReadAllText(repoJsonPath);
 
         Assert.Contains("SubmarineEtaPlanner", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.2.5.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.2.6.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
@@ -484,6 +526,42 @@ public sealed class EtaSimulatorTests
 
             return (rank, rank >= targetRank ? 0 : total, rank >= targetRank ? 0u : 100u);
         }
+
+        public string PointName(uint point) => point.ToString();
+
+        public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints) => false;
+    }
+
+    private sealed class MultiRouteCatalog(IReadOnlyList<RouteCandidate> routes) : ISubmarineCatalog
+    {
+        public IReadOnlyList<UnlockRule> UnlockRules => [];
+
+        public SubmarineBuild ResolveBuild(string buildCode, int rank)
+            => new(buildCode, rank, 100, 100, 100, 999, 100);
+
+        public SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank)
+            => ResolveBuild("TEST", rank);
+
+        public IReadOnlyList<RouteCandidate> GetCandidateRoutes(
+            SubmarineBuild build,
+            IReadOnlySet<uint> unlockedPoints,
+            IReadOnlySet<uint> exploredPoints,
+            IReadOnlySet<uint> mustInclude,
+            EtaSettings settings,
+            DateTimeOffset? deadlineUtc = null)
+            => routes
+                .Where(route => mustInclude.Count == 0 || route.Route.Any(mustInclude.Contains))
+                .Where(route => settings.EffectiveDurationLimitHours <= 0 || route.Duration <= TimeSpan.FromHours(settings.EffectiveDurationLimitHours))
+                .OrderByDescending(route => settings.EffectiveOptimizeExpPerHour ? route.ExpPerHour : route.Exp)
+                .ThenBy(route => route.Duration)
+                .ToArray();
+
+        public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode) => 0;
+
+        public TimeSpan CalculateDuration(IReadOnlyList<uint> route, SubmarineBuild build) => TimeSpan.Zero;
+
+        public (int Rank, uint CurrentExp, uint NextLevelExp) ApplyExp(int rank, uint currentExp, uint gainedExp, int targetRank)
+            => (rank, currentExp, 100);
 
         public string PointName(uint point) => point.ToString();
 

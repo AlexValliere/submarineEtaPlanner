@@ -22,7 +22,7 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
                     requiredUnlockPoints,
                     settings,
                     deadlineUtc)
-                .OrderByDescending(c => settings.OptimizeExpPerHour ? c.ExpPerHour : c.Exp)
+                .OrderByDescending(c => settings.EffectiveOptimizeExpPerHour ? c.ExpPerHour : c.Exp)
                 .ThenBy(c => c.Duration)
                 .FirstOrDefault(c => c.Route.Any(requiredUnlockPoints.Contains));
 
@@ -38,7 +38,7 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
                 settings,
                 deadlineUtc)
             .Where(c => !fleetMode || !c.UnlockTargets.Any(unlockState.PendingUnlockPoints.Contains))
-            .OrderByDescending(c => settings.OptimizeExpPerHour ? c.ExpPerHour : c.Exp)
+            .OrderByDescending(c => settings.EffectiveOptimizeExpPerHour ? c.ExpPerHour : c.Exp)
             .ThenBy(c => c.Duration)
             .FirstOrDefault();
 

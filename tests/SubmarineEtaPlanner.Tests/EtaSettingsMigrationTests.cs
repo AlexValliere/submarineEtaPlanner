@@ -15,6 +15,7 @@ public sealed class EtaSettingsMigrationTests
         Assert.Equal(EtaModel.PracticalLeveling, settings.EtaModel);
         Assert.Equal(24, settings.PracticalMaxVoyageHours);
         Assert.Equal(TimeoutResultBehavior.KeepLastComplete, settings.TimeoutResultBehavior);
+        Assert.False(settings.EffectiveOptimizeExpPerHour);
     }
 
     [Fact]
@@ -39,6 +40,8 @@ public sealed class EtaSettingsMigrationTests
         Assert.Equal(EtaModel.PracticalLeveling, settings.EtaModel);
         Assert.Equal(24, settings.PracticalMaxVoyageHours);
         Assert.Equal(TimeoutResultBehavior.KeepLastComplete, settings.TimeoutResultBehavior);
+        Assert.False(settings.OptimizeExpPerHour);
+        Assert.False(settings.EffectiveOptimizeExpPerHour);
         Assert.Equal(120, settings.TargetRank);
         Assert.Equal("custom.db", settings.SubmarineTrackerDatabasePathOverride);
     }

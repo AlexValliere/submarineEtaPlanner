@@ -123,7 +123,7 @@ public sealed class SettingsWindow : Window
         }
 
         var optimizeExpPerHour = settings.OptimizeExpPerHour;
-        if (ImGui.Checkbox("Optimize EXP/hour", ref optimizeExpPerHour))
+        if (ImGui.Checkbox("Optimize EXP/hour (exact mode)", ref optimizeExpPerHour))
         {
             settings.OptimizeExpPerHour = optimizeExpPerHour;
             changed = true;
