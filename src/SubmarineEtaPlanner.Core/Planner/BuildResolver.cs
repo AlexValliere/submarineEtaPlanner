@@ -4,7 +4,11 @@ public sealed class BuildResolver(ISubmarineCatalog catalog)
 {
     public string GetBuildCodeForRank(int rank, EtaSettings settings)
     {
-        var step = settings.BuildProfile
+        var profile = settings.EtaModel == EtaModel.PracticalLeveling
+            ? EtaSettings.CreateDefault().BuildProfile
+            : settings.BuildProfile;
+
+        var step = profile
             .OrderBy(s => s.MinRank)
             .FirstOrDefault(s => s.Contains(rank));
 

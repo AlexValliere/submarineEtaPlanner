@@ -34,7 +34,7 @@ public sealed class EtaSimulatorTests
     public void FleetModeSharesUnlockState()
     {
         var simulator = CreateSimulator();
-        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet };
+        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet, EtaModel = EtaModel.ExactRouteSearch };
         settings.TargetRank = 22;
         var fc = CreateFc(Enumerable.Range(1, 15).Select(i => (uint)i).ToHashSet(), CreateSub(1, "A", 20), CreateSub(2, "B", 20));
 
@@ -48,7 +48,7 @@ public sealed class EtaSimulatorTests
     public void UnlockMilestonesAreStampedAtVoyageReturn()
     {
         var simulator = CreateSimulator();
-        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet };
+        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet, EtaModel = EtaModel.ExactRouteSearch };
         settings.TargetRank = 22;
         var fc = CreateFc(Enumerable.Range(1, 15).Select(i => (uint)i).ToHashSet(), CreateSub(1, "A", 20));
 
@@ -113,7 +113,7 @@ public sealed class EtaSimulatorTests
     {
         var catalog = new ScriptedCatalog();
         var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
-        var settings = EtaSettings.CreateDefault() with { RouteGoal = RouteGoal.UnlockEverythingThenLevel };
+        var settings = EtaSettings.CreateDefault() with { EtaModel = EtaModel.ExactRouteSearch, RouteGoal = RouteGoal.UnlockEverythingThenLevel };
         var state = new UnlockState([1], [1], [], []);
 
         var route = selector.SelectNextRoute(CreateSub(rank: 10), state, catalog.ResolveBuild("TEST", 10), settings, fleetMode: false);
@@ -131,7 +131,7 @@ public sealed class EtaSimulatorTests
             new UnlockRule(2, 3, 1, UnlocksSubSlot: true),
         ]);
         var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
-        var settings = EtaSettings.CreateDefault() with { RouteGoal = RouteGoal.UnlockSubSlotsThenLevel };
+        var settings = EtaSettings.CreateDefault() with { EtaModel = EtaModel.ExactRouteSearch, RouteGoal = RouteGoal.UnlockSubSlotsThenLevel };
         var state = new UnlockState([1], [1], [], []);
 
         var route = selector.SelectNextRoute(CreateSub(rank: 10), state, catalog.ResolveBuild("TEST", 10), settings, fleetMode: false);
@@ -148,6 +148,7 @@ public sealed class EtaSimulatorTests
         var settings = EtaSettings.CreateDefault() with
         {
             SimulationMode = SimulationMode.Fleet,
+            EtaModel = EtaModel.ExactRouteSearch,
             RouteGoal = RouteGoal.UnlockEverythingThenLevel,
             SimulationSafetyVoyageCapPerSubmarine = 4,
         };
@@ -168,6 +169,7 @@ public sealed class EtaSimulatorTests
         var settings = EtaSettings.CreateDefault() with
         {
             SimulationMode = SimulationMode.Fleet,
+            EtaModel = EtaModel.ExactRouteSearch,
             RouteGoal = RouteGoal.UnlockEverythingThenLevel,
             SimulationSafetyVoyageCapPerSubmarine = 4,
         };
@@ -244,12 +246,91 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
+    public void SafetyCapProducesIncompleteResultInsteadOfDone()
+    {
+        var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 100));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.OptimisticPerSub,
+            SimulationSafetyVoyageCapPerSubmarine = 1,
+        };
+        settings.TargetRank = 5;
+        var fc = CreateFc(CreateSub(rank: 1));
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var sub = Assert.Single(result.PerSubResults);
+
+        Assert.False(result.IsComplete);
+        Assert.False(sub.IsComplete);
+        Assert.True(sub.FinalRank < settings.TargetRank);
+        Assert.Contains("stopped", sub.IncompleteReason ?? string.Empty);
+    }
+
+    [Fact]
+    public void PracticalModeRejectsRoutesOverPracticalCap()
+    {
+        var catalog = new ScriptedCatalog(routeDuration: TimeSpan.FromHours(30));
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            EtaModel = EtaModel.PracticalLeveling,
+            PracticalMaxVoyageHours = 24,
+        };
+        var state = new UnlockState([99], [99], [], []);
+
+        var route = selector.SelectNextRoute(CreateSub(rank: 10), state, catalog.ResolveBuild("TEST", 10), settings, fleetMode: false);
+
+        Assert.Empty(route.Route);
+    }
+
+    [Fact]
+    public void ExactModePreservesUncappedRouteSearch()
+    {
+        var catalog = new ScriptedCatalog(routeDuration: TimeSpan.FromHours(30));
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            EtaModel = EtaModel.ExactRouteSearch,
+            DurationLimitHours = 0,
+        };
+        var state = new UnlockState([99], [99], [], []);
+
+        var route = selector.SelectNextRoute(CreateSub(rank: 10), state, catalog.ResolveBuild("TEST", 10), settings, fleetMode: false);
+
+        Assert.Equal([99u], route.Route);
+        Assert.False(route.DurationCapApplied);
+    }
+
+    [Fact]
+    public void PracticalOptimisticSimulationBatchesIdenticalVoyages()
+    {
+        var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 25, routeDuration: TimeSpan.FromHours(1)));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.OptimisticPerSub,
+            EtaModel = EtaModel.PracticalLeveling,
+        };
+        settings.TargetRank = 2;
+        var fc = CreateFc(new HashSet<uint>([99]), CreateSub(rank: 1) with { NextLevelExp = 100 });
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var sub = Assert.Single(result.PerSubResults);
+
+        Assert.True(sub.IsComplete);
+        Assert.Equal(4, sub.VoyageCount);
+        Assert.Single(sub.VoyagePreview);
+        Assert.Equal(TimeSpan.FromHours(4), sub.Remaining);
+        Assert.Contains("Batched 4", sub.VoyagePreview.Single().Warnings.Single());
+    }
+
+    [Fact]
     public void RepoJsonContainsExpectedDownloadLinks()
     {
         var repoJsonPath = FindRepoJson();
         var repoJson = File.ReadAllText(repoJsonPath);
 
         Assert.Contains("SubmarineEtaPlanner", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.2.4.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
@@ -308,10 +389,17 @@ public sealed class EtaSimulatorTests
     private sealed class ScriptedCatalog : ISubmarineCatalog
     {
         private readonly IReadOnlyList<UnlockRule> unlockRules;
+        private readonly uint routeExp;
+        private readonly TimeSpan routeDuration;
 
-        public ScriptedCatalog(IReadOnlyList<UnlockRule>? unlockRules = null)
+        public ScriptedCatalog(
+            IReadOnlyList<UnlockRule>? unlockRules = null,
+            uint routeExp = 100,
+            TimeSpan? routeDuration = null)
         {
             this.unlockRules = unlockRules ?? [new UnlockRule(1, 2, 1)];
+            this.routeExp = routeExp;
+            this.routeDuration = routeDuration ?? TimeSpan.FromHours(1);
         }
 
         public IReadOnlyList<UnlockRule> UnlockRules => this.unlockRules;
@@ -339,18 +427,29 @@ public sealed class EtaSimulatorTests
         {
             LastMustInclude = mustInclude.Order().ToArray();
             var route = LastMustInclude.Count > 0 ? [LastMustInclude[0]] : new uint[] { 99 };
+            var durationLimitHours = settings.EffectiveDurationLimitHours;
+            if (durationLimitHours > 0 && this.routeDuration > TimeSpan.FromHours(durationLimitHours))
+                return [];
+
             var unlockTargets = this.unlockRules
                 .Where(rule => route.Contains(rule.SourcePoint))
                 .Where(rule => rule.RequiredRank <= build.Rank)
                 .Select(rule => rule.UnlocksPoint)
                 .ToArray();
 
-            return [new RouteCandidate(route, 100, TimeSpan.FromHours(1), 100, unlockTargets)];
+            return [new RouteCandidate(
+                route,
+                this.routeExp,
+                this.routeDuration,
+                this.routeExp / Math.Max(this.routeDuration.TotalHours, 0.01),
+                unlockTargets,
+                settings.EtaModel,
+                durationLimitHours > 0)];
         }
 
-        public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode) => 100;
+        public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode) => this.routeExp;
 
-        public TimeSpan CalculateDuration(IReadOnlyList<uint> route, SubmarineBuild build) => TimeSpan.FromHours(1);
+        public TimeSpan CalculateDuration(IReadOnlyList<uint> route, SubmarineBuild build) => this.routeDuration;
 
         public (int Rank, uint CurrentExp, uint NextLevelExp) ApplyExp(int rank, uint currentExp, uint gainedExp, int targetRank)
         {

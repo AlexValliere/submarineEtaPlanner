@@ -45,7 +45,7 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
         if (fallback is not null)
             return ReservePendingUnlocks(fallback, unlockState, rank, fleetMode);
 
-        return new RouteCandidate([], 0, TimeSpan.Zero, 0, []);
+        return new RouteCandidate([], 0, TimeSpan.Zero, 0, [], settings.EtaModel, settings.EffectiveDurationLimitHours > 0);
     }
 
     private HashSet<uint> GetRequiredUnlockPoints(
@@ -54,7 +54,7 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
         int rank,
         bool fleetMode)
     {
-        IEnumerable<uint> candidates = settings.RouteGoal switch
+        IEnumerable<uint> candidates = settings.EffectiveRouteGoal switch
         {
             RouteGoal.UnlockSubSlotsThenLevel => GetSubSlotUnlockPathCandidates(unlockState.UnlockedPoints, rank),
             RouteGoal.UnlockEverythingThenLevel => unlockGraph.GetNextUnlockCandidates(

@@ -5,7 +5,7 @@
     "Punchline": "Estimate submarine ETAs to rank 114.",
     "Description": "Read-only ETA planner for tracked FC submarines using SubmarineTracker-compatible voyage, build, EXP, and unlock calculations.",
     "InternalName": "SubmarineEtaPlanner",
-    "AssemblyVersion": "0.2.3.0",
+    "AssemblyVersion": "0.2.4.0",
     "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,

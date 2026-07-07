@@ -103,10 +103,11 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
                 continue;
 
             var duration = CalculateDuration(route, build);
-            if (settings.DurationLimitHours > 0 && duration > TimeSpan.FromHours(settings.DurationLimitHours))
+            var durationLimitHours = settings.EffectiveDurationLimitHours;
+            if (durationLimitHours > 0 && duration > TimeSpan.FromHours(durationLimitHours))
                 continue;
 
-            var exp = CalculateExp(route, build, settings.ExpMode);
+            var exp = CalculateExp(route, build, settings.EffectiveExpMode);
             var expPerHour = duration.TotalHours <= 0 ? exp : exp / duration.TotalHours;
             var unlockTargets = UnlockRules
                 .Where(r => route.Contains(r.SourcePoint))
@@ -114,7 +115,14 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
                 .Select(r => r.UnlocksPoint)
                 .ToArray();
 
-            candidates.Add(new RouteCandidate(route, exp, duration, expPerHour, unlockTargets));
+            candidates.Add(new RouteCandidate(
+                route,
+                exp,
+                duration,
+                expPerHour,
+                unlockTargets,
+                settings.EtaModel,
+                durationLimitHours > 0));
         }
 
         return candidates

@@ -21,6 +21,18 @@ public sealed class SettingsWindow : Window
         "Unlock everything then level",
     ];
 
+    private static readonly string[] EtaModelLabels =
+    [
+        "Practical leveling",
+        "Exact route search",
+    ];
+
+    private static readonly string[] TimeoutBehaviorLabels =
+    [
+        "Keep last complete",
+        "Show partial",
+    ];
+
     private readonly Configuration configuration;
     private readonly Action saveConfiguration;
     private readonly Action settingsChanged;
@@ -46,6 +58,8 @@ public sealed class SettingsWindow : Window
 
         DrawSectionHeader("Simulation");
 
+        DrawEtaModel(settings, ref changed);
+
         var target = settings.TargetRank;
         ImGui.SetNextItemWidth(120);
         if (ImGui.InputInt("Target rank", ref target))
@@ -67,6 +81,14 @@ public sealed class SettingsWindow : Window
         if (ImGui.InputInt("Duration limit hours", ref durationLimit))
         {
             settings.DurationLimitHours = Math.Max(0, durationLimit);
+            changed = true;
+        }
+
+        var practicalLimit = settings.PracticalMaxVoyageHours;
+        ImGui.SetNextItemWidth(120);
+        if (ImGui.InputInt("Practical max voyage hours", ref practicalLimit))
+        {
+            settings.PracticalMaxVoyageHours = Math.Clamp(practicalLimit, 1, 168);
             changed = true;
         }
 
@@ -108,6 +130,7 @@ public sealed class SettingsWindow : Window
         }
 
         DrawRouteGoal(settings, ref changed);
+        DrawTimeoutBehavior(settings, ref changed);
 
         var prioritizeSlots = settings.PrioritizeSubSlots;
         if (ImGui.Checkbox("Prioritize sub slot unlocks", ref prioritizeSlots))
@@ -120,6 +143,13 @@ public sealed class SettingsWindow : Window
         if (ImGui.Checkbox("Show post-114 MROJZ readiness", ref showReadiness))
         {
             settings.ShowPost114MrojzReadiness = showReadiness;
+            changed = true;
+        }
+
+        var showDiagnostics = settings.ShowRouteDiagnostics;
+        if (ImGui.Checkbox("Show route diagnostics", ref showDiagnostics))
+        {
+            settings.ShowRouteDiagnostics = showDiagnostics;
             changed = true;
         }
 
@@ -143,6 +173,29 @@ public sealed class SettingsWindow : Window
             this.saveConfiguration();
             this.settingsChanged();
         }
+    }
+
+    private static void DrawEtaModel(EtaSettings settings, ref bool changed)
+    {
+        var current = (int)settings.EtaModel;
+        var label = EtaModelLabels[Math.Clamp(current, 0, EtaModelLabels.Length - 1)];
+        if (!ImGui.BeginCombo("ETA model", label))
+            return;
+
+        for (var i = 0; i < EtaModelLabels.Length; i++)
+        {
+            var selected = i == current;
+            if (ImGui.Selectable(EtaModelLabels[i], selected))
+            {
+                settings.EtaModel = (EtaModel)i;
+                changed = true;
+            }
+
+            if (selected)
+                ImGui.SetItemDefaultFocus();
+        }
+
+        ImGui.EndCombo();
     }
 
     private static void DrawRouteGoal(EtaSettings settings, ref bool changed)
@@ -181,6 +234,29 @@ public sealed class SettingsWindow : Window
             if (ImGui.Selectable(UnknownVoyageLabels[i], selected))
             {
                 settings.UnknownCurrentVoyagePolicy = (UnknownCurrentVoyagePolicy)i;
+                changed = true;
+            }
+
+            if (selected)
+                ImGui.SetItemDefaultFocus();
+        }
+
+        ImGui.EndCombo();
+    }
+
+    private static void DrawTimeoutBehavior(EtaSettings settings, ref bool changed)
+    {
+        var current = (int)settings.TimeoutResultBehavior;
+        var label = TimeoutBehaviorLabels[Math.Clamp(current, 0, TimeoutBehaviorLabels.Length - 1)];
+        if (!ImGui.BeginCombo("Timeout result", label))
+            return;
+
+        for (var i = 0; i < TimeoutBehaviorLabels.Length; i++)
+        {
+            var selected = i == current;
+            if (ImGui.Selectable(TimeoutBehaviorLabels[i], selected))
+            {
+                settings.TimeoutResultBehavior = (TimeoutResultBehavior)i;
                 changed = true;
             }
 

@@ -34,6 +34,8 @@ public sealed record RouteCandidate(
     uint Exp,
     TimeSpan Duration,
     double ExpPerHour,
-    IReadOnlyList<uint> UnlockTargets);
+    IReadOnlyList<uint> UnlockTargets,
+    EtaModel EtaModel,
+    bool DurationCapApplied);
 
 public sealed record UnlockRule(uint SourcePoint, uint UnlocksPoint, int RequiredRank, bool UnlocksSubSlot = false);

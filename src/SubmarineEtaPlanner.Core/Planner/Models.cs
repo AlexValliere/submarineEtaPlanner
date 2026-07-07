@@ -26,6 +26,25 @@ public enum RouteGoal
     UnlockEverythingThenLevel,
 }
 
+public enum EtaModel
+{
+    PracticalLeveling,
+    ExactRouteSearch,
+}
+
+public enum CalculationStatus
+{
+    Complete,
+    Partial,
+    Failed,
+}
+
+public enum TimeoutResultBehavior
+{
+    KeepLastComplete,
+    ShowPartial,
+}
+
 public sealed record FcState(
     byte[] FcId,
     string FreeCompanyTag,
@@ -99,7 +118,11 @@ public sealed record VoyagePlan(
     uint ExpBefore,
     uint ExpAfter,
     IReadOnlyList<uint> UnlocksApplied,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    TimeSpan Duration,
+    double ExpPerHour,
+    EtaModel EtaModel,
+    bool DurationCapApplied);
 
 public sealed record PerSubEtaResult(
     long SubmarineId,
@@ -114,7 +137,12 @@ public sealed record PerSubEtaResult(
     IReadOnlyList<VoyagePlan> VoyagePreview,
     IReadOnlyList<UnlockMilestone> UnlockMilestones,
     IReadOnlyList<string> Warnings,
-    bool PostTargetFarmingReady);
+    bool PostTargetFarmingReady,
+    CalculationStatus Status,
+    string? IncompleteReason)
+{
+    public bool IsComplete => Status == CalculationStatus.Complete;
+}
 
 public sealed record EtaResult(
     byte[] FcId,
@@ -127,7 +155,12 @@ public sealed record EtaResult(
     int VoyageCount,
     IReadOnlyList<VoyagePlan> PlannedRoutes,
     IReadOnlyList<UnlockMilestone> UnlockMilestones,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    CalculationStatus Status,
+    string? IncompleteReason)
+{
+    public bool IsComplete => Status == CalculationStatus.Complete;
+}
 
 public sealed record EtaSettings
 {
@@ -147,6 +180,14 @@ public sealed record EtaSettings
 
     public int DurationLimitHours { get; set; } = 0;
 
+    public EtaModel EtaModel { get; set; } = EtaModel.PracticalLeveling;
+
+    public int PracticalMaxVoyageHours { get; set; } = 24;
+
+    public TimeoutResultBehavior TimeoutResultBehavior { get; set; } = TimeoutResultBehavior.KeepLastComplete;
+
+    public bool ShowRouteDiagnostics { get; set; } = true;
+
     public bool OptimizeExpPerHour { get; set; } = true;
 
     public UnknownCurrentVoyagePolicy UnknownCurrentVoyagePolicy { get; set; } = UnknownCurrentVoyagePolicy.WarnAndIgnore;
@@ -162,6 +203,15 @@ public sealed record EtaSettings
     public int SimulationSafetyVoyageCapPerSubmarine { get; set; } = 500;
 
     public int CalculationTimeLimitSeconds { get; set; } = 20;
+
+    public ExpMode EffectiveExpMode => EtaModel == EtaModel.PracticalLeveling ? ExpMode.Average : ExpMode;
+
+    public RouteGoal EffectiveRouteGoal => EtaModel == EtaModel.PracticalLeveling ? RouteGoal.FastestLevelingOnly : RouteGoal;
+
+    public int EffectiveDurationLimitHours =>
+        EtaModel == EtaModel.PracticalLeveling
+            ? (DurationLimitHours > 0 ? DurationLimitHours : Math.Max(1, PracticalMaxVoyageHours))
+            : DurationLimitHours;
 
     public static EtaSettings CreateDefault() => new()
     {

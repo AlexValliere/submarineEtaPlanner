@@ -12,16 +12,22 @@ public sealed class EtaSettingsMigrationTests
 
         Assert.Equal(ExpMode.Average, settings.ExpMode);
         Assert.Equal(RouteGoal.FastestLevelingOnly, settings.RouteGoal);
+        Assert.Equal(EtaModel.PracticalLeveling, settings.EtaModel);
+        Assert.Equal(24, settings.PracticalMaxVoyageHours);
+        Assert.Equal(TimeoutResultBehavior.KeepLastComplete, settings.TimeoutResultBehavior);
     }
 
     [Fact]
-    public void VersionTwoMigrationDefaultsExistingConfigsToRealisticEtaSettings()
+    public void VersionThreeMigrationDefaultsExistingConfigsToPracticalEtaSettings()
     {
         var version = 1;
         var settings = EtaSettings.CreateDefault();
         settings.TargetRank = 120;
         settings.ExpMode = ExpMode.Guaranteed;
         settings.RouteGoal = RouteGoal.UnlockEverythingThenLevel;
+        settings.EtaModel = EtaModel.ExactRouteSearch;
+        settings.PracticalMaxVoyageHours = 0;
+        settings.TimeoutResultBehavior = TimeoutResultBehavior.ShowPartial;
         settings.SubmarineTrackerDatabasePathOverride = "custom.db";
 
         var changed = EtaSettingsMigration.Migrate(settings, ref version);
@@ -30,6 +36,9 @@ public sealed class EtaSettingsMigrationTests
         Assert.Equal(EtaSettingsMigration.CurrentVersion, version);
         Assert.Equal(ExpMode.Average, settings.ExpMode);
         Assert.Equal(RouteGoal.FastestLevelingOnly, settings.RouteGoal);
+        Assert.Equal(EtaModel.PracticalLeveling, settings.EtaModel);
+        Assert.Equal(24, settings.PracticalMaxVoyageHours);
+        Assert.Equal(TimeoutResultBehavior.KeepLastComplete, settings.TimeoutResultBehavior);
         Assert.Equal(120, settings.TargetRank);
         Assert.Equal("custom.db", settings.SubmarineTrackerDatabasePathOverride);
     }

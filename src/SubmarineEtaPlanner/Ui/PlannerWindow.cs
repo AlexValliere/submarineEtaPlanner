@@ -14,6 +14,18 @@ public sealed class PlannerWindow : Window
         "Unlock everything then level",
     ];
 
+    private static readonly string[] EtaModelLabels =
+    [
+        "Practical leveling",
+        "Exact route search",
+    ];
+
+    private static readonly string[] TimeoutBehaviorLabels =
+    [
+        "Keep last complete",
+        "Show partial",
+    ];
+
     private readonly Configuration configuration;
     private readonly Action saveConfiguration;
     private readonly EtaPlannerService plannerService;
@@ -45,9 +57,14 @@ public sealed class PlannerWindow : Window
 
     public void InvalidateSnapshot()
     {
-        this.snapshot = null;
         if (IsOpen && this.refreshTask is { IsCompleted: false })
+        {
             this.refreshPending = true;
+            return;
+        }
+
+        if (IsOpen)
+            QueueRefresh();
     }
 
     public override void Draw()
@@ -77,9 +94,11 @@ public sealed class PlannerWindow : Window
         if (currentSnapshot is null)
             return;
 
-        if (currentSnapshot.Warnings.Count > 0)
+        if (currentSnapshot.Warnings.Count > 0 || !currentSnapshot.IsComplete)
         {
             DrawSectionHeader("Warnings");
+            if (!currentSnapshot.IsComplete && currentSnapshot.IncompleteReason is not null)
+                DrawBulletText(currentSnapshot.IncompleteReason);
             foreach (var warning in currentSnapshot.Warnings)
                 DrawBulletText(warning);
         }
@@ -135,6 +154,8 @@ public sealed class PlannerWindow : Window
 
     private void DrawSettings()
     {
+        DrawEtaModel();
+
         var delay = this.configuration.Settings.CollectionDelayMinutes;
         if (ImGui.InputInt("Collection delay minutes", ref delay))
         {
@@ -151,6 +172,14 @@ public sealed class PlannerWindow : Window
             InvalidateAndQueueRefresh();
         }
 
+        var practicalLimit = this.configuration.Settings.PracticalMaxVoyageHours;
+        if (ImGui.InputInt("Practical max voyage hours", ref practicalLimit))
+        {
+            this.configuration.Settings.PracticalMaxVoyageHours = Math.Clamp(practicalLimit, 1, 168);
+            this.saveConfiguration();
+            InvalidateAndQueueRefresh();
+        }
+
         var timeLimit = this.configuration.Settings.CalculationTimeLimitSeconds;
         if (ImGui.InputInt("Calculation time limit seconds", ref timeLimit))
         {
@@ -159,6 +188,7 @@ public sealed class PlannerWindow : Window
             InvalidateAndQueueRefresh();
         }
 
+        DrawTimeoutBehavior();
         DrawRouteGoal();
 
         var prioritizeSlots = this.configuration.Settings.PrioritizeSubSlots;
@@ -167,6 +197,13 @@ public sealed class PlannerWindow : Window
             this.configuration.Settings.PrioritizeSubSlots = prioritizeSlots;
             this.saveConfiguration();
             InvalidateAndQueueRefresh();
+        }
+
+        var showDiagnostics = this.configuration.Settings.ShowRouteDiagnostics;
+        if (ImGui.Checkbox("Show route diagnostics", ref showDiagnostics))
+        {
+            this.configuration.Settings.ShowRouteDiagnostics = showDiagnostics;
+            this.saveConfiguration();
         }
 
         var showReadiness = this.configuration.Settings.ShowPost114MrojzReadiness;
@@ -187,7 +224,55 @@ public sealed class PlannerWindow : Window
         }
 
         ImGui.TextUnformatted("Build profile: 1-14 SSSS, 15-24 SSUS, 25-113 SSUW, 114+ WSCC.");
+        ImGui.TextUnformatted("Practical leveling uses Average EXP, fastest leveling, and the default build profile.");
         ImGui.TextUnformatted("Estimator only. No deployment, collection, UI clicking, or automation is performed.");
+    }
+
+    private void DrawEtaModel()
+    {
+        var current = (int)this.configuration.Settings.EtaModel;
+        var label = EtaModelLabels[Math.Clamp(current, 0, EtaModelLabels.Length - 1)];
+        if (!ImGui.BeginCombo("ETA model", label))
+            return;
+
+        for (var i = 0; i < EtaModelLabels.Length; i++)
+        {
+            var selected = i == current;
+            if (ImGui.Selectable(EtaModelLabels[i], selected))
+            {
+                this.configuration.Settings.EtaModel = (EtaModel)i;
+                this.saveConfiguration();
+                InvalidateAndQueueRefresh();
+            }
+
+            if (selected)
+                ImGui.SetItemDefaultFocus();
+        }
+
+        ImGui.EndCombo();
+    }
+
+    private void DrawTimeoutBehavior()
+    {
+        var current = (int)this.configuration.Settings.TimeoutResultBehavior;
+        var label = TimeoutBehaviorLabels[Math.Clamp(current, 0, TimeoutBehaviorLabels.Length - 1)];
+        if (!ImGui.BeginCombo("Timeout result", label))
+            return;
+
+        for (var i = 0; i < TimeoutBehaviorLabels.Length; i++)
+        {
+            var selected = i == current;
+            if (ImGui.Selectable(TimeoutBehaviorLabels[i], selected))
+            {
+                this.configuration.Settings.TimeoutResultBehavior = (TimeoutResultBehavior)i;
+                this.saveConfiguration();
+            }
+
+            if (selected)
+                ImGui.SetItemDefaultFocus();
+        }
+
+        ImGui.EndCombo();
     }
 
     private void DrawRouteGoal()
@@ -216,8 +301,16 @@ public sealed class PlannerWindow : Window
 
     private void DrawFcResult(EtaResult result)
     {
-        if (!ImGui.CollapsingHeader($"{result.FcDisplayName} - done {FormatRelative(result.FcCompletionAtUtc, result.GeneratedAtUtc)}###fc-{Convert.ToHexString(result.FcId)}", ImGuiTreeNodeFlags.DefaultOpen))
+        var statusText = result.IsComplete
+            ? $"done {FormatRelative(result.FcCompletionAtUtc, result.GeneratedAtUtc)}"
+            : result.IncompleteReason?.Contains("time limit", StringComparison.OrdinalIgnoreCase) == true
+                ? "refresh timed out"
+                : "incomplete";
+        if (!ImGui.CollapsingHeader($"{result.FcDisplayName} - {statusText}###fc-{Convert.ToHexString(result.FcId)}", ImGuiTreeNodeFlags.DefaultOpen))
             return;
+
+        if (!result.IsComplete && result.IncompleteReason is not null)
+            ImGui.TextColored(new System.Numerics.Vector4(1f, 0.65f, 0.25f, 1f), result.IncompleteReason);
 
         if (!ImGui.BeginTable($"table-{Convert.ToHexString(result.FcId)}", 8, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))
             return;
@@ -250,14 +343,14 @@ public sealed class PlannerWindow : Window
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(sub.PostTargetFarmingReady ? "WSCC/MROJZ" : "-");
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(sub.Warnings.Count.ToString());
+            ImGui.TextUnformatted((sub.Warnings.Count + (sub.IsComplete ? 0 : 1)).ToString());
 
             if (open)
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
                 ImGui.TableSetColumnIndex(0);
-                DrawSubDetails(sub);
+                DrawSubDetails(sub, this.configuration.Settings.ShowRouteDiagnostics);
                 ImGui.TreePop();
             }
         }
@@ -265,9 +358,12 @@ public sealed class PlannerWindow : Window
         ImGui.EndTable();
     }
 
-    private static void DrawSubDetails(PerSubEtaResult sub)
+    private static void DrawSubDetails(PerSubEtaResult sub, bool showDiagnostics)
     {
         ImGui.Indent();
+        if (!sub.IsComplete && sub.IncompleteReason is not null)
+            ImGui.TextColored(new System.Numerics.Vector4(1f, 0.65f, 0.25f, 1f), sub.IncompleteReason);
+
         if (sub.Warnings.Count > 0)
         {
             ImGui.TextUnformatted("Warnings");
@@ -282,7 +378,8 @@ public sealed class PlannerWindow : Window
                 DrawBulletText($"{milestone.SourcePoint} unlocked {milestone.UnlockedPoint} at {milestone.ReturnAtUtc.LocalDateTime:g}");
         }
 
-        if (ImGui.BeginTable($"preview-{sub.SubmarineId}", 6, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+        var columnCount = showDiagnostics ? 8 : 6;
+        if (ImGui.BeginTable($"preview-{sub.SubmarineId}", columnCount, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
         {
             ImGui.TableSetupColumn("#");
             ImGui.TableSetupColumn("Return");
@@ -290,6 +387,11 @@ public sealed class PlannerWindow : Window
             ImGui.TableSetupColumn("Route");
             ImGui.TableSetupColumn("EXP");
             ImGui.TableSetupColumn("Rank");
+            if (showDiagnostics)
+            {
+                ImGui.TableSetupColumn("Duration");
+                ImGui.TableSetupColumn("EXP/h");
+            }
             ImGui.TableHeadersRow();
 
             for (var i = 0; i < sub.VoyagePreview.Count; i++)
@@ -308,6 +410,13 @@ public sealed class PlannerWindow : Window
                 ImGui.TextUnformatted(plan.ExpGain.ToString("N0"));
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted($"{plan.RankBefore}->{plan.RankAfter}");
+                if (showDiagnostics)
+                {
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted($"{(int)plan.Duration.TotalHours}h {plan.Duration.Minutes}m");
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(plan.ExpPerHour.ToString("N0"));
+                }
             }
 
             ImGui.EndTable();
@@ -318,7 +427,6 @@ public sealed class PlannerWindow : Window
 
     private void InvalidateAndQueueRefresh()
     {
-        this.snapshot = null;
         QueueRefresh();
     }
 
@@ -371,12 +479,21 @@ public sealed class PlannerWindow : Window
         try
         {
             this.lastError = string.Empty;
-            this.snapshot = task.GetAwaiter().GetResult();
+            var result = task.GetAwaiter().GetResult();
+            if (!result.IsComplete &&
+                this.configuration.Settings.TimeoutResultBehavior == TimeoutResultBehavior.KeepLastComplete &&
+                this.snapshot is { IsComplete: true })
+            {
+                this.lastError = result.IncompleteReason ?? "Refresh returned partial results; keeping the last complete table.";
+                return;
+            }
+
+            this.snapshot = result;
         }
         catch (Exception ex)
         {
             this.lastError = ex.Message;
-            this.snapshot = new EtaPlannerSnapshot(DateTimeOffset.UtcNow, [], [], [ex.Message]);
+            this.snapshot = new EtaPlannerSnapshot(DateTimeOffset.UtcNow, [], [], [ex.Message], CalculationStatus.Failed, ex.Message);
         }
 
         if (this.refreshPending && IsOpen)
@@ -395,6 +512,10 @@ public sealed class PlannerWindow : Window
         PrioritizeSubSlots = settings.PrioritizeSubSlots,
         RouteGoal = settings.RouteGoal,
         DurationLimitHours = settings.DurationLimitHours,
+        EtaModel = settings.EtaModel,
+        PracticalMaxVoyageHours = settings.PracticalMaxVoyageHours,
+        TimeoutResultBehavior = settings.TimeoutResultBehavior,
+        ShowRouteDiagnostics = settings.ShowRouteDiagnostics,
         OptimizeExpPerHour = settings.OptimizeExpPerHour,
         UnknownCurrentVoyagePolicy = settings.UnknownCurrentVoyagePolicy,
         ManualCurrentRouteOverrides = settings.ManualCurrentRouteOverrides
