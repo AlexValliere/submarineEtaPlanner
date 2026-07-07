@@ -7,6 +7,13 @@ namespace SubmarineEtaPlanner.Ui;
 
 public sealed class PlannerWindow : Window
 {
+    private static readonly string[] RouteGoalLabels =
+    [
+        "Fastest leveling only",
+        "Unlock sub slots then level",
+        "Unlock everything then level",
+    ];
+
     private readonly Configuration configuration;
     private readonly Action saveConfiguration;
     private readonly EtaPlannerService plannerService;
@@ -152,6 +159,8 @@ public sealed class PlannerWindow : Window
             InvalidateAndQueueRefresh();
         }
 
+        DrawRouteGoal();
+
         var prioritizeSlots = this.configuration.Settings.PrioritizeSubSlots;
         if (ImGui.Checkbox("Prioritize sub slot unlocks", ref prioritizeSlots))
         {
@@ -179,6 +188,30 @@ public sealed class PlannerWindow : Window
 
         ImGui.TextUnformatted("Build profile: 1-14 SSSS, 15-24 SSUS, 25-113 SSUW, 114+ WSCC.");
         ImGui.TextUnformatted("Estimator only. No deployment, collection, UI clicking, or automation is performed.");
+    }
+
+    private void DrawRouteGoal()
+    {
+        var current = (int)this.configuration.Settings.RouteGoal;
+        var label = RouteGoalLabels[Math.Clamp(current, 0, RouteGoalLabels.Length - 1)];
+        if (!ImGui.BeginCombo("Route goal", label))
+            return;
+
+        for (var i = 0; i < RouteGoalLabels.Length; i++)
+        {
+            var selected = i == current;
+            if (ImGui.Selectable(RouteGoalLabels[i], selected))
+            {
+                this.configuration.Settings.RouteGoal = (RouteGoal)i;
+                this.saveConfiguration();
+                InvalidateAndQueueRefresh();
+            }
+
+            if (selected)
+                ImGui.SetItemDefaultFocus();
+        }
+
+        ImGui.EndCombo();
     }
 
     private void DrawFcResult(EtaResult result)
@@ -360,6 +393,7 @@ public sealed class PlannerWindow : Window
             .Select(step => new BuildProfileStep(step.MinRank, step.MaxRank, step.BuildCode))
             .ToList(),
         PrioritizeSubSlots = settings.PrioritizeSubSlots,
+        RouteGoal = settings.RouteGoal,
         DurationLimitHours = settings.DurationLimitHours,
         OptimizeExpPerHour = settings.OptimizeExpPerHour,
         UnknownCurrentVoyagePolicy = settings.UnknownCurrentVoyagePolicy,

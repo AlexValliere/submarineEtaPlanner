@@ -70,16 +70,35 @@ public sealed class EtaSimulator(
             if (finished.Contains(submarineId))
                 continue;
 
-            if (!mutable.Source.CurrentVoyageKnown && mutable.Source.ReturnAtUtc > now && perSubPlans[submarineId].Count == 0)
+            if (!mutable.CurrentVoyageApplied && !mutable.Source.CurrentVoyageKnown && mutable.Source.ReturnAtUtc > now)
             {
                 var warning = $"Current voyage route is unknown for {mutable.Source.Name}.";
                 warnings.Add(warning);
                 perSubWarnings[submarineId].Add(warning);
+                mutable.CurrentVoyageApplied = true;
                 if (settings.UnknownCurrentVoyagePolicy == UnknownCurrentVoyagePolicy.BlockSimulation)
                 {
                     finished.Add(submarineId);
                     continue;
                 }
+            }
+
+            if (!mutable.CurrentVoyageApplied)
+            {
+                var currentVoyage = ApplyCurrentVoyageIfKnown(
+                    mutable.Source,
+                    unlockState,
+                    settings,
+                    now,
+                    mutable.Rank,
+                    mutable.CurrentExp,
+                    mutable.NextLevelExp,
+                    mutable.NextAvailableAt);
+                mutable.Rank = currentVoyage.Rank;
+                mutable.CurrentExp = currentVoyage.CurrentExp;
+                mutable.NextLevelExp = currentVoyage.NextLevelExp;
+                mutable.NextAvailableAt = currentVoyage.NextAvailableAt;
+                mutable.CurrentVoyageApplied = true;
             }
 
             if (mutable.Rank >= settings.TargetRank)
@@ -98,7 +117,13 @@ public sealed class EtaSimulator(
             }
 
             var build = buildResolver.ResolveBuildForRank(mutable.Rank, settings);
-            var route = routeSelector.SelectNextRoute(mutable.Source, unlockState, build, settings, fleetMode: true, deadlineUtc);
+            var currentSub = mutable.Source with
+            {
+                Rank = mutable.Rank,
+                CurrentExp = mutable.CurrentExp,
+                NextLevelExp = mutable.NextLevelExp,
+            };
+            var route = routeSelector.SelectNextRoute(currentSub, unlockState, build, settings, fleetMode: true, deadlineUtc);
             if (route.Route.Count == 0 || route.Exp == 0)
             {
                 var warning = $"No valid route found for {mutable.Source.Name}; ETA may be incomplete.";
@@ -146,8 +171,10 @@ public sealed class EtaSimulator(
         var results = states.Values.Select(state =>
         {
             var subPlans = perSubPlans[state.Source.SubmarineId];
-            var etaAt = subPlans.LastOrDefault()?.ReturnAtUtc ?? GetStartingAvailableTime(state.Source, settings, now);
-            var build = buildResolver.GetBuildCodeForRank(Math.Max(state.Rank, settings.TargetRank), settings);
+            var firstPlan = subPlans.FirstOrDefault();
+            var lastPlan = subPlans.LastOrDefault();
+            var etaAt = lastPlan?.ReturnAtUtc ?? GetStartingAvailableTime(state.Source, settings, now);
+            var build = firstPlan?.BuildCode ?? buildResolver.GetBuildCodeForRank(state.Source.Rank, settings);
             return new PerSubEtaResult(
                 state.Source.SubmarineId,
                 state.Source.Name,
@@ -157,7 +184,7 @@ public sealed class EtaSimulator(
                 etaAt - now,
                 subPlans.Count,
                 build,
-                subPlans.LastOrDefault()?.Route ?? [],
+                firstPlan?.Route ?? [],
                 subPlans.Take(settings.MaxPreviewVoyagesPerSubmarine).ToArray(),
                 unlockState.UnlockMilestones.Where(m => m.SubmarineId == state.Source.SubmarineId).ToArray(),
                 perSubWarnings[state.Source.SubmarineId],
@@ -206,6 +233,20 @@ public sealed class EtaSimulator(
             }
         }
 
+        var appliedCurrentVoyage = ApplyCurrentVoyageIfKnown(
+            sub,
+            unlockState,
+            settings,
+            now,
+            rank,
+            currentExp,
+            nextLevelExp,
+            nextAvailable);
+        rank = appliedCurrentVoyage.Rank;
+        currentExp = appliedCurrentVoyage.CurrentExp;
+        nextLevelExp = appliedCurrentVoyage.NextLevelExp;
+        nextAvailable = appliedCurrentVoyage.NextAvailableAt;
+
         while (rank < settings.TargetRank && plans.Count < settings.SimulationSafetyVoyageCapPerSubmarine)
         {
             if (IsTimedOut(deadlineUtc))
@@ -253,20 +294,50 @@ public sealed class EtaSimulator(
         if (plans.Count >= settings.SimulationSafetyVoyageCapPerSubmarine)
             warnings.Add($"Simulation stopped for {sub.Name} after {settings.SimulationSafetyVoyageCapPerSubmarine} voyages.");
 
+        var firstPlan = plans.FirstOrDefault();
+        var lastPlan = plans.LastOrDefault();
+        var etaAt = lastPlan?.ReturnAtUtc ?? nextAvailable;
+
         return new PerSubEtaResult(
             sub.SubmarineId,
             sub.Name,
             sub.Rank,
             rank,
-            plans.LastOrDefault()?.ReturnAtUtc ?? nextAvailable,
-            (plans.LastOrDefault()?.ReturnAtUtc ?? nextAvailable) - now,
+            etaAt,
+            etaAt - now,
             plans.Count,
-            buildResolver.GetBuildCodeForRank(Math.Max(rank, settings.TargetRank), settings),
-            plans.LastOrDefault()?.Route ?? [],
+            firstPlan?.BuildCode ?? buildResolver.GetBuildCodeForRank(sub.Rank, settings),
+            firstPlan?.Route ?? [],
             plans.Take(settings.MaxPreviewVoyagesPerSubmarine).ToArray(),
             unlockState.UnlockMilestones.Where(m => m.SubmarineId == sub.SubmarineId).ToArray(),
             warnings,
             catalog.IsPostTargetFarmingReady(buildResolver.ResolveBuildForRank(settings.TargetRank, settings), unlockState.UnlockedPoints));
+    }
+
+    private CurrentVoyageApplication ApplyCurrentVoyageIfKnown(
+        SubmarineState sub,
+        UnlockState unlockState,
+        EtaSettings settings,
+        DateTimeOffset now,
+        int rank,
+        uint currentExp,
+        uint nextLevelExp,
+        DateTimeOffset nextAvailable)
+    {
+        if (sub.ReturnAtUtc <= now)
+            return new CurrentVoyageApplication(rank, currentExp, nextLevelExp, nextAvailable);
+
+        var route = sub.ManualCurrentRouteOverride.Count > 0 ? sub.ManualCurrentRouteOverride : sub.CurrentRoute;
+        if (route.Count == 0)
+            return new CurrentVoyageApplication(rank, currentExp, nextLevelExp, nextAvailable);
+
+        var build = catalog.ResolveBuild(sub.BuildParts, rank) ?? buildResolver.ResolveBuildForRank(rank, settings);
+        var exp = catalog.CalculateExp(route, build, settings.ExpMode);
+        var rankResult = catalog.ApplyExp(rank, currentExp, exp, settings.TargetRank);
+        var returnAt = sub.ReturnAtUtc + TimeSpan.FromMinutes(settings.CollectionDelayMinutes);
+        unlockGraph.MarkRouteUnlocks(route, unlockState, rankResult.Rank, sub.SubmarineId, returnAt);
+
+        return new CurrentVoyageApplication(rankResult.Rank, rankResult.CurrentExp, rankResult.NextLevelExp, returnAt);
     }
 
     private static UnlockState CreateUnlockState(FcState fc) => new(
@@ -326,5 +397,13 @@ public sealed class EtaSimulator(
         public uint CurrentExp { get; set; } = currentExp;
 
         public uint NextLevelExp { get; set; } = nextLevelExp;
+
+        public bool CurrentVoyageApplied { get; set; }
     }
+
+    private sealed record CurrentVoyageApplication(
+        int Rank,
+        uint CurrentExp,
+        uint NextLevelExp,
+        DateTimeOffset NextAvailableAt);
 }

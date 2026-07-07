@@ -95,6 +95,121 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
+    public void FastestLevelingRouteGoalDoesNotRequestUnlockRoute()
+    {
+        var catalog = new ScriptedCatalog();
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var settings = EtaSettings.CreateDefault() with { RouteGoal = RouteGoal.FastestLevelingOnly };
+        var state = new UnlockState([1], [1], [], []);
+
+        var route = selector.SelectNextRoute(CreateSub(rank: 10), state, catalog.ResolveBuild("TEST", 10), settings, fleetMode: false);
+
+        Assert.Equal([99u], route.Route);
+        Assert.Empty(catalog.LastMustInclude);
+    }
+
+    [Fact]
+    public void UnlockEverythingRouteGoalRequestsReachableUnlockRoute()
+    {
+        var catalog = new ScriptedCatalog();
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var settings = EtaSettings.CreateDefault() with { RouteGoal = RouteGoal.UnlockEverythingThenLevel };
+        var state = new UnlockState([1], [1], [], []);
+
+        var route = selector.SelectNextRoute(CreateSub(rank: 10), state, catalog.ResolveBuild("TEST", 10), settings, fleetMode: false);
+
+        Assert.Equal([1u], route.Route);
+        Assert.Equal([1u], catalog.LastMustInclude);
+    }
+
+    [Fact]
+    public void UnlockSubSlotsRouteGoalRequestsPathTowardSubSlotUnlock()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(1, 2, 1),
+            new UnlockRule(2, 3, 1, UnlocksSubSlot: true),
+        ]);
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var settings = EtaSettings.CreateDefault() with { RouteGoal = RouteGoal.UnlockSubSlotsThenLevel };
+        var state = new UnlockState([1], [1], [], []);
+
+        var route = selector.SelectNextRoute(CreateSub(rank: 10), state, catalog.ResolveBuild("TEST", 10), settings, fleetMode: false);
+
+        Assert.Equal([1u], route.Route);
+        Assert.Equal([1u], catalog.LastMustInclude);
+    }
+
+    [Fact]
+    public void FleetModeUsesMutableRankForRouteSelectionAfterRankUp()
+    {
+        var catalog = new ScriptedCatalog([new UnlockRule(2, 3, 2)]);
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.Fleet,
+            RouteGoal = RouteGoal.UnlockEverythingThenLevel,
+            SimulationSafetyVoyageCapPerSubmarine = 4,
+        };
+        settings.TargetRank = 3;
+        var fc = CreateFc(new HashSet<uint>([1, 2]), CreateSub(rank: 1));
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+
+        Assert.Equal([99u], result.PlannedRoutes[0].Route);
+        Assert.Equal([2u], result.PlannedRoutes[1].Route);
+    }
+
+    [Fact]
+    public void ResultDisplaysFirstPlanRouteAndBuildButEtaUsesLastPlan()
+    {
+        var catalog = new ScriptedCatalog([new UnlockRule(2, 3, 2)]);
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.Fleet,
+            RouteGoal = RouteGoal.UnlockEverythingThenLevel,
+            SimulationSafetyVoyageCapPerSubmarine = 4,
+        };
+        settings.TargetRank = 3;
+        var fc = CreateFc(new HashSet<uint>([1, 2]), CreateSub(rank: 1));
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var sub = Assert.Single(result.PerSubResults);
+
+        Assert.Equal("R1", sub.PlannedBuild);
+        Assert.Equal(result.PlannedRoutes.First().Route, sub.NextRoute);
+        Assert.Equal(result.PlannedRoutes.Last().ReturnAtUtc, sub.EtaAtUtc);
+    }
+
+    [Fact]
+    public void KnownCurrentVoyageAppliesExpAndUnlocksBeforeFuturePlans()
+    {
+        var catalog = new ScriptedCatalog([new UnlockRule(7, 8, 2)]);
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet };
+        settings.TargetRank = 2;
+        var returnAt = DateTimeOffset.UnixEpoch.AddHours(6);
+        var sub = CreateSub(rank: 1) with
+        {
+            BuildParts = new SubmarineBuildParts(3, 4, 1, 2),
+            ReturnAtUtc = returnAt,
+            CurrentRoute = [7],
+            CurrentVoyageKnown = true,
+        };
+        var fc = CreateFc(new HashSet<uint>([7]), sub);
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var subResult = Assert.Single(result.PerSubResults);
+
+        Assert.Equal(2, subResult.FinalRank);
+        Assert.Equal(0, subResult.VoyageCount);
+        Assert.Equal(returnAt, subResult.EtaAtUtc);
+        Assert.Contains(result.UnlockMilestones, milestone => milestone.UnlockedPoint == 8);
+        Assert.Equal(1, catalog.PartBuildResolutionCount);
+    }
+
+    [Fact]
     public void OptimisticModeProducesPerSubPlans()
     {
         var simulator = CreateSimulator();
@@ -140,9 +255,9 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
-    private static EtaSimulator CreateSimulator()
+    private static EtaSimulator CreateSimulator(ISubmarineCatalog? catalog = null)
     {
-        var catalog = new CompatSubmarineCatalog();
+        catalog ??= new CompatSubmarineCatalog();
         var buildResolver = new BuildResolver(catalog);
         var unlockGraph = new RouteUnlockGraph(catalog);
         var selector = new RouteSelector(catalog, unlockGraph);
@@ -188,5 +303,69 @@ public sealed class EtaSimulatorTests
         }
 
         throw new FileNotFoundException("Could not locate repo.json from the test output directory.");
+    }
+
+    private sealed class ScriptedCatalog : ISubmarineCatalog
+    {
+        private readonly IReadOnlyList<UnlockRule> unlockRules;
+
+        public ScriptedCatalog(IReadOnlyList<UnlockRule>? unlockRules = null)
+        {
+            this.unlockRules = unlockRules ?? [new UnlockRule(1, 2, 1)];
+        }
+
+        public IReadOnlyList<UnlockRule> UnlockRules => this.unlockRules;
+
+        public IReadOnlyList<uint> LastMustInclude { get; private set; } = [];
+
+        public int PartBuildResolutionCount { get; private set; }
+
+        public SubmarineBuild ResolveBuild(string buildCode, int rank)
+            => new($"R{rank}", rank, 100, 100, 100, 999, 100);
+
+        public SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank)
+        {
+            PartBuildResolutionCount++;
+            return buildParts == SubmarineBuildParts.Empty ? null : new SubmarineBuild($"P{rank}", rank, 100, 100, 100, 999, 100);
+        }
+
+        public IReadOnlyList<RouteCandidate> GetCandidateRoutes(
+            SubmarineBuild build,
+            IReadOnlySet<uint> unlockedPoints,
+            IReadOnlySet<uint> exploredPoints,
+            IReadOnlySet<uint> mustInclude,
+            EtaSettings settings,
+            DateTimeOffset? deadlineUtc = null)
+        {
+            LastMustInclude = mustInclude.Order().ToArray();
+            var route = LastMustInclude.Count > 0 ? [LastMustInclude[0]] : new uint[] { 99 };
+            var unlockTargets = this.unlockRules
+                .Where(rule => route.Contains(rule.SourcePoint))
+                .Where(rule => rule.RequiredRank <= build.Rank)
+                .Select(rule => rule.UnlocksPoint)
+                .ToArray();
+
+            return [new RouteCandidate(route, 100, TimeSpan.FromHours(1), 100, unlockTargets)];
+        }
+
+        public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode) => 100;
+
+        public TimeSpan CalculateDuration(IReadOnlyList<uint> route, SubmarineBuild build) => TimeSpan.FromHours(1);
+
+        public (int Rank, uint CurrentExp, uint NextLevelExp) ApplyExp(int rank, uint currentExp, uint gainedExp, int targetRank)
+        {
+            var total = currentExp + gainedExp;
+            while (rank < targetRank && total >= 100)
+            {
+                total -= 100;
+                rank++;
+            }
+
+            return (rank, rank >= targetRank ? 0 : total, rank >= targetRank ? 0u : 100u);
+        }
+
+        public string PointName(uint point) => point.ToString();
+
+        public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints) => false;
     }
 }

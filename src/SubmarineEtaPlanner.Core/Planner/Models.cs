@@ -19,6 +19,13 @@ public enum UnknownCurrentVoyagePolicy
     ManualOverride,
 }
 
+public enum RouteGoal
+{
+    FastestLevelingOnly,
+    UnlockSubSlotsThenLevel,
+    UnlockEverythingThenLevel,
+}
+
 public sealed record FcState(
     byte[] FcId,
     string FreeCompanyTag,
@@ -126,7 +133,7 @@ public sealed record EtaSettings
 {
     public int TargetRank { get; set; } = 114;
 
-    public ExpMode ExpMode { get; set; } = ExpMode.Guaranteed;
+    public ExpMode ExpMode { get; set; } = ExpMode.Average;
 
     public int CollectionDelayMinutes { get; set; } = 0;
 
@@ -135,6 +142,8 @@ public sealed record EtaSettings
     public List<BuildProfileStep> BuildProfile { get; set; } = [];
 
     public bool PrioritizeSubSlots { get; set; } = true;
+
+    public RouteGoal RouteGoal { get; set; } = RouteGoal.FastestLevelingOnly;
 
     public int DurationLimitHours { get; set; } = 0;
 

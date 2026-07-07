@@ -51,6 +51,25 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
             Math.Max(40, stats.Sum(s => s.Speed) / stats.Length));
     }
 
+    public SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank)
+    {
+        if (buildParts == SubmarineBuildParts.Empty ||
+            buildParts.Hull == 0 ||
+            buildParts.Stern == 0 ||
+            buildParts.Bow == 0 ||
+            buildParts.Bridge == 0)
+        {
+            return null;
+        }
+
+        var buildCode = string.Concat(
+            ToIdentifier(buildParts.Hull),
+            ToIdentifier(buildParts.Stern),
+            ToIdentifier(buildParts.Bow),
+            ToIdentifier(buildParts.Bridge));
+        return ResolveBuild(buildCode, rank);
+    }
+
     public IReadOnlyList<RouteCandidate> GetCandidateRoutes(
         SubmarineBuild build,
         IReadOnlySet<uint> unlockedPoints,
@@ -182,6 +201,16 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
 
         return (normalized + "SSSS")[..4];
     }
+
+    private static char ToIdentifier(ushort partId)
+        => ((partId - 1) / 4) switch
+        {
+            0 => 'S',
+            1 => 'U',
+            2 => 'W',
+            3 => 'C',
+            _ => 'S',
+        };
 
     private static SectorInfo CreateSector(uint point)
     {

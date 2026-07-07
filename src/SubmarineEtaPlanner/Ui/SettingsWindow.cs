@@ -14,6 +14,13 @@ public sealed class SettingsWindow : Window
         "Manual override",
     ];
 
+    private static readonly string[] RouteGoalLabels =
+    [
+        "Fastest leveling only",
+        "Unlock sub slots then level",
+        "Unlock everything then level",
+    ];
+
     private readonly Configuration configuration;
     private readonly Action saveConfiguration;
     private readonly Action settingsChanged;
@@ -100,6 +107,8 @@ public sealed class SettingsWindow : Window
             changed = true;
         }
 
+        DrawRouteGoal(settings, ref changed);
+
         var prioritizeSlots = settings.PrioritizeSubSlots;
         if (ImGui.Checkbox("Prioritize sub slot unlocks", ref prioritizeSlots))
         {
@@ -134,6 +143,29 @@ public sealed class SettingsWindow : Window
             this.saveConfiguration();
             this.settingsChanged();
         }
+    }
+
+    private static void DrawRouteGoal(EtaSettings settings, ref bool changed)
+    {
+        var current = (int)settings.RouteGoal;
+        var label = RouteGoalLabels[Math.Clamp(current, 0, RouteGoalLabels.Length - 1)];
+        if (!ImGui.BeginCombo("Route goal", label))
+            return;
+
+        for (var i = 0; i < RouteGoalLabels.Length; i++)
+        {
+            var selected = i == current;
+            if (ImGui.Selectable(RouteGoalLabels[i], selected))
+            {
+                settings.RouteGoal = (RouteGoal)i;
+                changed = true;
+            }
+
+            if (selected)
+                ImGui.SetItemDefaultFocus();
+        }
+
+        ImGui.EndCombo();
     }
 
     private static void DrawUnknownVoyagePolicy(EtaSettings settings, ref bool changed)

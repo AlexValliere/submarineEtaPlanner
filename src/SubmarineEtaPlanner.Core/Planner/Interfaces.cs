@@ -4,6 +4,8 @@ public interface ISubmarineCatalog
 {
     SubmarineBuild ResolveBuild(string buildCode, int rank);
 
+    SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank);
+
     IReadOnlyList<RouteCandidate> GetCandidateRoutes(
         SubmarineBuild build,
         IReadOnlySet<uint> unlockedPoints,

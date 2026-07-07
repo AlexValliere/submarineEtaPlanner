@@ -48,6 +48,32 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
     public SubmarineBuild ResolveBuild(string buildCode, int rank)
     {
         var parts = ParseBuildCode(buildCode);
+        return ResolveBuild(parts, rank);
+    }
+
+    public SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank)
+    {
+        if (buildParts == SubmarineBuildParts.Empty ||
+            buildParts.Hull == 0 ||
+            buildParts.Stern == 0 ||
+            buildParts.Bow == 0 ||
+            buildParts.Bridge == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return ResolveBuild(new PartIds(buildParts.Hull, buildParts.Stern, buildParts.Bow, buildParts.Bridge), rank);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private SubmarineBuild ResolveBuild(PartIds parts, int rank)
+    {
         var rankRow = this.rankSheet.GetRow((uint)rank);
         var hull = this.partSheet.GetRow((uint)parts.Hull);
         var stern = this.partSheet.GetRow((uint)parts.Stern);

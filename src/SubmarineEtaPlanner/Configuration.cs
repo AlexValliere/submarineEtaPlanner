@@ -6,9 +6,18 @@ namespace SubmarineEtaPlanner;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = EtaSettingsMigration.CurrentVersion;
 
     public EtaSettings Settings { get; set; } = EtaSettings.CreateDefault();
 
     public bool WindowOpen { get; set; } = true;
+
+    public bool Migrate()
+    {
+        Settings ??= EtaSettings.CreateDefault();
+        var version = Version;
+        var changed = EtaSettingsMigration.Migrate(Settings, ref version);
+        Version = version;
+        return changed;
+    }
 }
