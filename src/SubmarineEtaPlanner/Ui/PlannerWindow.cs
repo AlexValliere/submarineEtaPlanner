@@ -10,6 +10,8 @@ public sealed class PlannerWindow : Window
     private readonly Action saveConfiguration;
     private readonly EtaPlannerService plannerService;
     private EtaPlannerSnapshot? snapshot;
+    private Task<EtaPlannerSnapshot>? refreshTask;
+    private bool refreshPending;
     private string lastError = string.Empty;
 
     public PlannerWindow(Configuration configuration, Action saveConfiguration, EtaPlannerService plannerService)
@@ -32,37 +34,58 @@ public sealed class PlannerWindow : Window
         this.saveConfiguration();
     }
 
+    public void InvalidateSnapshot()
+    {
+        this.snapshot = null;
+        if (IsOpen && this.refreshTask is { IsCompleted: false })
+            this.refreshPending = true;
+    }
+
     public override void Draw()
     {
+        CompleteRefreshIfReady();
         DrawToolbar();
+
+        if (this.snapshot is null && this.refreshTask is null)
+            StartRefresh();
 
         if (!string.IsNullOrWhiteSpace(this.lastError))
             ImGui.TextColored(new System.Numerics.Vector4(1f, 0.35f, 0.25f, 1f), this.lastError);
 
-        this.snapshot ??= CalculateSnapshot();
+        if (this.refreshTask is { IsCompleted: false })
+        {
+            ImGui.TextUnformatted(this.snapshot is null ? "Calculating ETA..." : "Refreshing ETA...");
+            if (this.snapshot is null)
+                return;
+        }
 
-        if (this.snapshot.Warnings.Count > 0)
+        var currentSnapshot = this.snapshot;
+        if (currentSnapshot is null)
+            return;
+
+        if (currentSnapshot.Warnings.Count > 0)
         {
             DrawSectionHeader("Warnings");
-            foreach (var warning in this.snapshot.Warnings)
-                ImGui.BulletText(warning);
+            foreach (var warning in currentSnapshot.Warnings)
+                DrawBulletText(warning);
         }
 
         DrawSectionHeader("FC Summary");
-        if (this.snapshot.Results.Count == 0)
+        if (currentSnapshot.Results.Count == 0)
         {
             ImGui.TextUnformatted("No SubmarineTracker data was found.");
             return;
         }
 
-        foreach (var fcResult in this.snapshot.Results)
+        foreach (var fcResult in currentSnapshot.Results)
             DrawFcResult(fcResult);
     }
 
     private void DrawToolbar()
     {
-        if (ImGui.Button("Refresh"))
-            this.snapshot = CalculateSnapshot();
+        var isRefreshing = this.refreshTask is { IsCompleted: false };
+        if (ImGui.Button(isRefreshing ? "Refreshing..." : "Refresh"))
+            QueueRefresh();
 
         ImGui.SameLine();
         var target = this.configuration.Settings.TargetRank;
@@ -71,7 +94,7 @@ public sealed class PlannerWindow : Window
         {
             this.configuration.Settings.TargetRank = Math.Clamp(target, 1, 149);
             this.saveConfiguration();
-            this.snapshot = null;
+            InvalidateAndQueueRefresh();
         }
 
         ImGui.SameLine();
@@ -80,7 +103,7 @@ public sealed class PlannerWindow : Window
         {
             this.configuration.Settings.SimulationMode = fleetMode ? SimulationMode.Fleet : SimulationMode.OptimisticPerSub;
             this.saveConfiguration();
-            this.snapshot = null;
+            InvalidateAndQueueRefresh();
         }
 
         ImGui.SameLine();
@@ -89,7 +112,7 @@ public sealed class PlannerWindow : Window
         {
             this.configuration.Settings.ExpMode = averageExp ? ExpMode.Average : ExpMode.Guaranteed;
             this.saveConfiguration();
-            this.snapshot = null;
+            InvalidateAndQueueRefresh();
         }
 
         if (ImGui.CollapsingHeader("Settings"))
@@ -103,7 +126,7 @@ public sealed class PlannerWindow : Window
         {
             this.configuration.Settings.CollectionDelayMinutes = Math.Max(0, delay);
             this.saveConfiguration();
-            this.snapshot = null;
+            InvalidateAndQueueRefresh();
         }
 
         var durationLimit = this.configuration.Settings.DurationLimitHours;
@@ -111,7 +134,7 @@ public sealed class PlannerWindow : Window
         {
             this.configuration.Settings.DurationLimitHours = Math.Max(0, durationLimit);
             this.saveConfiguration();
-            this.snapshot = null;
+            InvalidateAndQueueRefresh();
         }
 
         var prioritizeSlots = this.configuration.Settings.PrioritizeSubSlots;
@@ -119,7 +142,7 @@ public sealed class PlannerWindow : Window
         {
             this.configuration.Settings.PrioritizeSubSlots = prioritizeSlots;
             this.saveConfiguration();
-            this.snapshot = null;
+            InvalidateAndQueueRefresh();
         }
 
         var showReadiness = this.configuration.Settings.ShowPost114MrojzReadiness;
@@ -127,7 +150,7 @@ public sealed class PlannerWindow : Window
         {
             this.configuration.Settings.ShowPost114MrojzReadiness = showReadiness;
             this.saveConfiguration();
-            this.snapshot = null;
+            InvalidateAndQueueRefresh();
         }
 
         var dbPath = this.configuration.Settings.SubmarineTrackerDatabasePathOverride ?? string.Empty;
@@ -136,7 +159,7 @@ public sealed class PlannerWindow : Window
         {
             this.configuration.Settings.SubmarineTrackerDatabasePathOverride = string.IsNullOrWhiteSpace(dbPath) ? null : dbPath;
             this.saveConfiguration();
-            this.snapshot = null;
+            InvalidateAndQueueRefresh();
         }
 
         ImGui.TextUnformatted("Build profile: 1-14 SSSS, 15-24 SSUS, 25-113 SSUW, 114+ WSCC.");
@@ -201,14 +224,14 @@ public sealed class PlannerWindow : Window
         {
             ImGui.TextUnformatted("Warnings");
             foreach (var warning in sub.Warnings)
-                ImGui.BulletText(warning);
+                DrawBulletText(warning);
         }
 
         if (sub.UnlockMilestones.Count > 0)
         {
             ImGui.TextUnformatted("Unlock milestones");
             foreach (var milestone in sub.UnlockMilestones)
-                ImGui.BulletText($"{milestone.SourcePoint} unlocked {milestone.UnlockedPoint} at {milestone.ReturnAtUtc.LocalDateTime:g}");
+                DrawBulletText($"{milestone.SourcePoint} unlocked {milestone.UnlockedPoint} at {milestone.ReturnAtUtc.LocalDateTime:g}");
         }
 
         if (ImGui.BeginTable($"preview-{sub.SubmarineId}", 6, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
@@ -245,19 +268,73 @@ public sealed class PlannerWindow : Window
         ImGui.Unindent();
     }
 
-    private EtaPlannerSnapshot CalculateSnapshot()
+    private void InvalidateAndQueueRefresh()
     {
+        this.snapshot = null;
+        QueueRefresh();
+    }
+
+    private void QueueRefresh()
+    {
+        if (this.refreshTask is { IsCompleted: false })
+        {
+            this.refreshPending = true;
+            return;
+        }
+
+        StartRefresh();
+    }
+
+    private void StartRefresh()
+    {
+        this.refreshPending = false;
+        var settings = CloneSettings(this.configuration.Settings);
+        var now = DateTimeOffset.UtcNow;
+        this.refreshTask = Task.Run(() => this.plannerService.Calculate(settings, now));
+    }
+
+    private void CompleteRefreshIfReady()
+    {
+        var task = this.refreshTask;
+        if (task is null || !task.IsCompleted)
+            return;
+
+        this.refreshTask = null;
         try
         {
             this.lastError = string.Empty;
-            return this.plannerService.Calculate(this.configuration.Settings, DateTimeOffset.UtcNow);
+            this.snapshot = task.GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
             this.lastError = ex.Message;
-            return new EtaPlannerSnapshot(DateTimeOffset.UtcNow, [], [], [ex.Message]);
+            this.snapshot = new EtaPlannerSnapshot(DateTimeOffset.UtcNow, [], [], [ex.Message]);
         }
+
+        if (this.refreshPending && IsOpen)
+            StartRefresh();
     }
+
+    private static EtaSettings CloneSettings(EtaSettings settings) => new()
+    {
+        TargetRank = settings.TargetRank,
+        ExpMode = settings.ExpMode,
+        CollectionDelayMinutes = settings.CollectionDelayMinutes,
+        SimulationMode = settings.SimulationMode,
+        BuildProfile = settings.BuildProfile
+            .Select(step => new BuildProfileStep(step.MinRank, step.MaxRank, step.BuildCode))
+            .ToList(),
+        PrioritizeSubSlots = settings.PrioritizeSubSlots,
+        DurationLimitHours = settings.DurationLimitHours,
+        OptimizeExpPerHour = settings.OptimizeExpPerHour,
+        UnknownCurrentVoyagePolicy = settings.UnknownCurrentVoyagePolicy,
+        ManualCurrentRouteOverrides = settings.ManualCurrentRouteOverrides
+            .ToDictionary(pair => pair.Key, pair => pair.Value.ToList()),
+        ShowPost114MrojzReadiness = settings.ShowPost114MrojzReadiness,
+        SubmarineTrackerDatabasePathOverride = settings.SubmarineTrackerDatabasePathOverride,
+        MaxPreviewVoyagesPerSubmarine = settings.MaxPreviewVoyagesPerSubmarine,
+        SimulationSafetyVoyageCapPerSubmarine = settings.SimulationSafetyVoyageCapPerSubmarine,
+    };
 
     private static string FormatRelative(DateTimeOffset date, DateTimeOffset now)
     {
@@ -271,6 +348,13 @@ public sealed class PlannerWindow : Window
     }
 
     private static string FormatRoute(IReadOnlyList<uint> route) => route.Count == 0 ? "-" : string.Join("-", route);
+
+    private static void DrawBulletText(string text)
+    {
+        ImGui.Bullet();
+        ImGui.SameLine();
+        ImGui.TextUnformatted(text);
+    }
 
     private static void DrawSectionHeader(string label)
     {

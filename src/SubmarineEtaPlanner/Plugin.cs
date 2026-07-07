@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     internal static IDataManager Data { get; private set; } = null!;
 
     private readonly PlannerWindow plannerWindow;
+    private readonly SettingsWindow settingsWindow;
     private readonly Dalamud.Interface.Windowing.WindowSystem windowSystem = new("SubmarineEtaPlanner");
 
     public Plugin()
@@ -38,7 +39,9 @@ public sealed class Plugin : IDalamudPlugin
         var service = new EtaPlannerService(stateReader, simulator);
 
         this.plannerWindow = new PlannerWindow(Configuration, SaveConfiguration, service);
+        this.settingsWindow = new SettingsWindow(Configuration, SaveConfiguration, this.plannerWindow.InvalidateSnapshot);
         this.windowSystem.AddWindow(this.plannerWindow);
+        this.windowSystem.AddWindow(this.settingsWindow);
 
         PluginInterface.UiBuilder.Draw += Draw;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
@@ -55,13 +58,24 @@ public sealed class Plugin : IDalamudPlugin
         this.windowSystem.RemoveAllWindows();
     }
 
-    private void Draw() => this.windowSystem.Draw();
+    private void Draw()
+    {
+        try
+        {
+            this.windowSystem.Draw();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error while drawing Submarine ETA Planner UI.");
+        }
+    }
 
-    private void OpenConfigUi() => OpenMainUi();
+    private void OpenConfigUi() => this.settingsWindow.IsOpen = true;
 
     private void OpenMainUi()
     {
         Configuration.WindowOpen = true;
+        SaveConfiguration();
         this.plannerWindow.IsOpen = true;
     }
 
