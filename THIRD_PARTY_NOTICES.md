@@ -2,7 +2,7 @@
 
 ## SubmarineTracker
 
-This project vendors and adapts small calculation concepts and data-shape compatibility code from SubmarineTracker:
+This project vendors and adapts calculation concepts, unlock data, route/EXP formulas, and `CalculatedData.msgpack` route cache data from SubmarineTracker:
 
 https://github.com/Infiziert90/SubmarineTracker
 

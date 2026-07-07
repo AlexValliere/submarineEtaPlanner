@@ -1,0 +1,610 @@
+using System.Numerics;
+using Dalamud.Plugin.Services;
+using Lumina.Excel;
+using Lumina.Excel.Sheets;
+using MessagePack;
+using SubmarineEtaPlanner.Planner;
+
+namespace SubmarineEtaPlanner.SubmarineTrackerRuntime;
+
+public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
+{
+    private const int FixedVoyageTimeSeconds = 43200;
+    private static readonly uint[] Mrojz = [13, 18, 15, 10, 26];
+
+    private readonly ExcelSheet<SubmarineExploration> explorationSheet;
+    private readonly ExcelSheet<SubmarinePart> partSheet;
+    private readonly ExcelSheet<SubmarineRank> rankSheet;
+    private readonly Dictionary<uint, SubmarineExploration> sectorById;
+    private readonly uint[] reversedMapStartSectors;
+    private readonly CalculatedRouteData calculatedRoutes;
+    private readonly IPluginLog log;
+    private readonly uint lastRank;
+
+    public DalamudSubmarineCatalog(IDataManager dataManager, string pluginDirectory, IPluginLog log)
+    {
+        this.log = log;
+        this.explorationSheet = dataManager.GetExcelSheet<SubmarineExploration>();
+        this.partSheet = dataManager.GetExcelSheet<SubmarinePart>();
+        this.rankSheet = dataManager.GetExcelSheet<SubmarineRank>();
+        this.sectorById = this.explorationSheet.ToDictionary(row => row.RowId, row => row);
+        this.reversedMapStartSectors = this.explorationSheet
+            .Where(row => row.StartingPoint)
+            .Select(row => row.RowId)
+            .OrderDescending()
+            .ToArray();
+        this.lastRank = this.rankSheet.Last(row => row.Capacity != 0).RowId;
+        this.calculatedRoutes = LoadCalculatedRoutes(pluginDirectory);
+        UnlockRules = BuildUnlockRules();
+    }
+
+    public IReadOnlyList<UnlockRule> UnlockRules { get; }
+
+    public SubmarineBuild ResolveBuild(string buildCode, int rank)
+    {
+        var parts = ParseBuildCode(buildCode);
+        var rankRow = this.rankSheet.GetRow((uint)rank);
+        var hull = this.partSheet.GetRow((uint)parts.Hull);
+        var stern = this.partSheet.GetRow((uint)parts.Stern);
+        var bow = this.partSheet.GetRow((uint)parts.Bow);
+        var bridge = this.partSheet.GetRow((uint)parts.Bridge);
+
+        return new SubmarineBuild(
+            FormatBuildCode(parts),
+            rank,
+            rankRow.SurveillanceBonus + hull.Surveillance + stern.Surveillance + bow.Surveillance + bridge.Surveillance,
+            rankRow.RetrievalBonus + hull.Retrieval + stern.Retrieval + bow.Retrieval + bridge.Retrieval,
+            rankRow.FavorBonus + hull.Favor + stern.Favor + bow.Favor + bridge.Favor,
+            rankRow.RangeBonus + hull.Range + stern.Range + bow.Range + bridge.Range,
+            rankRow.SpeedBonus + hull.Speed + stern.Speed + bow.Speed + bridge.Speed);
+    }
+
+    public IReadOnlyList<RouteCandidate> GetCandidateRoutes(
+        SubmarineBuild build,
+        IReadOnlySet<uint> unlockedPoints,
+        IReadOnlySet<uint> exploredPoints,
+        IReadOnlySet<uint> mustInclude,
+        EtaSettings settings)
+    {
+        if (this.calculatedRoutes.Maps.Count == 0)
+            return [];
+
+        var candidates = new List<RouteCandidate>();
+        foreach (var routeSet in this.calculatedRoutes.Maps.Values)
+        {
+            foreach (var route in routeSet)
+            {
+                if (route.Sectors.Length is 0 or > 5)
+                    continue;
+                if (route.Distance > build.Range)
+                    continue;
+                if (mustInclude.Count > 0 && !route.Sectors.Any(mustInclude.Contains))
+                    continue;
+                if (!route.Sectors.All(sector => IsSectorValid(sector, build.Rank, unlockedPoints)))
+                    continue;
+
+                var duration = CalculateDuration(route.Sectors, build);
+                if (duration == TimeSpan.Zero)
+                    continue;
+                if (settings.DurationLimitHours > 0 && duration > TimeSpan.FromHours(settings.DurationLimitHours))
+                    continue;
+
+                var exp = CalculateExp(route.Sectors, build, settings.ExpMode);
+                if (exp == 0)
+                    continue;
+
+                candidates.Add(new RouteCandidate(
+                    route.Sectors,
+                    exp,
+                    duration,
+                    exp / Math.Max(duration.TotalHours, 0.01),
+                    GetUnlockTargets(route.Sectors, build.Rank, unlockedPoints)));
+            }
+        }
+
+        return candidates
+            .OrderByDescending(route => mustInclude.Count > 0 && route.Route.Any(mustInclude.Contains))
+            .ThenByDescending(route => settings.OptimizeExpPerHour ? route.ExpPerHour : route.Exp)
+            .ThenBy(route => route.Duration)
+            .Take(200)
+            .ToArray();
+    }
+
+    public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode)
+    {
+        var expGain = 0u;
+        foreach (var sectorId in route)
+        {
+            if (!this.sectorById.TryGetValue(sectorId, out var sector))
+                continue;
+
+            var bonus = PredictBonusExp(sectorId, build);
+            expGain += CalculateBonusExp(expMode == ExpMode.Average ? bonus.Average : bonus.Guaranteed, sector.ExpReward);
+        }
+
+        return expGain;
+    }
+
+    public TimeSpan CalculateDuration(IReadOnlyList<uint> route, SubmarineBuild build)
+    {
+        if (route.Count is 0 or > 5)
+            return TimeSpan.Zero;
+        if (!this.sectorById.TryGetValue(route[0], out var first))
+            return TimeSpan.Zero;
+        if (!this.sectorById.TryGetValue(FindVoyageStart(route[0]), out var start))
+            return TimeSpan.Zero;
+
+        var seconds = CalcTime(start, first, build.Speed);
+        for (var i = 1; i < route.Count; i++)
+        {
+            if (!this.sectorById.TryGetValue(route[i - 1], out var previous))
+                return TimeSpan.Zero;
+            if (!this.sectorById.TryGetValue(route[i], out var current))
+                return TimeSpan.Zero;
+
+            seconds += CalcTime(previous, current, build.Speed);
+        }
+
+        return TimeSpan.FromSeconds(seconds + FixedVoyageTimeSeconds);
+    }
+
+    public (int Rank, uint CurrentExp, uint NextLevelExp) ApplyExp(int rank, uint currentExp, uint gainedExp, int targetRank)
+    {
+        var totalExp = currentExp + gainedExp;
+        while (rank < targetRank)
+        {
+            var rankRow = this.rankSheet.GetRow((uint)rank);
+            if (rankRow.ExpToNext > totalExp)
+                break;
+
+            totalExp -= rankRow.ExpToNext;
+            rank++;
+
+            if (rank > this.lastRank)
+            {
+                rank--;
+                totalExp = 0;
+                break;
+            }
+        }
+
+        if (rank >= targetRank)
+            totalExp = 0;
+
+        return (rank, totalExp, rank >= targetRank ? 0 : this.rankSheet.GetRow((uint)rank).ExpToNext);
+    }
+
+    public string PointName(uint point)
+    {
+        if (!this.sectorById.TryGetValue(point, out var sector))
+            return point.ToString();
+
+        var name = sector.Destination.ExtractText();
+        return string.IsNullOrWhiteSpace(name) ? point.ToString() : name;
+    }
+
+    public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints)
+        => build.Code.Equals("WSCC", StringComparison.OrdinalIgnoreCase) && Mrojz.All(unlockedPoints.Contains);
+
+    private CalculatedRouteData LoadCalculatedRoutes(string pluginDirectory)
+    {
+        var path = Path.Combine(pluginDirectory, "CalculatedData.msgpack");
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return MessagePackSerializer.Deserialize<CalculatedRouteData>(stream);
+        }
+        catch (Exception ex)
+        {
+            this.log.Error(ex, "Failed loading CalculatedData.msgpack");
+            return new CalculatedRouteData();
+        }
+    }
+
+    private bool IsSectorValid(uint sectorId, int rank, IReadOnlySet<uint> unlockedPoints)
+    {
+        if (!this.sectorById.TryGetValue(sectorId, out var sector))
+            return false;
+        if (sector.StartingPoint || sector.ExpReward == 0)
+            return false;
+        if (sector.RankReq > rank)
+            return false;
+
+        return unlockedPoints.Count == 0 || unlockedPoints.Contains(sectorId);
+    }
+
+    private IReadOnlyList<uint> GetUnlockTargets(IReadOnlyList<uint> route, int rank, IReadOnlySet<uint> unlockedPoints)
+        => UnlockRules
+            .Where(rule => rule.RequiredRank <= rank)
+            .Where(rule => route.Contains(rule.SourcePoint))
+            .Where(rule => !unlockedPoints.Contains(rule.UnlocksPoint))
+            .Select(rule => rule.UnlocksPoint)
+            .Distinct()
+            .ToArray();
+
+    private IReadOnlyList<UnlockRule> BuildUnlockRules()
+    {
+        var rules = new List<UnlockRule>();
+        foreach (var (target, source) in ExactUnlocks.SectorToUnlock)
+        {
+            if (source.Sector is SectorType.Begin or SectorType.Map or SectorType.UnknownUnlock)
+                continue;
+            if (!this.sectorById.TryGetValue(target, out var targetSector))
+                continue;
+
+            rules.Add(new UnlockRule((uint)source.Sector, target, (int)targetSector.RankReq, source.Sub));
+        }
+
+        return rules;
+    }
+
+    private uint FindVoyageStart(uint sector)
+        => this.reversedMapStartSectors.FirstOrDefault(start => sector >= start);
+
+    private static uint CalcTime(SubmarineExploration from, SubmarineExploration to, float speed)
+        => GetVoyageTime(from, to, speed) + GetSurveyTime(to, speed);
+
+    private static uint GetSurveyTime(SubmarineExploration sector, float speed)
+    {
+        if (speed < 1)
+            speed = 1;
+
+        return (uint)Math.Floor(sector.SurveyDurationmin * 7000 / (speed * 100) * 60);
+    }
+
+    private static uint GetVoyageTime(SubmarineExploration from, SubmarineExploration to, float speed)
+    {
+        if (speed < 1)
+            speed = 1;
+
+        var distance = Vector3.Distance(new Vector3(from.X, from.Y, from.Z), new Vector3(to.X, to.Y, to.Z));
+        return (uint)Math.Floor(distance * 3990 / (speed * 100) * 60);
+    }
+
+    private static (int Guaranteed, int Average, int Maximum) PredictBonusExp(uint sector, SubmarineBuild build)
+    {
+        if (!Breakpoints.MapBreakpoints.TryGetValue(sector, out var breakpoint))
+            return (0, 0, 0);
+
+        var guaranteed = breakpoint.Optimal <= build.Retrieval ? 1 : 0;
+
+        var maximum = guaranteed;
+        maximum += breakpoint.T2 <= build.Surveillance ? 1 : 0;
+        maximum += breakpoint.T3 <= build.Surveillance ? 1 : 0;
+
+        if (breakpoint.Favor <= build.Favor)
+        {
+            maximum += 1;
+            maximum += breakpoint.T2 <= build.Surveillance ? 1 : 0;
+            maximum += breakpoint.T3 <= build.Surveillance ? 1 : 0;
+        }
+
+        var max = Math.Clamp(maximum, 0, 4);
+        var average = max == 0 ? 0 : (guaranteed + max) / 2;
+        return (guaranteed, average, max);
+    }
+
+    private static uint CalculateBonusExp(int bonus, uint exp)
+        => bonus switch
+        {
+            0 => exp,
+            1 => (uint)(exp * 1.25),
+            2 => (uint)(exp * 1.50),
+            3 => (uint)(exp * 1.75),
+            4 => (uint)(exp * 2.00),
+            _ => exp,
+        };
+
+    private static PartIds ParseBuildCode(string buildCode)
+    {
+        var normalized = new string((buildCode ?? string.Empty).ToUpperInvariant().Where(char.IsLetter).Take(4).ToArray());
+        normalized = (normalized + "SSSS")[..4];
+
+        return new PartIds(
+            ToPartId(normalized[0], 3),
+            ToPartId(normalized[1], 4),
+            ToPartId(normalized[2], 1),
+            ToPartId(normalized[3], 2));
+    }
+
+    private static string FormatBuildCode(PartIds parts)
+        => $"{ToIdentifier(parts.Hull)}{ToIdentifier(parts.Stern)}{ToIdentifier(parts.Bow)}{ToIdentifier(parts.Bridge)}";
+
+    private static int ToPartId(char code, int offset)
+        => code switch
+        {
+            'S' => 0 + offset,
+            'U' => 4 + offset,
+            'W' => 8 + offset,
+            'C' => 12 + offset,
+            'Y' => 16 + offset,
+            _ => offset,
+        };
+
+    private static string ToIdentifier(int partId)
+        => ((partId - 1) / 4) switch
+        {
+            0 => "S",
+            1 => "U",
+            2 => "W",
+            3 => "C",
+            4 => "Y",
+            5 or 6 or 7 or 8 or 9 => $"{ToIdentifier(partId - 20)}+",
+            _ => "?",
+        };
+
+    private readonly record struct PartIds(int Hull, int Stern, int Bow, int Bridge);
+
+    [MessagePackObject]
+    public sealed class CalculatedRouteData
+    {
+        [Key(0)]
+        public uint MaxSector;
+
+        [Key(1)]
+        public Dictionary<int, CalculatedRoute[]> Maps = [];
+    }
+
+    [MessagePackObject]
+    public struct CalculatedRoute
+    {
+        [Key(0)]
+        public uint Distance;
+
+        [Key(1)]
+        public uint[] Sectors;
+    }
+
+    private enum SectorType : uint
+    {
+        UnknownUnlock = 9876,
+        Begin = 9000,
+        Map = 9999,
+    }
+
+    private sealed record UnlockSource(SectorType Sector, bool Sub = false)
+    {
+        public UnlockSource(uint sector, bool sub = false)
+            : this((SectorType)sector, sub)
+        {
+        }
+    }
+
+    private static class ExactUnlocks
+    {
+        public static readonly Dictionary<uint, UnlockSource> SectorToUnlock = new()
+        {
+            { 0, new UnlockSource(SectorType.Map) },
+            { 1, new UnlockSource(SectorType.Begin) },
+            { 2, new UnlockSource(SectorType.Begin) },
+            { 3, new UnlockSource(1) },
+            { 4, new UnlockSource(2) },
+            { 5, new UnlockSource(2) },
+            { 6, new UnlockSource(3) },
+            { 7, new UnlockSource(4) },
+            { 8, new UnlockSource(7) },
+            { 9, new UnlockSource(5) },
+            { 10, new UnlockSource(5, sub: true) },
+            { 11, new UnlockSource(9) },
+            { 12, new UnlockSource(8) },
+            { 13, new UnlockSource(8) },
+            { 14, new UnlockSource(10) },
+            { 15, new UnlockSource(14, sub: true) },
+            { 16, new UnlockSource(11) },
+            { 17, new UnlockSource(16) },
+            { 18, new UnlockSource(12) },
+            { 19, new UnlockSource(15) },
+            { 20, new UnlockSource(19, sub: true) },
+            { 21, new UnlockSource(19) },
+            { 22, new UnlockSource(21) },
+            { 23, new UnlockSource(14) },
+            { 24, new UnlockSource(23) },
+            { 25, new UnlockSource(20) },
+            { 26, new UnlockSource(25) },
+            { 27, new UnlockSource(26) },
+            { 28, new UnlockSource(27) },
+            { 29, new UnlockSource(27) },
+            { 30, new UnlockSource(28) },
+            { 31, new UnlockSource(SectorType.Map) },
+            { 32, new UnlockSource(30) },
+            { 33, new UnlockSource(32) },
+            { 34, new UnlockSource(33) },
+            { 35, new UnlockSource(34) },
+            { 36, new UnlockSource(35) },
+            { 37, new UnlockSource(34) },
+            { 38, new UnlockSource(37) },
+            { 39, new UnlockSource(38) },
+            { 40, new UnlockSource(38) },
+            { 41, new UnlockSource(40) },
+            { 42, new UnlockSource(39) },
+            { 43, new UnlockSource(42) },
+            { 44, new UnlockSource(40) },
+            { 45, new UnlockSource(41) },
+            { 46, new UnlockSource(45) },
+            { 47, new UnlockSource(43) },
+            { 48, new UnlockSource(36) },
+            { 49, new UnlockSource(47) },
+            { 50, new UnlockSource(45) },
+            { 51, new UnlockSource(42) },
+            { 52, new UnlockSource(SectorType.Map) },
+            { 53, new UnlockSource(49) },
+            { 54, new UnlockSource(53) },
+            { 55, new UnlockSource(53) },
+            { 56, new UnlockSource(55) },
+            { 57, new UnlockSource(55) },
+            { 58, new UnlockSource(56) },
+            { 59, new UnlockSource(57) },
+            { 60, new UnlockSource(57) },
+            { 61, new UnlockSource(59) },
+            { 62, new UnlockSource(59) },
+            { 63, new UnlockSource(61) },
+            { 64, new UnlockSource(61) },
+            { 65, new UnlockSource(62) },
+            { 66, new UnlockSource(65) },
+            { 67, new UnlockSource(64) },
+            { 68, new UnlockSource(66) },
+            { 69, new UnlockSource(64) },
+            { 70, new UnlockSource(65) },
+            { 71, new UnlockSource(69) },
+            { 72, new UnlockSource(70) },
+            { 73, new UnlockSource(SectorType.Map) },
+            { 74, new UnlockSource(72) },
+            { 75, new UnlockSource(74) },
+            { 76, new UnlockSource(74) },
+            { 77, new UnlockSource(76) },
+            { 78, new UnlockSource(75) },
+            { 79, new UnlockSource(75) },
+            { 80, new UnlockSource(76) },
+            { 81, new UnlockSource(77) },
+            { 82, new UnlockSource(81) },
+            { 83, new UnlockSource(79) },
+            { 84, new UnlockSource(83) },
+            { 85, new UnlockSource(83) },
+            { 86, new UnlockSource(81) },
+            { 87, new UnlockSource(82) },
+            { 88, new UnlockSource(84) },
+            { 89, new UnlockSource(85) },
+            { 90, new UnlockSource(87) },
+            { 91, new UnlockSource(88) },
+            { 92, new UnlockSource(88) },
+            { 93, new UnlockSource(89) },
+            { 94, new UnlockSource(SectorType.Map) },
+            { 95, new UnlockSource(93) },
+            { 96, new UnlockSource(95) },
+            { 97, new UnlockSource(95) },
+            { 98, new UnlockSource(96) },
+            { 99, new UnlockSource(97) },
+            { 100, new UnlockSource(96) },
+            { 101, new UnlockSource(97) },
+            { 102, new UnlockSource(101) },
+            { 103, new UnlockSource(98) },
+            { 104, new UnlockSource(100) },
+            { 105, new UnlockSource(101) },
+            { 106, new UnlockSource(104) },
+            { 107, new UnlockSource(105) },
+            { 108, new UnlockSource(106) },
+            { 109, new UnlockSource(107) },
+            { 110, new UnlockSource(103) },
+            { 111, new UnlockSource(106) },
+            { 112, new UnlockSource(109) },
+            { 113, new UnlockSource(108) },
+            { 114, new UnlockSource(111) },
+            { 115, new UnlockSource(SectorType.Map) },
+            { 116, new UnlockSource(114) },
+            { 117, new UnlockSource(116) },
+            { 118, new UnlockSource(116) },
+            { 119, new UnlockSource(117) },
+            { 120, new UnlockSource(118) },
+            { 121, new UnlockSource(117) },
+            { 122, new UnlockSource(118) },
+            { 123, new UnlockSource(122) },
+            { 124, new UnlockSource(121) },
+            { 125, new UnlockSource(122) },
+            { 126, new UnlockSource(123) },
+            { 127, new UnlockSource(124) },
+            { 128, new UnlockSource(124) },
+            { 129, new UnlockSource(128) },
+            { 130, new UnlockSource(127) },
+            { 131, new UnlockSource(129) },
+            { 132, new UnlockSource(127) },
+            { 133, new UnlockSource(129) },
+            { 134, new UnlockSource(132) },
+            { 135, new UnlockSource(133) },
+            { 136, new UnlockSource(SectorType.Map) },
+            { 137, new UnlockSource(135) },
+            { 138, new UnlockSource(137) },
+            { 139, new UnlockSource(137) },
+            { 140, new UnlockSource(139) },
+            { 141, new UnlockSource(138) },
+            { 142, new UnlockSource(140) },
+            { 143, new UnlockSource(142) },
+            { 144, new UnlockSource(143) },
+            { 145, new UnlockSource(141) },
+            { 146, new UnlockSource(145) },
+            { 147, new UnlockSource(144) },
+            { 148, new UnlockSource(146) },
+            { 149, new UnlockSource(144) },
+        };
+    }
+
+    private sealed record Breakpoint(int T2, int T3, int Normal, int Optimal, int Favor);
+
+    private static class Breakpoints
+    {
+        public static readonly Dictionary<uint, Breakpoint> MapBreakpoints = new()
+        {
+            { 001, new Breakpoint(020, 080, 050, 080, 070) }, { 002, new Breakpoint(020, 080, 050, 080, 070) },
+            { 003, new Breakpoint(020, 085, 055, 085, 070) }, { 004, new Breakpoint(020, 085, 055, 085, 070) },
+            { 005, new Breakpoint(025, 090, 060, 090, 080) }, { 006, new Breakpoint(025, 090, 060, 090, 080) },
+            { 007, new Breakpoint(030, 095, 065, 095, 090) }, { 008, new Breakpoint(030, 100, 070, 100, 090) },
+            { 009, new Breakpoint(035, 110, 075, 105, 090) }, { 010, new Breakpoint(050, 115, 080, 110, 090) },
+            { 011, new Breakpoint(050, 090, 080, 110, 070) }, { 012, new Breakpoint(055, 095, 090, 120, 080) },
+            { 013, new Breakpoint(060, 100, 100, 130, 075) }, { 014, new Breakpoint(060, 100, 100, 130, 085) },
+            { 015, new Breakpoint(080, 115, 120, 160, 090) }, { 016, new Breakpoint(060, 100, 100, 130, 085) },
+            { 017, new Breakpoint(065, 105, 110, 140, 090) }, { 018, new Breakpoint(085, 120, 135, 175, 095) },
+            { 019, new Breakpoint(075, 110, 120, 155, 095) }, { 020, new Breakpoint(090, 125, 140, 180, 100) },
+            { 021, new Breakpoint(090, 120, 135, 175, 095) }, { 022, new Breakpoint(105, 130, 140, 180, 100) },
+            { 023, new Breakpoint(110, 140, 140, 180, 105) }, { 024, new Breakpoint(120, 130, 145, 190, 105) },
+            { 025, new Breakpoint(120, 135, 145, 190, 105) }, { 026, new Breakpoint(135, 140, 150, 195, 110) },
+            { 027, new Breakpoint(130, 145, 150, 195, 110) }, { 028, new Breakpoint(130, 150, 155, 200, 120) },
+            { 029, new Breakpoint(135, 150, 160, 200, 130) }, { 030, new Breakpoint(140, 155, 170, 215, 135) },
+            { 032, new Breakpoint(135, 150, 165, 205, 140) }, { 033, new Breakpoint(140, 155, 170, 205, 140) },
+            { 034, new Breakpoint(140, 160, 175, 210, 145) }, { 035, new Breakpoint(145, 165, 180, 220, 145) },
+            { 036, new Breakpoint(145, 160, 185, 220, 150) }, { 037, new Breakpoint(145, 165, 180, 220, 145) },
+            { 038, new Breakpoint(150, 170, 180, 220, 140) }, { 039, new Breakpoint(160, 175, 190, 225, 150) },
+            { 040, new Breakpoint(155, 170, 190, 220, 140) }, { 041, new Breakpoint(160, 175, 190, 225, 150) },
+            { 042, new Breakpoint(155, 170, 185, 230, 160) }, { 043, new Breakpoint(160, 175, 185, 235, 165) },
+            { 044, new Breakpoint(160, 170, 190, 240, 175) }, { 045, new Breakpoint(165, 190, 195, 245, 170) },
+            { 046, new Breakpoint(170, 185, 205, 250, 175) }, { 047, new Breakpoint(165, 180, 185, 235, 165) },
+            { 048, new Breakpoint(165, 180, 185, 235, 165) }, { 049, new Breakpoint(170, 185, 190, 240, 165) },
+            { 050, new Breakpoint(175, 190, 200, 250, 175) }, { 051, new Breakpoint(180, 190, 200, 250, 175) },
+            { 053, new Breakpoint(180, 190, 200, 250, 175) }, { 054, new Breakpoint(180, 190, 200, 250, 175) },
+            { 055, new Breakpoint(180, 190, 200, 250, 175) }, { 056, new Breakpoint(180, 195, 205, 260, 178) },
+            { 057, new Breakpoint(180, 195, 210, 260, 185) }, { 058, new Breakpoint(180, 195, 210, 265, 185) },
+            { 059, new Breakpoint(180, 195, 215, 270, 185) }, { 060, new Breakpoint(180, 195, 220, 270, 185) },
+            { 061, new Breakpoint(180, 195, 220, 270, 185) }, { 062, new Breakpoint(180, 195, 220, 270, 185) },
+            { 063, new Breakpoint(185, 200, 225, 275, 190) }, { 064, new Breakpoint(185, 200, 230, 280, 190) },
+            { 065, new Breakpoint(185, 200, 230, 280, 190) }, { 066, new Breakpoint(190, 205, 235, 285, 195) },
+            { 067, new Breakpoint(195, 210, 240, 290, 200) }, { 068, new Breakpoint(195, 210, 245, 295, 200) },
+            { 069, new Breakpoint(200, 215, 255, 300, 205) }, { 070, new Breakpoint(205, 220, 255, 300, 210) },
+            { 071, new Breakpoint(205, 220, 260, 305, 210) }, { 072, new Breakpoint(205, 220, 260, 305, 210) },
+            { 074, new Breakpoint(205, 220, 260, 305, 210) }, { 075, new Breakpoint(205, 220, 260, 305, 210) },
+            { 076, new Breakpoint(205, 220, 260, 305, 210) }, { 077, new Breakpoint(210, 225, 265, 310, 215) },
+            { 078, new Breakpoint(210, 225, 265, 310, 215) }, { 079, new Breakpoint(210, 225, 265, 310, 215) },
+            { 080, new Breakpoint(210, 225, 265, 310, 215) }, { 081, new Breakpoint(215, 230, 270, 315, 220) },
+            { 082, new Breakpoint(215, 230, 270, 315, 220) }, { 083, new Breakpoint(215, 230, 270, 315, 220) },
+            { 084, new Breakpoint(215, 230, 270, 315, 220) }, { 085, new Breakpoint(215, 230, 270, 315, 220) },
+            { 086, new Breakpoint(215, 230, 270, 315, 220) }, { 087, new Breakpoint(220, 235, 275, 320, 225) },
+            { 088, new Breakpoint(220, 235, 275, 320, 225) }, { 089, new Breakpoint(220, 235, 275, 320, 225) },
+            { 090, new Breakpoint(220, 235, 275, 320, 225) }, { 091, new Breakpoint(220, 235, 275, 320, 225) },
+            { 092, new Breakpoint(220, 235, 275, 320, 225) }, { 093, new Breakpoint(220, 235, 275, 320, 225) },
+            { 095, new Breakpoint(220, 235, 275, 320, 225) }, { 096, new Breakpoint(220, 235, 275, 320, 225) },
+            { 097, new Breakpoint(220, 235, 275, 320, 225) }, { 098, new Breakpoint(225, 240, 280, 325, 230) },
+            { 099, new Breakpoint(225, 237, 280, 325, 227) }, { 100, new Breakpoint(225, 238, 280, 325, 230) },
+            { 101, new Breakpoint(225, 240, 280, 325, 230) }, { 102, new Breakpoint(226, 241, 281, 326, 231) },
+            { 103, new Breakpoint(227, 242, 282, 327, 232) }, { 104, new Breakpoint(228, 243, 283, 328, 233) },
+            { 105, new Breakpoint(229, 244, 284, 329, 234) }, { 106, new Breakpoint(230, 245, 285, 330, 235) },
+            { 107, new Breakpoint(230, 245, 285, 330, 235) }, { 108, new Breakpoint(231, 246, 286, 331, 236) },
+            { 109, new Breakpoint(232, 247, 287, 332, 237) }, { 110, new Breakpoint(233, 248, 288, 333, 238) },
+            { 111, new Breakpoint(234, 249, 289, 334, 239) }, { 112, new Breakpoint(234, 249, 289, 334, 239) },
+            { 113, new Breakpoint(235, 250, 290, 335, 240) }, { 114, new Breakpoint(235, 250, 290, 335, 240) },
+            { 116, new Breakpoint(235, 250, 290, 335, 240) }, { 117, new Breakpoint(235, 250, 290, 335, 240) },
+            { 118, new Breakpoint(235, 250, 290, 335, 240) }, { 119, new Breakpoint(236, 251, 291, 336, 241) },
+            { 120, new Breakpoint(237, 252, 292, 337, 242) }, { 121, new Breakpoint(238, 253, 293, 338, 243) },
+            { 122, new Breakpoint(240, 255, 295, 340, 245) }, { 123, new Breakpoint(241, 256, 296, 341, 246) },
+            { 124, new Breakpoint(242, 257, 297, 342, 247) }, { 125, new Breakpoint(243, 258, 298, 343, 248) },
+            { 126, new Breakpoint(244, 259, 299, 344, 249) }, { 127, new Breakpoint(245, 260, 300, 345, 250) },
+            { 128, new Breakpoint(245, 260, 300, 345, 250) }, { 129, new Breakpoint(246, 261, 301, 346, 251) },
+            { 130, new Breakpoint(247, 262, 302, 347, 252) }, { 131, new Breakpoint(248, 263, 303, 348, 253) },
+            { 132, new Breakpoint(249, 264, 304, 349, 254) }, { 133, new Breakpoint(249, 264, 304, 349, 254) },
+            { 134, new Breakpoint(250, 265, 305, 350, 255) }, { 135, new Breakpoint(250, 266, 305, 350, 255) },
+            { 137, new Breakpoint(251, 266, 306, 351, 256) }, { 138, new Breakpoint(252, 267, 307, 352, 257) },
+            { 139, new Breakpoint(253, 268, 308, 353, 258) }, { 140, new Breakpoint(254, 269, 309, 354, 259) },
+            { 141, new Breakpoint(254, 269, 309, 354, 259) }, { 142, new Breakpoint(255, 270, 310, 355, 260) },
+            { 143, new Breakpoint(255, 270, 310, 355, 260) }, { 144, new Breakpoint(256, 271, 311, 356, 261) },
+            { 145, new Breakpoint(257, 272, 312, 357, 262) }, { 146, new Breakpoint(258, 273, 313, 358, 263) },
+            { 147, new Breakpoint(258, 273, 313, 358, 263) }, { 148, new Breakpoint(259, 274, 314, 359, 264) },
+            { 149, new Breakpoint(260, 275, 315, 360, 265) },
+        };
+    }
+}

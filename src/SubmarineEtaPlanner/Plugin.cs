@@ -2,6 +2,7 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using SubmarineEtaPlanner.Planner;
+using SubmarineEtaPlanner.SubmarineTrackerRuntime;
 using SubmarineEtaPlanner.SubmarineTrackerCompat;
 using SubmarineEtaPlanner.TrackerData;
 using SubmarineEtaPlanner.Ui;
@@ -18,6 +19,9 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService]
     internal static IPluginLog Log { get; private set; } = null!;
 
+    [PluginService]
+    internal static IDataManager Data { get; private set; } = null!;
+
     private readonly PlannerWindow plannerWindow;
     private readonly Dalamud.Interface.Windowing.WindowSystem windowSystem = new("SubmarineEtaPlanner");
 
@@ -25,7 +29,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
-        var catalog = new CompatSubmarineCatalog();
+        ISubmarineCatalog catalog = new DalamudSubmarineCatalog(Data, PluginInterface.AssemblyLocation.DirectoryName!, Log);
         var stateReader = new SubmarineTrackerStateReader();
         var buildResolver = new BuildResolver(catalog);
         var unlockGraph = new RouteUnlockGraph(catalog);
