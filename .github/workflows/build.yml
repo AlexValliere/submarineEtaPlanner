@@ -1,0 +1,73 @@
+name: Build
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ "v*" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore SubmarineEtaPlanner.sln
+
+      - name: Test
+        run: dotnet test SubmarineEtaPlanner.sln --configuration Release --no-restore
+
+      - name: Build
+        run: dotnet build src/SubmarineEtaPlanner/SubmarineEtaPlanner.csproj --configuration Release --no-restore
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $project = "src/SubmarineEtaPlanner"
+          $out = "$project/bin/Release"
+          New-Item -ItemType Directory -Force -Path "artifacts" | Out-Null
+          if (Test-Path "$out/SubmarineEtaPlanner/latest.zip") {
+            Copy-Item "$out/SubmarineEtaPlanner/latest.zip" "artifacts/latest.zip"
+          } else {
+            $packageDir = "artifacts/SubmarineEtaPlanner"
+            New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+            Copy-Item "$out/*.dll" $packageDir
+            Copy-Item "$out/SubmarineEtaPlanner.deps.json" $packageDir
+            Copy-Item "$out/SubmarineEtaPlanner.json" $packageDir
+            Compress-Archive -Path "$packageDir/*" -DestinationPath "artifacts/latest.zip" -Force
+          }
+
+      - name: Stage Pages
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "public/SubmarineEtaPlanner" | Out-Null
+          Copy-Item repo.json public/repo.json
+          Copy-Item artifacts/latest.zip public/SubmarineEtaPlanner/latest.zip
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          path: public
+
+  deploy:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
