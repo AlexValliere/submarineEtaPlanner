@@ -99,13 +99,27 @@ public sealed class EtaSimulatorTests
     {
         var catalog = new ScriptedCatalog();
         var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
-        var settings = EtaSettings.CreateDefault() with { RouteGoal = RouteGoal.FastestLevelingOnly };
+        var settings = EtaSettings.CreateDefault() with { EtaModel = EtaModel.ExactRouteSearch, RouteGoal = RouteGoal.FastestLevelingOnly };
         var state = new UnlockState([1], [1], [], []);
 
         var route = selector.SelectNextRoute(CreateSub(rank: 10), state, catalog.ResolveBuild("TEST", 10), settings, fleetMode: false);
 
         Assert.Equal([99u], route.Route);
         Assert.Empty(catalog.LastMustInclude);
+    }
+
+    [Fact]
+    public void PracticalLevelingRequestsReachableUnlockProgressionRoute()
+    {
+        var catalog = new ScriptedCatalog();
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var settings = EtaSettings.CreateDefault() with { EtaModel = EtaModel.PracticalLeveling };
+        var state = new UnlockState([1], [1], [], []);
+
+        var route = selector.SelectNextRoute(CreateSub(rank: 10), state, catalog.ResolveBuild("TEST", 10), settings, fleetMode: false);
+
+        Assert.Equal([1u], route.Route);
+        Assert.Equal([1u], catalog.LastMustInclude);
     }
 
     [Fact]
@@ -344,7 +358,7 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
-    public void PracticalOptimisticSimulationBatchesIdenticalVoyages()
+    public void PracticalOptimisticSimulationDoesNotBatchWhenUnlockProgressionIsActive()
     {
         var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 25, routeDuration: TimeSpan.FromHours(1)));
         var settings = EtaSettings.CreateDefault() with
@@ -360,9 +374,9 @@ public sealed class EtaSimulatorTests
 
         Assert.True(sub.IsComplete);
         Assert.Equal(4, sub.VoyageCount);
-        Assert.Single(sub.VoyagePreview);
+        Assert.Equal(4, sub.VoyagePreview.Count);
         Assert.Equal(TimeSpan.FromHours(4), sub.Remaining);
-        Assert.Contains("Batched 4", sub.VoyagePreview.Single().Warnings.Single());
+        Assert.All(sub.VoyagePreview, plan => Assert.Empty(plan.Warnings));
     }
 
     [Fact]
@@ -394,7 +408,7 @@ public sealed class EtaSimulatorTests
         var repoJson = File.ReadAllText(repoJsonPath);
 
         Assert.Contains("SubmarineEtaPlanner", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.2.6.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.2.7.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);

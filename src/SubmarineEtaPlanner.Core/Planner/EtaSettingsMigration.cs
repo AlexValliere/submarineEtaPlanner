@@ -2,7 +2,7 @@ namespace SubmarineEtaPlanner.Planner;
 
 public static class EtaSettingsMigration
 {
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
 
     public static bool Migrate(EtaSettings settings, ref int version)
     {
@@ -27,6 +27,9 @@ public static class EtaSettingsMigration
 
         if (version < 4 && settings.EtaModel == EtaModel.PracticalLeveling)
             settings.OptimizeExpPerHour = false;
+
+        if (version < 5 && settings.EtaModel == EtaModel.PracticalLeveling)
+            settings.RouteGoal = RouteGoal.UnlockLevelingRoutesThenLevel;
 
         version = CurrentVersion;
         return true;

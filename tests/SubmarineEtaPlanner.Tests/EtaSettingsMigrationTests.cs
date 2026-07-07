@@ -6,12 +6,13 @@ namespace SubmarineEtaPlanner.Tests;
 public sealed class EtaSettingsMigrationTests
 {
     [Fact]
-    public void DefaultsUseAverageExpAndFastestLevelingRouteGoal()
+    public void DefaultsUseAverageExpAndUnlockLevelingRouteGoal()
     {
         var settings = EtaSettings.CreateDefault();
 
         Assert.Equal(ExpMode.Average, settings.ExpMode);
-        Assert.Equal(RouteGoal.FastestLevelingOnly, settings.RouteGoal);
+        Assert.Equal(RouteGoal.UnlockLevelingRoutesThenLevel, settings.RouteGoal);
+        Assert.Equal(RouteGoal.UnlockLevelingRoutesThenLevel, settings.EffectiveRouteGoal);
         Assert.Equal(EtaModel.PracticalLeveling, settings.EtaModel);
         Assert.Equal(24, settings.PracticalMaxVoyageHours);
         Assert.Equal(TimeoutResultBehavior.KeepLastComplete, settings.TimeoutResultBehavior);
@@ -36,7 +37,8 @@ public sealed class EtaSettingsMigrationTests
         Assert.True(changed);
         Assert.Equal(EtaSettingsMigration.CurrentVersion, version);
         Assert.Equal(ExpMode.Average, settings.ExpMode);
-        Assert.Equal(RouteGoal.FastestLevelingOnly, settings.RouteGoal);
+        Assert.Equal(RouteGoal.UnlockLevelingRoutesThenLevel, settings.RouteGoal);
+        Assert.Equal(RouteGoal.UnlockLevelingRoutesThenLevel, settings.EffectiveRouteGoal);
         Assert.Equal(EtaModel.PracticalLeveling, settings.EtaModel);
         Assert.Equal(24, settings.PracticalMaxVoyageHours);
         Assert.Equal(TimeoutResultBehavior.KeepLastComplete, settings.TimeoutResultBehavior);

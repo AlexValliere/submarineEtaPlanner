@@ -61,6 +61,10 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
                 unlockState.UnlockedPoints,
                 rank,
                 settings.PrioritizeSubSlots),
+            RouteGoal.UnlockLevelingRoutesThenLevel => unlockGraph.GetNextUnlockCandidates(
+                unlockState.UnlockedPoints,
+                rank,
+                prioritizeSubSlots: false),
             _ => [],
         };
 

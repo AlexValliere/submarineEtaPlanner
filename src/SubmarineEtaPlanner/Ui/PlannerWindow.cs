@@ -12,6 +12,7 @@ public sealed class PlannerWindow : Window
         "Fastest leveling only",
         "Unlock sub slots then level",
         "Unlock everything then level",
+        "Unlock leveling routes",
     ];
 
     private static readonly string[] EtaModelLabels =
@@ -224,7 +225,7 @@ public sealed class PlannerWindow : Window
         }
 
         ImGui.TextUnformatted("Build profile: 1-14 SSSS, 15-24 SSUS, 25-113 SSUW, 114+ WSCC.");
-        ImGui.TextUnformatted("Practical leveling uses Average EXP, highest route EXP, and the default build profile.");
+        ImGui.TextUnformatted("Practical leveling unlocks better routes, uses Average EXP, highest route EXP, and the default build profile.");
         ImGui.TextUnformatted("Estimator only. No deployment, collection, UI clicking, or automation is performed.");
     }
 

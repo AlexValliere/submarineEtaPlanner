@@ -19,6 +19,7 @@ public sealed class SettingsWindow : Window
         "Fastest leveling only",
         "Unlock sub slots then level",
         "Unlock everything then level",
+        "Unlock leveling routes",
     ];
 
     private static readonly string[] EtaModelLabels =

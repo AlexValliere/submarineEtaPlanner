@@ -24,6 +24,7 @@ public enum RouteGoal
     FastestLevelingOnly,
     UnlockSubSlotsThenLevel,
     UnlockEverythingThenLevel,
+    UnlockLevelingRoutesThenLevel,
 }
 
 public enum EtaModel
@@ -176,7 +177,7 @@ public sealed record EtaSettings
 
     public bool PrioritizeSubSlots { get; set; } = true;
 
-    public RouteGoal RouteGoal { get; set; } = RouteGoal.FastestLevelingOnly;
+    public RouteGoal RouteGoal { get; set; } = RouteGoal.UnlockLevelingRoutesThenLevel;
 
     public int DurationLimitHours { get; set; } = 0;
 
@@ -206,7 +207,7 @@ public sealed record EtaSettings
 
     public ExpMode EffectiveExpMode => EtaModel == EtaModel.PracticalLeveling ? ExpMode.Average : ExpMode;
 
-    public RouteGoal EffectiveRouteGoal => EtaModel == EtaModel.PracticalLeveling ? RouteGoal.FastestLevelingOnly : RouteGoal;
+    public RouteGoal EffectiveRouteGoal => EtaModel == EtaModel.PracticalLeveling ? RouteGoal.UnlockLevelingRoutesThenLevel : RouteGoal;
 
     public int EffectiveDurationLimitHours =>
         EtaModel == EtaModel.PracticalLeveling
