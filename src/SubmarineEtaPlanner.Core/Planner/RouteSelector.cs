@@ -7,34 +7,38 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
         UnlockState unlockState,
         SubmarineBuild build,
         EtaSettings settings,
-        bool fleetMode)
+        bool fleetMode,
+        DateTimeOffset? deadlineUtc = null)
     {
-        var warnings = new List<string>();
         var requiredUnlockPoints = unlockGraph
             .GetNextUnlockCandidates(unlockState.UnlockedPoints, submarine.Rank, settings.PrioritizeSubSlots)
             .Where(point => !fleetMode || !unlockGraph.GetUnlockTargetsForRoute([point], unlockState, submarine.Rank).Any(unlockState.PendingUnlockPoints.Contains))
             .ToHashSet();
 
-        var candidates = catalog.GetCandidateRoutes(
-                build,
-                unlockState.UnlockedPoints,
-                unlockState.ExploredPoints,
-                requiredUnlockPoints,
-                settings)
-            .OrderByDescending(c => c.ExpPerHour)
-            .ThenBy(c => c.Duration)
-            .ToArray();
+        if (requiredUnlockPoints.Count > 0)
+        {
+            var unlockCandidate = catalog.GetCandidateRoutes(
+                    build,
+                    unlockState.UnlockedPoints,
+                    unlockState.ExploredPoints,
+                    requiredUnlockPoints,
+                    settings,
+                    deadlineUtc)
+                .OrderByDescending(c => settings.OptimizeExpPerHour ? c.ExpPerHour : c.Exp)
+                .ThenBy(c => c.Duration)
+                .FirstOrDefault(c => c.Route.Any(requiredUnlockPoints.Contains));
 
-        var unlockCandidate = candidates.FirstOrDefault(c => requiredUnlockPoints.Count > 0 && c.Route.Any(requiredUnlockPoints.Contains));
-        if (unlockCandidate is not null)
-            return ReservePendingUnlocks(unlockCandidate, unlockState, submarine.Rank, fleetMode);
+            if (unlockCandidate is not null)
+                return ReservePendingUnlocks(unlockCandidate, unlockState, submarine.Rank, fleetMode);
+        }
 
         var fallback = catalog.GetCandidateRoutes(
                 build,
                 unlockState.UnlockedPoints,
                 unlockState.ExploredPoints,
                 new HashSet<uint>(),
-                settings)
+                settings,
+                deadlineUtc)
             .Where(c => !fleetMode || !c.UnlockTargets.Any(unlockState.PendingUnlockPoints.Contains))
             .OrderByDescending(c => settings.OptimizeExpPerHour ? c.ExpPerHour : c.Exp)
             .ThenBy(c => c.Duration)
@@ -43,7 +47,6 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
         if (fallback is not null)
             return ReservePendingUnlocks(fallback, unlockState, submarine.Rank, fleetMode);
 
-        warnings.Add("No valid route was found; using an empty idle plan.");
         return new RouteCandidate([], 0, TimeSpan.Zero, 0, []);
     }
 

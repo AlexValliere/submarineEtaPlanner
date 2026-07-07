@@ -71,6 +71,14 @@ public sealed class SettingsWindow : Window
             changed = true;
         }
 
+        var timeLimit = settings.CalculationTimeLimitSeconds;
+        ImGui.SetNextItemWidth(120);
+        if (ImGui.InputInt("Calculation time limit seconds", ref timeLimit))
+        {
+            settings.CalculationTimeLimitSeconds = Math.Clamp(timeLimit, 0, 300);
+            changed = true;
+        }
+
         var fleetMode = settings.SimulationMode == SimulationMode.Fleet;
         if (ImGui.Checkbox("Fleet simulation", ref fleetMode))
         {

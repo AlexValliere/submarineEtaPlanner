@@ -56,7 +56,8 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
         IReadOnlySet<uint> unlockedPoints,
         IReadOnlySet<uint> exploredPoints,
         IReadOnlySet<uint> mustInclude,
-        EtaSettings settings)
+        EtaSettings settings,
+        DateTimeOffset? deadlineUtc = null)
     {
         var available = Sectors.Values
             .Where(s => s.RequiredRank <= build.Rank)

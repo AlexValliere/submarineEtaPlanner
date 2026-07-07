@@ -1,6 +1,7 @@
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
 using SubmarineEtaPlanner.Planner;
+using System.Diagnostics;
 
 namespace SubmarineEtaPlanner.Ui;
 
@@ -11,6 +12,7 @@ public sealed class PlannerWindow : Window
     private readonly EtaPlannerService plannerService;
     private EtaPlannerSnapshot? snapshot;
     private Task<EtaPlannerSnapshot>? refreshTask;
+    private DateTimeOffset? refreshStartedAtUtc;
     private bool refreshPending;
     private string lastError = string.Empty;
 
@@ -54,7 +56,12 @@ public sealed class PlannerWindow : Window
 
         if (this.refreshTask is { IsCompleted: false })
         {
-            ImGui.TextUnformatted(this.snapshot is null ? "Calculating ETA..." : "Refreshing ETA...");
+            var elapsed = this.refreshStartedAtUtc is null
+                ? TimeSpan.Zero
+                : DateTimeOffset.UtcNow - this.refreshStartedAtUtc.Value;
+            ImGui.TextUnformatted($"{(this.snapshot is null ? "Calculating ETA" : "Refreshing ETA")}... {FormatElapsed(elapsed)}");
+            if (elapsed.TotalSeconds > 10)
+                ImGui.TextWrapped("Large tracker datasets may return partial results when the calculation time limit is reached.");
             if (this.snapshot is null)
                 return;
         }
@@ -133,6 +140,14 @@ public sealed class PlannerWindow : Window
         if (ImGui.InputInt("Duration limit hours", ref durationLimit))
         {
             this.configuration.Settings.DurationLimitHours = Math.Max(0, durationLimit);
+            this.saveConfiguration();
+            InvalidateAndQueueRefresh();
+        }
+
+        var timeLimit = this.configuration.Settings.CalculationTimeLimitSeconds;
+        if (ImGui.InputInt("Calculation time limit seconds", ref timeLimit))
+        {
+            this.configuration.Settings.CalculationTimeLimitSeconds = Math.Clamp(timeLimit, 0, 300);
             this.saveConfiguration();
             InvalidateAndQueueRefresh();
         }
@@ -288,9 +303,28 @@ public sealed class PlannerWindow : Window
     private void StartRefresh()
     {
         this.refreshPending = false;
+        this.refreshStartedAtUtc = DateTimeOffset.UtcNow;
         var settings = CloneSettings(this.configuration.Settings);
         var now = DateTimeOffset.UtcNow;
-        this.refreshTask = Task.Run(() => this.plannerService.Calculate(settings, now));
+        Plugin.Log.Information("Starting submarine ETA calculation.");
+        this.refreshTask = Task.Run(() =>
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                var result = this.plannerService.Calculate(settings, now);
+                Plugin.Log.Information(
+                    "Submarine ETA calculation completed in {ElapsedMilliseconds} ms for {FreeCompanyCount} FC(s).",
+                    stopwatch.ElapsedMilliseconds,
+                    result.Results.Count);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error(ex, "Submarine ETA calculation failed after {ElapsedMilliseconds} ms.", stopwatch.ElapsedMilliseconds);
+                throw;
+            }
+        });
     }
 
     private void CompleteRefreshIfReady()
@@ -300,6 +334,7 @@ public sealed class PlannerWindow : Window
             return;
 
         this.refreshTask = null;
+        this.refreshStartedAtUtc = null;
         try
         {
             this.lastError = string.Empty;
@@ -334,6 +369,7 @@ public sealed class PlannerWindow : Window
         SubmarineTrackerDatabasePathOverride = settings.SubmarineTrackerDatabasePathOverride,
         MaxPreviewVoyagesPerSubmarine = settings.MaxPreviewVoyagesPerSubmarine,
         SimulationSafetyVoyageCapPerSubmarine = settings.SimulationSafetyVoyageCapPerSubmarine,
+        CalculationTimeLimitSeconds = settings.CalculationTimeLimitSeconds,
     };
 
     private static string FormatRelative(DateTimeOffset date, DateTimeOffset now)
@@ -348,6 +384,9 @@ public sealed class PlannerWindow : Window
     }
 
     private static string FormatRoute(IReadOnlyList<uint> route) => route.Count == 0 ? "-" : string.Join("-", route);
+
+    private static string FormatElapsed(TimeSpan elapsed)
+        => elapsed.TotalSeconds < 1 ? string.Empty : $"({elapsed:mm\\:ss})";
 
     private static void DrawBulletText(string text)
     {

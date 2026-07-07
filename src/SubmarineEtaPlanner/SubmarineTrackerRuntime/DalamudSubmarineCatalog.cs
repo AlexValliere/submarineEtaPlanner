@@ -10,6 +10,9 @@ namespace SubmarineEtaPlanner.SubmarineTrackerRuntime;
 public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
 {
     private const int FixedVoyageTimeSeconds = 43200;
+    private const int CandidateLimit = 200;
+    private const int CandidatePruneThreshold = CandidateLimit * 8;
+    private const int CandidateCacheLimit = 4096;
     private static readonly uint[] Mrojz = [13, 18, 15, 10, 26];
 
     private readonly ExcelSheet<SubmarineExploration> explorationSheet;
@@ -20,6 +23,8 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
     private readonly CalculatedRouteData calculatedRoutes;
     private readonly IPluginLog log;
     private readonly uint lastRank;
+    private readonly object candidateCacheLock = new();
+    private readonly Dictionary<CandidateCacheKey, IReadOnlyList<RouteCandidate>> candidateCache = [];
 
     public DalamudSubmarineCatalog(IDataManager dataManager, string pluginDirectory, IPluginLog log)
     {
@@ -64,16 +69,54 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
         IReadOnlySet<uint> unlockedPoints,
         IReadOnlySet<uint> exploredPoints,
         IReadOnlySet<uint> mustInclude,
-        EtaSettings settings)
+        EtaSettings settings,
+        DateTimeOffset? deadlineUtc = null)
+    {
+        var cacheKey = CandidateCacheKey.Create(build, unlockedPoints, mustInclude, settings);
+        lock (this.candidateCacheLock)
+        {
+            if (this.candidateCache.TryGetValue(cacheKey, out var cached))
+                return cached;
+        }
+
+        var (candidates, completed) = BuildCandidateRoutes(build, unlockedPoints, mustInclude, settings, deadlineUtc);
+        if (completed)
+        {
+            lock (this.candidateCacheLock)
+            {
+                if (this.candidateCache.Count >= CandidateCacheLimit)
+                    this.candidateCache.Clear();
+
+                this.candidateCache[cacheKey] = candidates;
+            }
+        }
+
+        return candidates;
+    }
+
+    private (IReadOnlyList<RouteCandidate> Candidates, bool Completed) BuildCandidateRoutes(
+        SubmarineBuild build,
+        IReadOnlySet<uint> unlockedPoints,
+        IReadOnlySet<uint> mustInclude,
+        EtaSettings settings,
+        DateTimeOffset? deadlineUtc)
     {
         if (this.calculatedRoutes.Maps.Count == 0)
-            return [];
+            return ([], Completed: true);
 
         var candidates = new List<RouteCandidate>();
+        var routeCounter = 0;
         foreach (var routeSet in this.calculatedRoutes.Maps.Values)
         {
             foreach (var route in routeSet)
             {
+                if ((++routeCounter & 0x3FF) == 0 && IsTimedOut(deadlineUtc))
+                {
+                    return (OrderCandidates(candidates, mustInclude, settings)
+                        .Take(CandidateLimit)
+                        .ToArray(), Completed: false);
+                }
+
                 if (route.Sectors.Length is 0 or > 5)
                     continue;
                 if (route.Distance > build.Range)
@@ -99,16 +142,38 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
                     duration,
                     exp / Math.Max(duration.TotalHours, 0.01),
                     GetUnlockTargets(route.Sectors, build.Rank, unlockedPoints)));
+
+                if (candidates.Count >= CandidatePruneThreshold)
+                    PruneCandidates(candidates, mustInclude, settings);
             }
         }
 
-        return candidates
+        var orderedCandidates = OrderCandidates(candidates, mustInclude, settings)
+            .Take(CandidateLimit)
+            .ToArray();
+        return (orderedCandidates, Completed: true);
+    }
+
+    private static void PruneCandidates(List<RouteCandidate> candidates, IReadOnlySet<uint> mustInclude, EtaSettings settings)
+    {
+        var topCandidates = OrderCandidates(candidates, mustInclude, settings)
+            .Take(CandidateLimit)
+            .ToArray();
+        candidates.Clear();
+        candidates.AddRange(topCandidates);
+    }
+
+    private static IOrderedEnumerable<RouteCandidate> OrderCandidates(
+        IEnumerable<RouteCandidate> candidates,
+        IReadOnlySet<uint> mustInclude,
+        EtaSettings settings)
+        => candidates
             .OrderByDescending(route => mustInclude.Count > 0 && route.Route.Any(mustInclude.Contains))
             .ThenByDescending(route => settings.OptimizeExpPerHour ? route.ExpPerHour : route.Exp)
-            .ThenBy(route => route.Duration)
-            .Take(200)
-            .ToArray();
-    }
+            .ThenBy(route => route.Duration);
+
+    private static bool IsTimedOut(DateTimeOffset? deadlineUtc)
+        => deadlineUtc is not null && DateTimeOffset.UtcNow >= deadlineUtc.Value;
 
     public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode)
     {
@@ -192,7 +257,12 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
         try
         {
             using var stream = File.OpenRead(path);
-            return MessagePackSerializer.Deserialize<CalculatedRouteData>(stream);
+            var data = MessagePackSerializer.Deserialize<CalculatedRouteData>(stream);
+            this.log.Information(
+                "Loaded {RouteCount} calculated submarine routes across {MapCount} maps.",
+                data.Maps.Values.Sum(routes => routes.Length),
+                data.Maps.Count);
+            return data;
         }
         catch (Exception ex)
         {
@@ -528,6 +598,43 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
     }
 
     private sealed record Breakpoint(int T2, int T3, int Normal, int Optimal, int Favor);
+
+    private sealed record CandidateCacheKey(
+        string BuildCode,
+        int Rank,
+        int Surveillance,
+        int Retrieval,
+        int Favor,
+        int Range,
+        int Speed,
+        ExpMode ExpMode,
+        int DurationLimitHours,
+        bool OptimizeExpPerHour,
+        string UnlockedPoints,
+        string MustIncludePoints)
+    {
+        public static CandidateCacheKey Create(
+            SubmarineBuild build,
+            IReadOnlySet<uint> unlockedPoints,
+            IReadOnlySet<uint> mustInclude,
+            EtaSettings settings)
+            => new(
+                build.Code,
+                build.Rank,
+                build.Surveillance,
+                build.Retrieval,
+                build.Favor,
+                build.Range,
+                build.Speed,
+                settings.ExpMode,
+                settings.DurationLimitHours,
+                settings.OptimizeExpPerHour,
+                CreateSetKey(unlockedPoints),
+                CreateSetKey(mustInclude));
+
+        private static string CreateSetKey(IReadOnlySet<uint> values)
+            => values.Count == 0 ? string.Empty : string.Join(',', values.Order());
+    }
 
     private static class Breakpoints
     {

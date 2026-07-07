@@ -7,13 +7,16 @@ public sealed class EtaSimulator(
     ISubmarineCatalog catalog)
 {
     public EtaResult Simulate(FcState fc, EtaSettings settings, DateTimeOffset now)
+        => Simulate(fc, settings, now, null);
+
+    public EtaResult Simulate(FcState fc, EtaSettings settings, DateTimeOffset now, DateTimeOffset? deadlineUtc)
         => settings.SimulationMode switch
         {
-            SimulationMode.OptimisticPerSub => SimulateOptimistic(fc, settings, now),
-            _ => SimulateFleet(fc, settings, now),
+            SimulationMode.OptimisticPerSub => SimulateOptimistic(fc, settings, now, deadlineUtc),
+            _ => SimulateFleet(fc, settings, now, deadlineUtc),
         };
 
-    private EtaResult SimulateOptimistic(FcState fc, EtaSettings settings, DateTimeOffset now)
+    private EtaResult SimulateOptimistic(FcState fc, EtaSettings settings, DateTimeOffset now, DateTimeOffset? deadlineUtc)
     {
         var results = new List<PerSubEtaResult>();
         var allPlans = new List<VoyagePlan>();
@@ -21,8 +24,14 @@ public sealed class EtaSimulator(
 
         foreach (var sub in fc.Submarines)
         {
+            if (IsTimedOut(deadlineUtc))
+            {
+                warnings.Add($"Calculation time limit reached while simulating {fc.DisplayName}; results are partial.");
+                break;
+            }
+
             var unlockState = CreateUnlockState(fc);
-            var result = SimulateSingleSub(sub, fc, unlockState, settings, now, fleetMode: false);
+            var result = SimulateSingleSub(sub, fc, unlockState, settings, now, fleetMode: false, deadlineUtc);
             results.Add(result);
             allPlans.AddRange(result.VoyagePreview);
             warnings.AddRange(result.Warnings);
@@ -31,7 +40,7 @@ public sealed class EtaSimulator(
         return CreateEtaResult(fc, settings, now, results, allPlans, results.SelectMany(r => r.UnlockMilestones), warnings);
     }
 
-    private EtaResult SimulateFleet(FcState fc, EtaSettings settings, DateTimeOffset now)
+    private EtaResult SimulateFleet(FcState fc, EtaSettings settings, DateTimeOffset now, DateTimeOffset? deadlineUtc)
     {
         var unlockState = CreateUnlockState(fc);
         var states = fc.Submarines.ToDictionary(
@@ -50,6 +59,12 @@ public sealed class EtaSimulator(
 
         while (queue.Count > 0 && finished.Count < states.Count)
         {
+            if (IsTimedOut(deadlineUtc))
+            {
+                warnings.Add($"Calculation time limit reached while simulating {fc.DisplayName}; results are partial.");
+                break;
+            }
+
             var submarineId = queue.Dequeue();
             var mutable = states[submarineId];
             if (finished.Contains(submarineId))
@@ -83,7 +98,7 @@ public sealed class EtaSimulator(
             }
 
             var build = buildResolver.ResolveBuildForRank(mutable.Rank, settings);
-            var route = routeSelector.SelectNextRoute(mutable.Source, unlockState, build, settings, fleetMode: true);
+            var route = routeSelector.SelectNextRoute(mutable.Source, unlockState, build, settings, fleetMode: true, deadlineUtc);
             if (route.Route.Count == 0 || route.Exp == 0)
             {
                 var warning = $"No valid route found for {mutable.Source.Name}; ETA may be incomplete.";
@@ -158,7 +173,8 @@ public sealed class EtaSimulator(
         UnlockState unlockState,
         EtaSettings settings,
         DateTimeOffset now,
-        bool fleetMode)
+        bool fleetMode,
+        DateTimeOffset? deadlineUtc)
     {
         var warnings = new List<string>();
         var plans = new List<VoyagePlan>();
@@ -192,9 +208,15 @@ public sealed class EtaSimulator(
 
         while (rank < settings.TargetRank && plans.Count < settings.SimulationSafetyVoyageCapPerSubmarine)
         {
+            if (IsTimedOut(deadlineUtc))
+            {
+                warnings.Add($"Calculation time limit reached for {sub.Name}; ETA is partial.");
+                break;
+            }
+
             var build = buildResolver.ResolveBuildForRank(rank, settings);
             var tempSub = sub with { Rank = rank, CurrentExp = currentExp, NextLevelExp = nextLevelExp };
-            var route = routeSelector.SelectNextRoute(tempSub, unlockState, build, settings, fleetMode);
+            var route = routeSelector.SelectNextRoute(tempSub, unlockState, build, settings, fleetMode, deadlineUtc);
             if (route.Route.Count == 0 || route.Exp == 0)
             {
                 warnings.Add($"No valid route found for {sub.Name}; ETA may be incomplete.");
@@ -258,6 +280,9 @@ public sealed class EtaSimulator(
         var availableAt = sub.ReturnAtUtc > now ? sub.ReturnAtUtc : now;
         return availableAt + TimeSpan.FromMinutes(settings.CollectionDelayMinutes);
     }
+
+    private static bool IsTimedOut(DateTimeOffset? deadlineUtc)
+        => deadlineUtc is not null && DateTimeOffset.UtcNow >= deadlineUtc.Value;
 
     private static EtaResult CreateEtaResult(
         FcState fc,

@@ -9,7 +9,8 @@ public interface ISubmarineCatalog
         IReadOnlySet<uint> unlockedPoints,
         IReadOnlySet<uint> exploredPoints,
         IReadOnlySet<uint> mustInclude,
-        EtaSettings settings);
+        EtaSettings settings,
+        DateTimeOffset? deadlineUtc = null);
 
     uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode);
 

@@ -152,6 +152,8 @@ public sealed record EtaSettings
 
     public int SimulationSafetyVoyageCapPerSubmarine { get; set; } = 500;
 
+    public int CalculationTimeLimitSeconds { get; set; } = 20;
+
     public static EtaSettings CreateDefault() => new()
     {
         BuildProfile =
