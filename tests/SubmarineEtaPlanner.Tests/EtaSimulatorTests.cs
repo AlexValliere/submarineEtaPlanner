@@ -324,13 +324,35 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
+    public void FleetEtaUsesFinalAvailabilityWhenPreviewIsCapped()
+    {
+        var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 100, routeDuration: TimeSpan.FromDays(1)));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.Fleet,
+            MaxPreviewVoyagesPerSubmarine = 2,
+        };
+        settings.TargetRank = 5;
+        var fc = CreateFc(new HashSet<uint>([99]), CreateSub(rank: 1) with { NextLevelExp = 100 });
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var sub = Assert.Single(result.PerSubResults);
+
+        Assert.True(sub.IsComplete);
+        Assert.Equal(4, sub.VoyageCount);
+        Assert.Equal(2, sub.VoyagePreview.Count);
+        Assert.Equal(TimeSpan.FromDays(4), sub.Remaining);
+        Assert.Equal(TimeSpan.FromDays(4), result.FcCompletionAtUtc - result.GeneratedAtUtc);
+    }
+
+    [Fact]
     public void RepoJsonContainsExpectedDownloadLinks()
     {
         var repoJsonPath = FindRepoJson();
         var repoJson = File.ReadAllText(repoJsonPath);
 
         Assert.Contains("SubmarineEtaPlanner", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.2.4.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.2.5.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);

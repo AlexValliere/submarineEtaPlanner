@@ -167,8 +167,7 @@ public sealed class EtaSimulator(
         {
             var subPlans = perSubPlans[state.Source.SubmarineId];
             var firstPlan = subPlans.FirstOrDefault();
-            var lastPlan = subPlans.LastOrDefault();
-            var etaAt = lastPlan?.ReturnAtUtc ?? state.NextAvailableAt;
+            var etaAt = state.NextAvailableAt;
             var build = firstPlan?.BuildCode ?? buildResolver.GetBuildCodeForRank(state.Source.Rank, settings);
             var subWarnings = perSubWarnings[state.Source.SubmarineId].ToList();
             var status = state.Rank >= settings.TargetRank && subWarnings.All(w => !IsIncompleteWarning(w))
