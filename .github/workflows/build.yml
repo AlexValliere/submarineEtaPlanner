@@ -23,11 +23,20 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Download Dalamud dev files
+        shell: pwsh
+        run: |
+          $version = Invoke-RestMethod "https://kamori.goats.dev/Dalamud/Release/VersionInfo?track=stg"
+          New-Item -ItemType Directory -Force -Path ".dalamud" | Out-Null
+          Invoke-WebRequest $version.downloadUrl -OutFile ".dalamud/dalamud.zip"
+          Expand-Archive ".dalamud/dalamud.zip" -DestinationPath ".dalamud/dev" -Force
+          "DALAMUD_HOME=$((Resolve-Path ".dalamud/dev").Path)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Restore
         run: dotnet restore SubmarineEtaPlanner.sln
 
       - name: Test
-        run: dotnet test SubmarineEtaPlanner.sln --configuration Release --no-restore
+        run: dotnet test tests/SubmarineEtaPlanner.Tests/SubmarineEtaPlanner.Tests.csproj --configuration Release --no-restore
 
       - name: Build
         run: dotnet build src/SubmarineEtaPlanner/SubmarineEtaPlanner.csproj --configuration Release --no-restore

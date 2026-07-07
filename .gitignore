@@ -8,4 +8,5 @@ obj/
 TestResults/
 artifacts/
 public/
+.dalamud/
 *.zip
