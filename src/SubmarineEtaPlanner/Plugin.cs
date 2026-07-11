@@ -23,7 +23,6 @@ public sealed class Plugin : IDalamudPlugin
     internal static IDataManager Data { get; private set; } = null!;
 
     private readonly PlannerWindow plannerWindow;
-    private readonly SettingsWindow settingsWindow;
     private readonly Dalamud.Interface.Windowing.WindowSystem windowSystem = new("SubmarineEtaPlanner");
 
     public Plugin()
@@ -38,12 +37,10 @@ public sealed class Plugin : IDalamudPlugin
         var unlockGraph = new RouteUnlockGraph(catalog);
         var routeSelector = new RouteSelector(catalog, unlockGraph);
         var simulator = new EtaSimulator(buildResolver, unlockGraph, routeSelector, catalog);
-        var service = new EtaPlannerService(stateReader, simulator);
+        var service = new EtaPlannerService(stateReader, simulator, catalog as IRouteSearchDiagnostics);
 
         this.plannerWindow = new PlannerWindow(Configuration, SaveConfiguration, service);
-        this.settingsWindow = new SettingsWindow(Configuration, SaveConfiguration, this.plannerWindow.InvalidateSnapshot);
         this.windowSystem.AddWindow(this.plannerWindow);
-        this.windowSystem.AddWindow(this.settingsWindow);
 
         PluginInterface.UiBuilder.Draw += Draw;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
@@ -57,6 +54,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.Draw -= Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
+        this.plannerWindow.CancelRefresh();
         this.windowSystem.RemoveAllWindows();
     }
 
@@ -72,13 +70,16 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    private void OpenConfigUi() => this.settingsWindow.IsOpen = true;
+    private void OpenConfigUi()
+    {
+        this.plannerWindow.OpenSettings();
+        SaveConfiguration();
+    }
 
     private void OpenMainUi()
     {
-        Configuration.WindowOpen = true;
+        this.plannerWindow.OpenResults();
         SaveConfiguration();
-        this.plannerWindow.IsOpen = true;
     }
 
     private void SaveConfiguration() => PluginInterface.SavePluginConfig(Configuration);

@@ -2,10 +2,18 @@ using SubmarineEtaPlanner.TrackerData;
 
 namespace SubmarineEtaPlanner.Planner;
 
-public sealed class EtaPlannerService(SubmarineTrackerStateReader stateReader, EtaSimulator simulator)
+public sealed class EtaPlannerService(
+    SubmarineTrackerStateReader stateReader,
+    EtaSimulator simulator,
+    IRouteSearchDiagnostics? routeSearchDiagnostics = null)
 {
     public EtaPlannerSnapshot Calculate(EtaSettings settings, DateTimeOffset now)
+        => Calculate(settings, now, CancellationToken.None);
+
+    public EtaPlannerSnapshot Calculate(EtaSettings settings, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        routeSearchDiagnostics?.ResetRouteSearchMetrics();
         var warnings = new List<string>();
         var fcStates = stateReader.Read(settings, warnings);
         var deadlineUtc = settings.CalculationTimeLimitSeconds > 0
@@ -15,13 +23,14 @@ public sealed class EtaPlannerService(SubmarineTrackerStateReader stateReader, E
 
         foreach (var fc in fcStates)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (IsTimedOut(deadlineUtc))
             {
                 warnings.Add($"Calculation stopped after {settings.CalculationTimeLimitSeconds} seconds. Results are partial.");
                 break;
             }
 
-            results.Add(simulator.Simulate(fc, settings, now, deadlineUtc));
+            results.Add(simulator.Simulate(fc, settings, now, deadlineUtc, cancellationToken));
         }
 
         var status = results.Count == fcStates.Count && results.All(r => r.IsComplete) && warnings.All(w => !IsIncompleteWarning(w))
@@ -33,7 +42,15 @@ public sealed class EtaPlannerService(SubmarineTrackerStateReader stateReader, E
               warnings.FirstOrDefault(IsIncompleteWarning) ??
               "Calculation stopped before every tracked FC completed.";
 
-        return new EtaPlannerSnapshot(now, fcStates, results, warnings, status, reason);
+        var routeMetrics = routeSearchDiagnostics?.GetRouteSearchMetrics() ?? new RouteSearchMetrics(0, 0, 0);
+        return new EtaPlannerSnapshot(
+            now,
+            fcStates,
+            results,
+            warnings,
+            status,
+            reason,
+            new CalculationMetrics(stopwatch.ElapsedMilliseconds, routeMetrics.Queries, routeMetrics.CacheHits, routeMetrics.RoutesEvaluated));
     }
 
     private static bool IsTimedOut(DateTimeOffset? deadlineUtc)
@@ -51,7 +68,8 @@ public sealed record EtaPlannerSnapshot(
     IReadOnlyList<EtaResult> Results,
     IReadOnlyList<string> Warnings,
     CalculationStatus Status,
-    string? IncompleteReason)
+    string? IncompleteReason,
+    CalculationMetrics? Metrics = null)
 {
     public bool IsComplete => Status == CalculationStatus.Complete;
 }

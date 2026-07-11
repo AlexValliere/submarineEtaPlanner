@@ -8,100 +8,77 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
         SubmarineBuild build,
         EtaSettings settings,
         bool fleetMode,
-        DateTimeOffset? deadlineUtc = null)
+        DateTimeOffset? deadlineUtc = null,
+        CancellationToken cancellationToken = default)
     {
-        var rank = build.Rank;
-        var requiredUnlockPoints = GetRequiredUnlockPoints(unlockState, settings, rank, fleetMode);
+        cancellationToken.ThrowIfCancellationRequested();
+        var objective = unlockGraph.GetNextObjective(
+            unlockState,
+            settings,
+            build.Rank,
+            settings.TargetRank,
+            fleetMode);
 
-        if (requiredUnlockPoints.Count > 0)
+        if (objective is not null)
         {
-            var unlockCandidate = catalog.GetCandidateRoutes(
-                    build,
-                    unlockState.UnlockedPoints,
-                    unlockState.ExploredPoints,
-                    requiredUnlockPoints,
-                    settings,
-                    deadlineUtc)
-                .OrderByDescending(c => settings.EffectiveOptimizeExpPerHour ? c.ExpPerHour : c.Exp)
-                .ThenBy(c => c.Duration)
-                .FirstOrDefault(c => c.Route.Any(requiredUnlockPoints.Contains));
-
-            if (unlockCandidate is not null)
-                return ReservePendingUnlocks(unlockCandidate, unlockState, rank, fleetMode);
-        }
-
-        var fallback = catalog.GetCandidateRoutes(
+            var objectiveResult = FindBest(
                 build,
-                unlockState.UnlockedPoints,
-                unlockState.ExploredPoints,
-                new HashSet<uint>(),
+                unlockState,
+                SectorMask.From([objective.RequiredPoint]),
                 settings,
-                deadlineUtc)
-            .Where(c => !fleetMode || !c.UnlockTargets.Any(unlockState.PendingUnlockPoints.Contains))
-            .OrderByDescending(c => settings.EffectiveOptimizeExpPerHour ? c.ExpPerHour : c.Exp)
-            .ThenBy(c => c.Duration)
-            .FirstOrDefault();
-
-        if (fallback is not null)
-            return ReservePendingUnlocks(fallback, unlockState, rank, fleetMode);
-
-        return new RouteCandidate([], 0, TimeSpan.Zero, 0, [], settings.EtaModel, settings.EffectiveDurationLimitHours > 0);
-    }
-
-    private HashSet<uint> GetRequiredUnlockPoints(
-        UnlockState unlockState,
-        EtaSettings settings,
-        int rank,
-        bool fleetMode)
-    {
-        IEnumerable<uint> candidates = settings.EffectiveRouteGoal switch
-        {
-            RouteGoal.UnlockSubSlotsThenLevel => GetSubSlotUnlockPathCandidates(unlockState.UnlockedPoints, rank),
-            RouteGoal.UnlockEverythingThenLevel => unlockGraph.GetNextUnlockCandidates(
-                unlockState.UnlockedPoints,
-                rank,
-                settings.PrioritizeSubSlots),
-            RouteGoal.UnlockLevelingRoutesThenLevel => unlockGraph.GetNextUnlockCandidates(
-                unlockState.UnlockedPoints,
-                rank,
-                prioritizeSubSlots: false),
-            _ => [],
-        };
-
-        return candidates
-            .Where(point => !fleetMode || !unlockGraph.GetUnlockTargetsForRoute([point], unlockState, rank).Any(unlockState.PendingUnlockPoints.Contains))
-            .ToHashSet();
-    }
-
-    private IEnumerable<uint> GetSubSlotUnlockPathCandidates(IReadOnlySet<uint> unlockedPoints, int rank)
-    {
-        var rulesByTarget = catalog.UnlockRules.ToDictionary(rule => rule.UnlocksPoint, rule => rule);
-        foreach (var slotRule in catalog.UnlockRules.Where(rule => rule.UnlocksSubSlot && !unlockedPoints.Contains(rule.UnlocksPoint)))
-        {
-            var path = unlockGraph.GetUnlockPath(slotRule.UnlocksPoint);
-            foreach (var target in path.Skip(1))
+                deadlineUtc,
+                cancellationToken);
+            if (objectiveResult is not null)
             {
-                if (!rulesByTarget.TryGetValue(target, out var rule))
-                    continue;
-                if (rule.RequiredRank > rank)
-                    continue;
-                if (!unlockedPoints.Contains(rule.SourcePoint) || unlockedPoints.Contains(rule.UnlocksPoint))
-                    continue;
-
-                yield return rule.SourcePoint;
-                break;
+                return ReservePendingUnlocks(
+                    objectiveResult with { AdvancesUnlockObjective = true },
+                    unlockState,
+                    fleetMode);
             }
         }
+
+        var fallback = FindBest(
+            build,
+            unlockState,
+            new SectorMask(),
+            settings,
+            deadlineUtc,
+            cancellationToken);
+        if (fallback is not null)
+            return ReservePendingUnlocks(fallback, unlockState, fleetMode);
+
+        return new RouteCandidate(
+            [],
+            0,
+            TimeSpan.Zero,
+            0,
+            [],
+            settings.EtaModel,
+            settings.GetEffectiveDurationLimitHours() > 0);
     }
 
-    private RouteCandidate ReservePendingUnlocks(RouteCandidate route, UnlockState unlockState, int rank, bool fleetMode)
+    private RouteCandidate? FindBest(
+        SubmarineBuild build,
+        UnlockState unlockState,
+        SectorMask mustInclude,
+        EtaSettings settings,
+        DateTimeOffset? deadlineUtc,
+        CancellationToken cancellationToken)
+        => catalog.FindBestRoute(new RouteSearchRequest(
+            build,
+            unlockState.UnlockedPoints,
+            SectorMask.From(unlockState.UnlockedPoints),
+            mustInclude,
+            settings,
+            SectorMask.From(unlockGraph.GetPendingUnlockSourcePoints(unlockState)),
+            deadlineUtc,
+            cancellationToken)).Route;
+
+    private RouteCandidate ReservePendingUnlocks(RouteCandidate route, UnlockState unlockState, bool fleetMode)
     {
-        var unlocks = unlockGraph.GetUnlockTargetsForRoute(route.Route, unlockState, rank);
+        var unlocks = unlockGraph.GetUnlockTargetsForRoute(route.Route, unlockState, rank: int.MaxValue);
         if (fleetMode)
-        {
-            foreach (var unlock in unlocks)
-                unlockState.PendingUnlockPoints.Add(unlock);
-        }
+            unlockGraph.ReserveRoute(route.Route, unlockState);
 
         return route with { UnlockTargets = unlocks };
     }

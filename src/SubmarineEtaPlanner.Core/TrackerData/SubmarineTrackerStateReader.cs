@@ -57,13 +57,20 @@ public sealed class SubmarineTrackerStateReader
             var fcId = (byte[])reader["FreeCompanyId"];
             var unlocked = DecodeDictionaryKeys((byte[])reader["UnlockedSectors"], warnings, "UnlockedSectors");
             var explored = DecodeDictionaryKeys((byte[])reader["ExploredSectors"], warnings, "ExploredSectors");
+            var unlockDataKnown = unlocked.Count > 0;
+            if (!unlockDataKnown)
+                warnings.Add($"Unlock data is missing for {reader.GetString(1)}; its leveling ETA is incomplete.");
+
             fcs.Add(new FcState(
                 fcId,
                 reader.GetString(1),
                 reader.GetString(2),
                 unlocked,
                 explored,
-                []));
+                [])
+            {
+                UnlockDataKnown = unlockDataKnown,
+            });
         }
 
         return fcs;

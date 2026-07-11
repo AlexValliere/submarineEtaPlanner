@@ -70,17 +70,32 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
         return ResolveBuild(buildCode, rank);
     }
 
-    public IReadOnlyList<RouteCandidate> GetCandidateRoutes(
+    public RouteSearchResult FindBestRoute(RouteSearchRequest request)
+    {
+        var candidates = GetCandidateRoutes(
+            request.Build,
+            request.UnlockedPoints,
+            request.MustIncludeMask,
+            request.ExcludedSectorMask,
+            request.Settings,
+            request.DeadlineUtc,
+            request.CancellationToken);
+        return new RouteSearchResult(candidates.FirstOrDefault(), candidates.Count, CacheHit: false);
+    }
+
+    private IReadOnlyList<RouteCandidate> GetCandidateRoutes(
         SubmarineBuild build,
         IReadOnlySet<uint> unlockedPoints,
-        IReadOnlySet<uint> exploredPoints,
-        IReadOnlySet<uint> mustInclude,
+        SectorMask mustIncludeMask,
+        SectorMask excludedSectorMask,
         EtaSettings settings,
-        DateTimeOffset? deadlineUtc = null)
+        DateTimeOffset? deadlineUtc,
+        CancellationToken cancellationToken)
     {
+        var mustInclude = Sectors.Keys.Where(mustIncludeMask.Contains).ToHashSet();
         var available = Sectors.Values
             .Where(s => s.RequiredRank <= build.Rank)
-            .Where(s => unlockedPoints.Count == 0 || unlockedPoints.Contains(s.Point))
+            .Where(s => unlockedPoints.Contains(s.Point))
             .OrderByDescending(s => mustInclude.Contains(s.Point))
             .ThenByDescending(s => s.Exp)
             .Take(24)
@@ -98,20 +113,23 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
         var candidates = new List<RouteCandidate>();
         foreach (var route in BuildRouteSets(available.Select(s => s.Point).ToArray(), mustInclude))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (SectorMask.From(route).Intersects(excludedSectorMask))
+                continue;
             var distance = route.Sum(p => Sectors[p].Distance);
             if (distance > build.Range)
                 continue;
 
             var duration = CalculateDuration(route, build);
-            var durationLimitHours = settings.EffectiveDurationLimitHours;
+            var durationLimitHours = settings.GetEffectiveDurationLimitHours();
             if (durationLimitHours > 0 && duration > TimeSpan.FromHours(durationLimitHours))
                 continue;
 
-            var exp = CalculateExp(route, build, settings.EffectiveExpMode);
+            var exp = CalculateExp(route, build, settings.GetEffectiveExpMode());
             var expPerHour = duration.TotalHours <= 0 ? exp : exp / duration.TotalHours;
             var unlockTargets = UnlockRules
                 .Where(r => route.Contains(r.SourcePoint))
-                .Where(r => r.RequiredRank <= build.Rank)
+                .Where(r => r.SourceRequiredRank <= build.Rank)
                 .Select(r => r.UnlocksPoint)
                 .ToArray();
 
@@ -127,7 +145,7 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
 
         return candidates
             .OrderByDescending(c => mustInclude.Count > 0 && c.Route.Any(mustInclude.Contains))
-            .ThenByDescending(c => settings.EffectiveOptimizeExpPerHour ? c.ExpPerHour : c.Exp)
+            .ThenByDescending(c => settings.GetEffectiveOptimizeExpPerHour() ? c.ExpPerHour : c.Exp)
             .ThenBy(c => c.Duration)
             .ToArray();
     }
@@ -175,6 +193,9 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
 
     public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints)
         => build.Code.Equals("WSCC", StringComparison.OrdinalIgnoreCase) && Mrojz.All(unlockedPoints.Contains);
+
+    public int GetPointRequiredRank(uint point)
+        => Sectors.TryGetValue(point, out var sector) ? sector.RequiredRank : int.MaxValue;
 
     private static uint ExpToNext(int rank)
         => (uint)(1000 + rank * rank * 24 + rank * 240);

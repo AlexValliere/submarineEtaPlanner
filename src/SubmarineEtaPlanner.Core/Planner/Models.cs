@@ -40,6 +40,21 @@ public enum CalculationStatus
     Failed,
 }
 
+public enum UnlockMilestoneKind
+{
+    SectorUnlocked,
+    SectorExplored,
+    SubmarineSlotUnlocked,
+    MapUnlocked,
+}
+
+public enum FcResultFilter
+{
+    Leveling,
+    All,
+    Ready,
+}
+
 public enum TimeoutResultBehavior
 {
     KeepLastComplete,
@@ -57,6 +72,8 @@ public sealed record FcState(
     public string DisplayName => string.IsNullOrWhiteSpace(World) ? FreeCompanyTag : $"{FreeCompanyTag} - {World}";
 
     public string FcIdKey => Convert.ToHexString(FcId);
+
+    public bool UnlockDataKnown { get; init; } = true;
 }
 
 public sealed record SubmarineState(
@@ -88,18 +105,27 @@ public sealed record UnlockState(
     HashSet<uint> PendingUnlockPoints,
     List<UnlockMilestone> UnlockMilestones)
 {
+    public HashSet<uint> PendingExplorePoints { get; init; } = [];
+
+    public int KnownSubmarineSlots { get; set; } = 1;
+
     public UnlockState DeepClone() => new(
         new HashSet<uint>(UnlockedPoints),
         new HashSet<uint>(ExploredPoints),
         new HashSet<uint>(PendingUnlockPoints),
-        new List<UnlockMilestone>(UnlockMilestones));
+        new List<UnlockMilestone>(UnlockMilestones))
+    {
+        PendingExplorePoints = new HashSet<uint>(PendingExplorePoints),
+        KnownSubmarineSlots = KnownSubmarineSlots,
+    };
 }
 
 public sealed record UnlockMilestone(
     long SubmarineId,
     uint SourcePoint,
     uint UnlockedPoint,
-    DateTimeOffset ReturnAtUtc);
+    DateTimeOffset ReturnAtUtc,
+    UnlockMilestoneKind Kind = UnlockMilestoneKind.SectorUnlocked);
 
 public sealed record BuildProfileStep(int MinRank, int MaxRank, string BuildCode)
 {
@@ -123,7 +149,10 @@ public sealed record VoyagePlan(
     TimeSpan Duration,
     double ExpPerHour,
     EtaModel EtaModel,
-    bool DurationCapApplied);
+    bool DurationCapApplied,
+    int RepeatCount = 1,
+    uint ExpPerVoyage = 0,
+    TimeSpan PerVoyageDuration = default);
 
 public sealed record PerSubEtaResult(
     long SubmarineId,
@@ -183,7 +212,7 @@ public sealed record EtaSettings
 
     public EtaModel EtaModel { get; set; } = EtaModel.PracticalLeveling;
 
-    public int PracticalMaxVoyageHours { get; set; } = 24;
+    public int PracticalMaxVoyageHours { get; set; } = 0;
 
     public TimeoutResultBehavior TimeoutResultBehavior { get; set; } = TimeoutResultBehavior.KeepLastComplete;
 
@@ -205,16 +234,16 @@ public sealed record EtaSettings
 
     public int CalculationTimeLimitSeconds { get; set; } = 20;
 
-    public ExpMode EffectiveExpMode => EtaModel == EtaModel.PracticalLeveling ? ExpMode.Average : ExpMode;
+    public ExpMode GetEffectiveExpMode() => EtaModel == EtaModel.PracticalLeveling ? ExpMode.Average : ExpMode;
 
-    public RouteGoal EffectiveRouteGoal => EtaModel == EtaModel.PracticalLeveling ? RouteGoal.UnlockLevelingRoutesThenLevel : RouteGoal;
+    public RouteGoal GetEffectiveRouteGoal() => EtaModel == EtaModel.PracticalLeveling ? RouteGoal.UnlockLevelingRoutesThenLevel : RouteGoal;
 
-    public int EffectiveDurationLimitHours =>
+    public int GetEffectiveDurationLimitHours() =>
         EtaModel == EtaModel.PracticalLeveling
-            ? (DurationLimitHours > 0 ? DurationLimitHours : Math.Max(1, PracticalMaxVoyageHours))
+            ? (DurationLimitHours > 0 ? DurationLimitHours : Math.Max(0, PracticalMaxVoyageHours))
             : DurationLimitHours;
 
-    public bool EffectiveOptimizeExpPerHour => EtaModel != EtaModel.PracticalLeveling && OptimizeExpPerHour;
+    public bool GetEffectiveOptimizeExpPerHour() => EtaModel != EtaModel.PracticalLeveling && OptimizeExpPerHour;
 
     public static EtaSettings CreateDefault() => new()
     {
@@ -226,4 +255,32 @@ public sealed record EtaSettings
             new BuildProfileStep(114, 999, "WSCC"),
         ],
     };
+}
+
+public sealed record CalculationMetrics(
+    long ElapsedMilliseconds,
+    long RouteQueries,
+    long RouteCacheHits,
+    long RoutesEvaluated);
+
+public sealed class ResultsViewState
+{
+    public bool? ExpansionOverride { get; private set; }
+
+    public void ExpandAll() => ExpansionOverride = true;
+
+    public void CollapseAll() => ExpansionOverride = false;
+
+    public void ClearExpansionOverride() => ExpansionOverride = null;
+
+    public static bool IsReady(EtaResult result, int targetRank)
+        => result.PerSubResults.Count > 0 && result.PerSubResults.All(sub => sub.StartingRank >= targetRank);
+
+    public static bool ShouldInclude(EtaResult result, int targetRank, FcResultFilter filter)
+        => filter switch
+        {
+            FcResultFilter.Leveling => !IsReady(result, targetRank),
+            FcResultFilter.Ready => IsReady(result, targetRank),
+            _ => true,
+        };
 }

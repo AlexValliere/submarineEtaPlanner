@@ -53,7 +53,9 @@ public sealed class EtaSimulatorTests
         var fc = CreateFc(Enumerable.Range(1, 15).Select(i => (uint)i).ToHashSet(), CreateSub(1, "A", 20));
 
         var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
-        var milestone = Assert.Single(result.UnlockMilestones);
+        var milestone = Assert.Single(
+            result.UnlockMilestones,
+            item => item.Kind == UnlockMilestoneKind.SectorUnlocked);
         var unlockPlan = Assert.Single(result.PlannedRoutes, plan => plan.UnlocksApplied.Contains(milestone.UnlockedPoint));
 
         Assert.Equal(unlockPlan.ReturnAtUtc, milestone.ReturnAtUtc);
@@ -358,7 +360,7 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
-    public void PracticalOptimisticSimulationDoesNotBatchWhenUnlockProgressionIsActive()
+    public void PracticalOptimisticSimulationBatchesWhenNoUnlockObjectiveIsReachable()
     {
         var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 25, routeDuration: TimeSpan.FromHours(1)));
         var settings = EtaSettings.CreateDefault() with
@@ -374,9 +376,10 @@ public sealed class EtaSimulatorTests
 
         Assert.True(sub.IsComplete);
         Assert.Equal(4, sub.VoyageCount);
-        Assert.Equal(4, sub.VoyagePreview.Count);
+        var preview = Assert.Single(sub.VoyagePreview);
+        Assert.Equal(4, preview.RepeatCount);
         Assert.Equal(TimeSpan.FromHours(4), sub.Remaining);
-        Assert.All(sub.VoyagePreview, plan => Assert.Empty(plan.Warnings));
+        Assert.Contains(preview.Warnings, warning => warning.Contains("Batched", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -402,13 +405,168 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
+    public void AlreadyCompletedSubmarineHasZeroEtaEvenWhileAway()
+    {
+        var simulator = CreateSimulator();
+        var settings = EtaSettings.CreateDefault();
+        var now = DateTimeOffset.UnixEpoch;
+        var sub = CreateSub(rank: 114) with
+        {
+            ReturnAtUtc = now.AddDays(2),
+            CurrentRoute = [1],
+            CurrentVoyageKnown = true,
+        };
+
+        var result = simulator.Simulate(CreateFc(sub), settings, now);
+        var subResult = Assert.Single(result.PerSubResults);
+
+        Assert.True(subResult.IsComplete);
+        Assert.Equal(now, subResult.EtaAtUtc);
+        Assert.Equal(TimeSpan.Zero, subResult.Remaining);
+        Assert.Equal(0, subResult.VoyageCount);
+    }
+
+    [Fact]
+    public void UnlockEligibilityUsesSourceRankInsteadOfTargetRank()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(1, 2, SourceRequiredRank: 1, TargetRequiredRank: 50, IsMainProgression: true),
+        ]);
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var state = new UnlockState([1], [1], [], []) { KnownSubmarineSlots = 4 };
+
+        var route = selector.SelectNextRoute(
+            CreateSub(rank: 1),
+            state,
+            catalog.ResolveBuild("TEST", 1),
+            EtaSettings.CreateDefault(),
+            fleetMode: false);
+
+        Assert.Equal([1u], route.Route);
+    }
+
+    [Fact]
+    public void MainProgressionIncludesUnflaggedPrerequisiteSectors()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(1, 2, 1, 1),
+            new UnlockRule(2, 3, 1, 1, IsMainProgression: true),
+        ]);
+        var selector = new RouteSelector(catalog, new RouteUnlockGraph(catalog));
+        var state = new UnlockState([1], [1], [], []) { KnownSubmarineSlots = 4 };
+
+        var route = selector.SelectNextRoute(
+            CreateSub(rank: 1),
+            state,
+            catalog.ResolveBuild("TEST", 1),
+            EtaSettings.CreateDefault(),
+            fleetMode: false);
+
+        Assert.Equal([1u], route.Route);
+    }
+
+    [Fact]
+    public void SubmarineSlotRequiresExploringTheUnlockedTarget()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(1, 2, 1, 1, UnlocksSubSlot: true, IsMainProgression: true),
+        ]);
+        var graph = new RouteUnlockGraph(catalog);
+        var state = new UnlockState([1], [1], [], []) { KnownSubmarineSlots = 1 };
+
+        graph.MarkRouteReturn([1], state, submarineId: 1, DateTimeOffset.UnixEpoch.AddHours(12));
+
+        Assert.Contains(2u, state.UnlockedPoints);
+        Assert.DoesNotContain(2u, state.ExploredPoints);
+        Assert.Equal(1, state.KnownSubmarineSlots);
+        Assert.DoesNotContain(state.UnlockMilestones, item => item.Kind == UnlockMilestoneKind.SubmarineSlotUnlocked);
+
+        graph.MarkRouteReturn([2], state, submarineId: 1, DateTimeOffset.UnixEpoch.AddHours(24));
+
+        Assert.Contains(2u, state.ExploredPoints);
+        Assert.Equal(2, state.KnownSubmarineSlots);
+        Assert.Contains(state.UnlockMilestones, item => item.Kind == UnlockMilestoneKind.SubmarineSlotUnlocked);
+    }
+
+    [Fact]
+    public void FleetUnlockIsNotVisibleBeforeTheUnlockingVoyageReturns()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(1, 2, 1, 1, IsMainProgression: true),
+        ], routeDuration: TimeSpan.FromHours(1));
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet };
+        settings.TargetRank = 2;
+        var delayedSub = CreateSub(2, "B", 1) with
+        {
+            ReturnAtUtc = DateTimeOffset.UnixEpoch.AddMinutes(30),
+            CurrentVoyageKnown = false,
+        };
+        var fc = CreateFc(new HashSet<uint>([1]), CreateSub(1, "A", 1), delayedSub);
+
+        simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+
+        Assert.True(catalog.ObservedUnlockedStates.Count >= 2);
+        Assert.DoesNotContain(2u, catalog.ObservedUnlockedStates[1]);
+    }
+
+    [Fact]
+    public void MissingUnlockDataProducesIncompleteEta()
+    {
+        var simulator = CreateSimulator();
+        var settings = EtaSettings.CreateDefault();
+        var fc = CreateFc(new HashSet<uint>(), CreateSub(rank: 10)) with { UnlockDataKnown = false };
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+
+        Assert.False(result.IsComplete);
+        Assert.Contains(result.PerSubResults, sub => !sub.IsComplete);
+    }
+
+    [Fact]
+    public void ResultFiltersUseCurrentRanksAndExpansionCommandsAreOneShot()
+    {
+        var simulator = CreateSimulator();
+        var settings = EtaSettings.CreateDefault();
+        var ready = simulator.Simulate(CreateFc(CreateSub(rank: 114)), settings, DateTimeOffset.UnixEpoch);
+        var leveling = simulator.Simulate(CreateFc(CreateSub(rank: 113)), settings, DateTimeOffset.UnixEpoch);
+        var viewState = new ResultsViewState();
+
+        Assert.True(ResultsViewState.ShouldInclude(leveling, 114, FcResultFilter.Leveling));
+        Assert.False(ResultsViewState.ShouldInclude(ready, 114, FcResultFilter.Leveling));
+        Assert.True(ResultsViewState.ShouldInclude(ready, 114, FcResultFilter.Ready));
+
+        viewState.ExpandAll();
+        Assert.True(viewState.ExpansionOverride);
+        viewState.ClearExpansionOverride();
+        Assert.Null(viewState.ExpansionOverride);
+        viewState.CollapseAll();
+        Assert.False(viewState.ExpansionOverride);
+    }
+
+    [Fact]
+    public void SubmarineVoyageDurationIncludesTwelveHourBaseline()
+    {
+        var catalog = new CompatSubmarineCatalog();
+        var build = catalog.ResolveBuild("SSUW", 75);
+
+        var duration = catalog.CalculateDuration([1], build);
+
+        Assert.True(duration >= TimeSpan.FromHours(12));
+    }
+
+    [Fact]
     public void RepoJsonContainsExpectedDownloadLinks()
     {
         var repoJsonPath = FindRepoJson();
         var repoJson = File.ReadAllText(repoJsonPath);
 
         Assert.Contains("SubmarineEtaPlanner", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.2.7.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.2.8.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
@@ -475,7 +633,7 @@ public sealed class EtaSimulatorTests
             uint routeExp = 100,
             TimeSpan? routeDuration = null)
         {
-            this.unlockRules = unlockRules ?? [new UnlockRule(1, 2, 1)];
+            this.unlockRules = unlockRules ?? [new UnlockRule(1, 2, 1, 1, IsMainProgression: true)];
             this.routeExp = routeExp;
             this.routeDuration = routeDuration ?? TimeSpan.FromHours(1);
         }
@@ -486,6 +644,8 @@ public sealed class EtaSimulatorTests
 
         public int PartBuildResolutionCount { get; private set; }
 
+        public List<HashSet<uint>> ObservedUnlockedStates { get; } = [];
+
         public SubmarineBuild ResolveBuild(string buildCode, int rank)
             => new($"R{rank}", rank, 100, 100, 100, 999, 100);
 
@@ -495,34 +655,33 @@ public sealed class EtaSimulatorTests
             return buildParts == SubmarineBuildParts.Empty ? null : new SubmarineBuild($"P{rank}", rank, 100, 100, 100, 999, 100);
         }
 
-        public IReadOnlyList<RouteCandidate> GetCandidateRoutes(
-            SubmarineBuild build,
-            IReadOnlySet<uint> unlockedPoints,
-            IReadOnlySet<uint> exploredPoints,
-            IReadOnlySet<uint> mustInclude,
-            EtaSettings settings,
-            DateTimeOffset? deadlineUtc = null)
+        public RouteSearchResult FindBestRoute(RouteSearchRequest request)
         {
-            LastMustInclude = mustInclude.Order().ToArray();
+            ObservedUnlockedStates.Add(new HashSet<uint>(request.UnlockedPoints));
+            LastMustInclude = Enumerable.Range(0, 192)
+                .Select(point => (uint)point)
+                .Where(request.MustIncludeMask.Contains)
+                .ToArray();
             var route = LastMustInclude.Count > 0 ? [LastMustInclude[0]] : new uint[] { 99 };
-            var durationLimitHours = settings.EffectiveDurationLimitHours;
+            if (route.Any(request.ExcludedSectorMask.Contains))
+                return new RouteSearchResult(null, 1, CacheHit: false);
+            var durationLimitHours = request.Settings.GetEffectiveDurationLimitHours();
             if (durationLimitHours > 0 && this.routeDuration > TimeSpan.FromHours(durationLimitHours))
-                return [];
+                return new RouteSearchResult(null, 1, CacheHit: false);
 
             var unlockTargets = this.unlockRules
                 .Where(rule => route.Contains(rule.SourcePoint))
-                .Where(rule => rule.RequiredRank <= build.Rank)
                 .Select(rule => rule.UnlocksPoint)
                 .ToArray();
 
-            return [new RouteCandidate(
+            return new RouteSearchResult(new RouteCandidate(
                 route,
                 this.routeExp,
                 this.routeDuration,
                 this.routeExp / Math.Max(this.routeDuration.TotalHours, 0.01),
                 unlockTargets,
-                settings.EtaModel,
-                durationLimitHours > 0)];
+                request.Settings.EtaModel,
+                durationLimitHours > 0), 1, CacheHit: false);
         }
 
         public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode) => this.routeExp;
@@ -544,6 +703,8 @@ public sealed class EtaSimulatorTests
         public string PointName(uint point) => point.ToString();
 
         public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints) => false;
+
+        public int GetPointRequiredRank(uint point) => 1;
     }
 
     private sealed class MultiRouteCatalog(IReadOnlyList<RouteCandidate> routes) : ISubmarineCatalog
@@ -556,19 +717,18 @@ public sealed class EtaSimulatorTests
         public SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank)
             => ResolveBuild("TEST", rank);
 
-        public IReadOnlyList<RouteCandidate> GetCandidateRoutes(
-            SubmarineBuild build,
-            IReadOnlySet<uint> unlockedPoints,
-            IReadOnlySet<uint> exploredPoints,
-            IReadOnlySet<uint> mustInclude,
-            EtaSettings settings,
-            DateTimeOffset? deadlineUtc = null)
-            => routes
-                .Where(route => mustInclude.Count == 0 || route.Route.Any(mustInclude.Contains))
-                .Where(route => settings.EffectiveDurationLimitHours <= 0 || route.Duration <= TimeSpan.FromHours(settings.EffectiveDurationLimitHours))
-                .OrderByDescending(route => settings.EffectiveOptimizeExpPerHour ? route.ExpPerHour : route.Exp)
+        public RouteSearchResult FindBestRoute(RouteSearchRequest request)
+        {
+            var selected = routes
+                .Where(route => request.MustIncludeMask.IsEmpty || SectorMask.From(route.Route).Intersects(request.MustIncludeMask))
+                .Where(route => !SectorMask.From(route.Route).Intersects(request.ExcludedSectorMask))
+                .Where(route => request.Settings.GetEffectiveDurationLimitHours() <= 0 ||
+                                route.Duration <= TimeSpan.FromHours(request.Settings.GetEffectiveDurationLimitHours()))
+                .OrderByDescending(route => request.Settings.GetEffectiveOptimizeExpPerHour() ? route.ExpPerHour : route.Exp)
                 .ThenBy(route => route.Duration)
-                .ToArray();
+                .FirstOrDefault();
+            return new RouteSearchResult(selected, routes.Count, CacheHit: false);
+        }
 
         public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode) => 0;
 
@@ -580,5 +740,7 @@ public sealed class EtaSimulatorTests
         public string PointName(uint point) => point.ToString();
 
         public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints) => false;
+
+        public int GetPointRequiredRank(uint point) => 1;
     }
 }

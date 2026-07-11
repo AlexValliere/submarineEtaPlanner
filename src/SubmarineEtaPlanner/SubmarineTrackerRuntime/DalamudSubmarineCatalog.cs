@@ -7,13 +7,10 @@ using SubmarineEtaPlanner.Planner;
 
 namespace SubmarineEtaPlanner.SubmarineTrackerRuntime;
 
-public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
+public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDiagnostics
 {
     private const int FixedVoyageTimeSeconds = 43200;
-    private const int CandidateLimit = 200;
-    private const int CandidatePruneThreshold = CandidateLimit * 8;
-    private const int CandidateCacheLimit = 4096;
-    private const int MetricCacheLimit = 131072;
+    private const int RouteSearchCacheLimit = 8192;
     private static readonly uint[] Mrojz = [13, 18, 15, 10, 26];
 
     private readonly ExcelSheet<SubmarineExploration> explorationSheet;
@@ -25,11 +22,12 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
     private readonly RouteCandidateIndex routeIndex;
     private readonly IPluginLog log;
     private readonly uint lastRank;
-    private readonly object candidateCacheLock = new();
-    private readonly Dictionary<CandidateCacheKey, IReadOnlyList<RouteCandidate>> candidateCache = [];
-    private readonly object metricCacheLock = new();
-    private readonly Dictionary<DurationCacheKey, TimeSpan> durationCache = [];
-    private readonly Dictionary<ExpCacheKey, uint> expCache = [];
+    private readonly Dictionary<RouteSearchCacheKey, RouteCandidate?> routeSearchCache = [];
+    private readonly Dictionary<int, long[]> durationTicksBySpeed = [];
+    private readonly Dictionary<ExpProfile, uint[]> sectorExpByProfile = [];
+    private long routeQueries;
+    private long routeCacheHits;
+    private long routesEvaluated;
 
     public DalamudSubmarineCatalog(IDataManager dataManager, string pluginDirectory, IPluginLog log)
     {
@@ -96,157 +94,150 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
             rankRow.SpeedBonus + hull.Speed + stern.Speed + bow.Speed + bridge.Speed);
     }
 
-    public IReadOnlyList<RouteCandidate> GetCandidateRoutes(
-        SubmarineBuild build,
-        IReadOnlySet<uint> unlockedPoints,
-        IReadOnlySet<uint> exploredPoints,
-        IReadOnlySet<uint> mustInclude,
-        EtaSettings settings,
-        DateTimeOffset? deadlineUtc = null)
+    public RouteSearchResult FindBestRoute(RouteSearchRequest request)
     {
-        var cacheKey = CandidateCacheKey.Create(build, unlockedPoints, mustInclude, settings);
-        lock (this.candidateCacheLock)
+        request.CancellationToken.ThrowIfCancellationRequested();
+        this.routeQueries++;
+        var cacheKey = RouteSearchCacheKey.Create(request);
+        if (this.routeSearchCache.TryGetValue(cacheKey, out var cached))
         {
-            if (this.candidateCache.TryGetValue(cacheKey, out var cached))
-                return cached;
+            this.routeCacheHits++;
+            return new RouteSearchResult(cached, 0, CacheHit: true);
         }
 
-        var (candidates, completed) = BuildCandidateRoutes(build, unlockedPoints, mustInclude, settings, deadlineUtc);
-        if (completed)
+        var settings = request.Settings;
+        var build = request.Build;
+        var durationLimitHours = settings.GetEffectiveDurationLimitHours();
+        var optimizeExpPerHour = settings.GetEffectiveOptimizeExpPerHour();
+        var completed = true;
+        var evaluated = 0;
+        RouteRecord? bestRecord = null;
+        TimeSpan bestDuration = TimeSpan.Zero;
+        uint bestExp = 0;
+        double bestScore = double.MinValue;
+
+        foreach (var route in this.routeIndex.Enumerate(request.MustIncludeMask, build.Range))
         {
-            lock (this.candidateCacheLock)
+            if ((evaluated & 0x3FF) == 0)
             {
-                if (this.candidateCache.Count >= CandidateCacheLimit)
-                    this.candidateCache.Clear();
-
-                this.candidateCache[cacheKey] = candidates;
-            }
-        }
-
-        return candidates;
-    }
-
-    private (IReadOnlyList<RouteCandidate> Candidates, bool Completed) BuildCandidateRoutes(
-        SubmarineBuild build,
-        IReadOnlySet<uint> unlockedPoints,
-        IReadOnlySet<uint> mustInclude,
-        EtaSettings settings,
-        DateTimeOffset? deadlineUtc)
-    {
-        if (this.calculatedRoutes.Maps.Count == 0)
-            return ([], Completed: true);
-
-        var durationLimitHours = settings.EffectiveDurationLimitHours;
-        var candidates = new List<RouteCandidate>();
-        foreach (var route in this.routeIndex.Routes)
-        {
-            if ((route.Id & 0x3FF) == 0 && IsTimedOut(deadlineUtc))
-            {
-                return (OrderCandidates(candidates, mustInclude, settings)
-                    .Take(CandidateLimit)
-                    .ToArray(), Completed: false);
+                request.CancellationToken.ThrowIfCancellationRequested();
+                if (IsTimedOut(request.DeadlineUtc))
+                {
+                    completed = false;
+                    break;
+                }
             }
 
-            if (route.Distance > build.Range)
-                continue;
-            if (route.MaxRequiredRank > build.Rank)
-                continue;
-            if (mustInclude.Count > 0 && !route.Sectors.Any(mustInclude.Contains))
-                continue;
-            if (!route.Sectors.All(sector => IsSectorValid(sector, build.Rank, unlockedPoints)))
+            evaluated++;
+            if (route.MaxRequiredRank > build.Rank ||
+                !request.UnlockedMask.ContainsAll(route.Mask) ||
+                route.Mask.Intersects(request.ExcludedSectorMask))
                 continue;
 
-            var duration = GetCachedDuration(route, build);
-            if (duration == TimeSpan.Zero)
-                continue;
-            if (durationLimitHours > 0 && duration > TimeSpan.FromHours(durationLimitHours))
-                continue;
-
-            var exp = GetCachedExp(route, build, settings.EffectiveExpMode);
+            var exp = GetCachedExp(route, build, settings.GetEffectiveExpMode());
             if (exp == 0)
                 continue;
 
-            candidates.Add(new RouteCandidate(
-                route.Sectors,
-                exp,
-                duration,
-                exp / Math.Max(duration.TotalHours, 0.01),
-                GetUnlockTargets(route.Sectors, build.Rank, unlockedPoints),
-                settings.EtaModel,
-                durationLimitHours > 0));
+            if (!optimizeExpPerHour && durationLimitHours == 0 && exp < bestExp)
+                continue;
 
-            if (candidates.Count >= CandidatePruneThreshold)
-                PruneCandidates(candidates, mustInclude, settings);
+            var duration = GetCachedDuration(route, build);
+            if (duration == TimeSpan.Zero ||
+                (durationLimitHours > 0 && duration > TimeSpan.FromHours(durationLimitHours)))
+            {
+                continue;
+            }
+
+            var score = optimizeExpPerHour
+                ? exp / Math.Max(duration.TotalHours, 0.01)
+                : exp;
+            if (score < bestScore ||
+                (Math.Abs(score - bestScore) < 0.001 && bestRecord is not null && duration >= bestDuration))
+            {
+                continue;
+            }
+
+            bestRecord = route;
+            bestDuration = duration;
+            bestExp = exp;
+            bestScore = score;
         }
 
-        var orderedCandidates = OrderCandidates(candidates, mustInclude, settings)
-            .Take(CandidateLimit)
-            .ToArray();
-        return (orderedCandidates, Completed: true);
+        this.routesEvaluated += evaluated;
+        RouteCandidate? result = bestRecord is null
+            ? null
+            : new RouteCandidate(
+                bestRecord.Sectors,
+                bestExp,
+                bestDuration,
+                bestExp / Math.Max(bestDuration.TotalHours, 0.01),
+                GetUnlockTargets(bestRecord.Sectors, request.UnlockedPoints),
+                settings.EtaModel,
+                durationLimitHours > 0);
+
+        if (completed)
+        {
+            if (this.routeSearchCache.Count >= RouteSearchCacheLimit)
+                this.routeSearchCache.Clear();
+            this.routeSearchCache[cacheKey] = result;
+        }
+
+        return new RouteSearchResult(result, evaluated, CacheHit: false);
     }
 
     private TimeSpan GetCachedDuration(RouteRecord route, SubmarineBuild build)
     {
-        var key = new DurationCacheKey(route.Id, build.Speed);
-        lock (this.metricCacheLock)
+        if (!this.durationTicksBySpeed.TryGetValue(build.Speed, out var values))
         {
-            if (this.durationCache.TryGetValue(key, out var duration))
-                return duration;
+            values = new long[this.routeIndex.RouteCount];
+            this.durationTicksBySpeed[build.Speed] = values;
         }
+
+        var ticks = values[route.Id];
+        if (ticks != 0)
+            return TimeSpan.FromTicks(ticks);
 
         var calculated = CalculateDuration(route.Sectors, build);
-        lock (this.metricCacheLock)
-        {
-            if (this.durationCache.Count >= MetricCacheLimit)
-                this.durationCache.Clear();
-
-            this.durationCache[key] = calculated;
-        }
-
+        values[route.Id] = calculated.Ticks;
         return calculated;
     }
 
     private uint GetCachedExp(RouteRecord route, SubmarineBuild build, ExpMode expMode)
     {
-        var key = new ExpCacheKey(route.Id, build.Surveillance, build.Retrieval, build.Favor, expMode);
-        lock (this.metricCacheLock)
+        var profile = new ExpProfile(build.Surveillance, build.Retrieval, build.Favor, expMode);
+        if (!this.sectorExpByProfile.TryGetValue(profile, out var values))
         {
-            if (this.expCache.TryGetValue(key, out var exp))
-                return exp;
+            values = new uint[this.sectorById.Keys.Max() + 1];
+            foreach (var (sectorId, sector) in this.sectorById)
+            {
+                var bonus = PredictBonusExp(sectorId, build);
+                values[sectorId] = CalculateBonusExp(
+                    expMode == ExpMode.Average ? bonus.Average : bonus.Guaranteed,
+                    sector.ExpReward);
+            }
+
+            this.sectorExpByProfile[profile] = values;
         }
 
-        var calculated = CalculateExp(route.Sectors, build, expMode);
-        lock (this.metricCacheLock)
-        {
-            if (this.expCache.Count >= MetricCacheLimit)
-                this.expCache.Clear();
+        var exp = 0u;
+        foreach (var sectorId in route.Sectors)
+            exp += values[sectorId];
 
-            this.expCache[key] = calculated;
-        }
-
-        return calculated;
+        return exp;
     }
-
-    private static void PruneCandidates(List<RouteCandidate> candidates, IReadOnlySet<uint> mustInclude, EtaSettings settings)
-    {
-        var topCandidates = OrderCandidates(candidates, mustInclude, settings)
-            .Take(CandidateLimit)
-            .ToArray();
-        candidates.Clear();
-        candidates.AddRange(topCandidates);
-    }
-
-    private static IOrderedEnumerable<RouteCandidate> OrderCandidates(
-        IEnumerable<RouteCandidate> candidates,
-        IReadOnlySet<uint> mustInclude,
-        EtaSettings settings)
-        => candidates
-            .OrderByDescending(route => mustInclude.Count > 0 && route.Route.Any(mustInclude.Contains))
-            .ThenByDescending(route => settings.EffectiveOptimizeExpPerHour ? route.ExpPerHour : route.Exp)
-            .ThenBy(route => route.Duration);
 
     private static bool IsTimedOut(DateTimeOffset? deadlineUtc)
         => deadlineUtc is not null && DateTimeOffset.UtcNow >= deadlineUtc.Value;
+
+    public void ResetRouteSearchMetrics()
+    {
+        this.routeQueries = 0;
+        this.routeCacheHits = 0;
+        this.routesEvaluated = 0;
+    }
+
+    public RouteSearchMetrics GetRouteSearchMetrics()
+        => new(this.routeQueries, this.routeCacheHits, this.routesEvaluated);
 
     public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode)
     {
@@ -324,6 +315,9 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
     public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints)
         => build.Code.Equals("WSCC", StringComparison.OrdinalIgnoreCase) && Mrojz.All(unlockedPoints.Contains);
 
+    public int GetPointRequiredRank(uint point)
+        => this.sectorById.TryGetValue(point, out var sector) ? (int)sector.RankReq : int.MaxValue;
+
     private CalculatedRouteData LoadCalculatedRoutes(string pluginDirectory)
     {
         var path = Path.Combine(pluginDirectory, "CalculatedData.msgpack");
@@ -344,21 +338,8 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
         }
     }
 
-    private bool IsSectorValid(uint sectorId, int rank, IReadOnlySet<uint> unlockedPoints)
-    {
-        if (!this.sectorById.TryGetValue(sectorId, out var sector))
-            return false;
-        if (sector.StartingPoint || sector.ExpReward == 0)
-            return false;
-        if (sector.RankReq > rank)
-            return false;
-
-        return unlockedPoints.Count == 0 || unlockedPoints.Contains(sectorId);
-    }
-
-    private IReadOnlyList<uint> GetUnlockTargets(IReadOnlyList<uint> route, int rank, IReadOnlySet<uint> unlockedPoints)
+    private IReadOnlyList<uint> GetUnlockTargets(IReadOnlyList<uint> route, IReadOnlySet<uint> unlockedPoints)
         => UnlockRules
-            .Where(rule => rule.RequiredRank <= rank)
             .Where(rule => route.Contains(rule.SourcePoint))
             .Where(rule => !unlockedPoints.Contains(rule.UnlocksPoint))
             .Select(rule => rule.UnlocksPoint)
@@ -374,8 +355,17 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
                 continue;
             if (!this.sectorById.TryGetValue(target, out var targetSector))
                 continue;
+            if (!this.sectorById.TryGetValue((uint)source.Sector, out var sourceSector))
+                continue;
 
-            rules.Add(new UnlockRule((uint)source.Sector, target, (int)targetSector.RankReq, source.Sub));
+            rules.Add(new UnlockRule(
+                (uint)source.Sector,
+                target,
+                (int)sourceSector.RankReq,
+                (int)targetSector.RankReq,
+                source.Sub,
+                ExactUnlocks.MapProgressionPoints.Contains(target),
+                ExactUnlocks.MainProgressionPoints.Contains(target)));
         }
 
         return rules;
@@ -515,6 +505,18 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
 
     private static class ExactUnlocks
     {
+        public static readonly HashSet<uint> MainProgressionPoints =
+        [
+            5, 10, 14, 15, 19, 20, 25, 26, 27, 28, 30,
+            32, 33, 34, 37, 38, 39, 42, 43, 47, 49,
+            53, 55, 57, 59, 62, 65, 70, 72,
+            74, 75, 79, 83, 85, 89, 93,
+            95, 96, 100, 104, 106, 111, 114,
+            117, 121, 124, 128, 129, 133, 135,
+        ];
+
+        public static readonly HashSet<uint> MapProgressionPoints = [30, 49, 72, 93, 114, 135];
+
         public static readonly Dictionary<uint, UnlockSource> SectorToUnlock = new()
         {
             { 0, new UnlockSource(SectorType.Map) },
@@ -677,16 +679,62 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
         int Map,
         uint Distance,
         uint[] Sectors,
-        int MaxRequiredRank);
+        int MaxRequiredRank,
+        SectorMask Mask);
 
     private sealed class RouteCandidateIndex
     {
+        private readonly Dictionary<int, RouteRecord[]> routesByMap;
+        private readonly Dictionary<uint, RouteRecord[]> routesBySector;
+
         private RouteCandidateIndex(RouteRecord[] routes)
         {
-            Routes = routes;
+            RouteCount = routes.Length;
+            this.routesByMap = routes
+                .GroupBy(route => route.Map)
+                .ToDictionary(group => group.Key, group => group.OrderBy(route => route.Distance).ToArray());
+            this.routesBySector = routes
+                .SelectMany(route => route.Sectors.Select(sector => (sector, route)))
+                .GroupBy(pair => pair.sector)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Select(pair => pair.route).OrderBy(route => route.Distance).ToArray());
         }
 
-        public RouteRecord[] Routes { get; }
+        public int RouteCount { get; }
+
+        public IEnumerable<RouteRecord> Enumerate(SectorMask mustInclude, int range)
+        {
+            if (!mustInclude.IsEmpty)
+            {
+                var matchingBuckets = new List<RouteRecord[]>();
+                for (uint point = 0; point < 192; point++)
+                {
+                    if (mustInclude.Contains(point) && this.routesBySector.TryGetValue(point, out var routes))
+                        matchingBuckets.Add(routes);
+                }
+
+                HashSet<int>? seen = matchingBuckets.Count > 1 ? [] : null;
+                foreach (var routes in matchingBuckets)
+                {
+                    var limit = UpperBound(routes, range);
+                    for (var i = 0; i < limit; i++)
+                    {
+                        if (seen is null || seen.Add(routes[i].Id))
+                            yield return routes[i];
+                    }
+                }
+
+                yield break;
+            }
+
+            foreach (var routes in this.routesByMap.Values)
+            {
+                var limit = UpperBound(routes, range);
+                for (var i = 0; i < limit; i++)
+                    yield return routes[i];
+            }
+        }
 
         public static RouteCandidateIndex Build(
             CalculatedRouteData data,
@@ -715,25 +763,45 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
                     }
 
                     if (valid)
-                        records.Add(new RouteRecord(id++, map, route.Distance, route.Sectors, maxRank));
+                    {
+                        records.Add(new RouteRecord(
+                            id++,
+                            map,
+                            route.Distance,
+                            route.Sectors,
+                            maxRank,
+                            SectorMask.From(route.Sectors)));
+                    }
                 }
             }
 
             return new RouteCandidateIndex(records.ToArray());
         }
+
+        private static int UpperBound(RouteRecord[] routes, int range)
+        {
+            var low = 0;
+            var high = routes.Length;
+            while (low < high)
+            {
+                var middle = low + ((high - low) / 2);
+                if (routes[middle].Distance <= (uint)Math.Max(0, range))
+                    low = middle + 1;
+                else
+                    high = middle;
+            }
+
+            return low;
+        }
     }
 
-    private readonly record struct DurationCacheKey(int RouteId, int Speed);
-
-    private readonly record struct ExpCacheKey(
-        int RouteId,
+    private readonly record struct ExpProfile(
         int Surveillance,
         int Retrieval,
         int Favor,
         ExpMode ExpMode);
 
-    private sealed record CandidateCacheKey(
-        string BuildCode,
+    private readonly record struct RouteSearchCacheKey(
         int Rank,
         int Surveillance,
         int Retrieval,
@@ -744,31 +812,25 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog
         ExpMode ExpMode,
         int DurationLimitHours,
         bool OptimizeExpPerHour,
-        string UnlockedPoints,
-        string MustIncludePoints)
+        SectorMask UnlockedPoints,
+        SectorMask MustIncludePoints,
+        SectorMask ExcludedSectorPoints)
     {
-        public static CandidateCacheKey Create(
-            SubmarineBuild build,
-            IReadOnlySet<uint> unlockedPoints,
-            IReadOnlySet<uint> mustInclude,
-            EtaSettings settings)
+        public static RouteSearchCacheKey Create(RouteSearchRequest request)
             => new(
-                build.Code,
-                build.Rank,
-                build.Surveillance,
-                build.Retrieval,
-                build.Favor,
-                build.Range,
-                build.Speed,
-                settings.EtaModel,
-                settings.EffectiveExpMode,
-                settings.EffectiveDurationLimitHours,
-                settings.EffectiveOptimizeExpPerHour,
-                CreateSetKey(unlockedPoints),
-                CreateSetKey(mustInclude));
-
-        private static string CreateSetKey(IReadOnlySet<uint> values)
-            => values.Count == 0 ? string.Empty : string.Join(',', values.Order());
+                request.Build.Rank,
+                request.Build.Surveillance,
+                request.Build.Retrieval,
+                request.Build.Favor,
+                request.Build.Range,
+                request.Build.Speed,
+                request.Settings.EtaModel,
+                request.Settings.GetEffectiveExpMode(),
+                request.Settings.GetEffectiveDurationLimitHours(),
+                request.Settings.GetEffectiveOptimizeExpPerHour(),
+                request.UnlockedMask,
+                request.MustIncludeMask,
+                request.ExcludedSectorMask);
     }
 
     private static class Breakpoints
