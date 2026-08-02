@@ -48,7 +48,7 @@ public sealed class Plugin : IDalamudPlugin
         var simulator = new EtaSimulator(buildResolver, unlockGraph, routeSelector, catalog);
         var service = new EtaPlannerService(stateReader, simulator, catalog as IRouteSearchDiagnostics);
 
-        this.plannerWindow = new PlannerWindow(Configuration, SaveConfiguration, service);
+        this.plannerWindow = new PlannerWindow(Configuration, SaveConfiguration, service, catalog);
         this.windowSystem.AddWindow(this.plannerWindow);
 
         PluginInterface.UiBuilder.Draw += Draw;

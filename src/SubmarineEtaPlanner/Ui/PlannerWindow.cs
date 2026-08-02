@@ -26,6 +26,7 @@ public sealed partial class PlannerWindow : Window
     private readonly Configuration configuration;
     private readonly Action saveConfiguration;
     private readonly EtaPlannerService plannerService;
+    private readonly ISubmarineCatalog catalog;
     private readonly ResultsViewState viewState = new();
     private readonly HashSet<string> expandedSubmarines = [];
 
@@ -40,12 +41,17 @@ public sealed partial class PlannerWindow : Window
     private EtaSettings draftSettings;
     private bool draftDirty;
 
-    public PlannerWindow(Configuration configuration, Action saveConfiguration, EtaPlannerService plannerService)
+    public PlannerWindow(
+        Configuration configuration,
+        Action saveConfiguration,
+        EtaPlannerService plannerService,
+        ISubmarineCatalog catalog)
         : base("Submarine ETA Planner###SubmarineEtaPlanner", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         this.configuration = configuration;
         this.saveConfiguration = saveConfiguration;
         this.plannerService = plannerService;
+        this.catalog = catalog;
         this.draftSettings = CloneSettings(configuration.Settings);
         IsOpen = configuration.WindowOpen;
         Size = new Vector2(1040, 700);
@@ -377,8 +383,10 @@ public sealed partial class PlannerWindow : Window
             ? $"{(int)duration.TotalDays}d {duration.Hours}h {duration.Minutes}m"
             : $"{(int)duration.TotalHours}h {duration.Minutes}m";
 
-    private static string FormatRoute(IReadOnlyList<uint> route)
-        => route.Count == 0 ? "-" : string.Join("-", route);
+    private string FormatRoute(IReadOnlyList<uint> route)
+        => route.Count == 0 ? "-" : string.Join(" → ", route.Select(this.catalog.PointName));
+
+    private string FormatPoint(uint point) => this.catalog.PointName(point);
 
     private static string FormatElapsed(TimeSpan elapsed)
         => elapsed.TotalSeconds < 1 ? string.Empty : $"({elapsed:mm\\:ss})";

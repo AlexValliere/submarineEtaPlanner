@@ -151,8 +151,7 @@ public sealed class EtaSimulator(
                     if (completedPlan is not null)
                     {
                         mutable.VoyageCount += completedPlan.RepeatCount;
-                        if (perSubPlans[submarineId].Count < settings.MaxPreviewVoyagesPerSubmarine)
-                            perSubPlans[submarineId].Add(completedPlan);
+                        perSubPlans[submarineId].Add(completedPlan);
                         plans.Add(completedPlan);
                     }
                 }
@@ -398,8 +397,7 @@ public sealed class EtaSimulator(
             nextAvailable = plan.ReturnAtUtc;
             voyageCount += batchCount;
 
-            if (plans.Count < settings.MaxPreviewVoyagesPerSubmarine)
-                plans.Add(plan);
+            plans.Add(plan);
         }
 
         if (voyageCount >= settings.SimulationSafetyVoyageCapPerSubmarine && rank < settings.TargetRank)
@@ -612,7 +610,7 @@ public sealed class EtaSimulator(
             voyageCount,
             firstPlan?.BuildCode ?? buildResolver.GetBuildCodeForRank(sub.Rank, settings),
             firstPlan?.Route ?? [],
-            plans.Take(settings.MaxPreviewVoyagesPerSubmarine).ToArray(),
+            plans.ToArray(),
             unlockState.UnlockMilestones.Where(m => m.SubmarineId == sub.SubmarineId).ToArray(),
             finalWarnings,
             catalog.IsPostTargetFarmingReady(buildResolver.ResolveBuildForRank(settings.TargetRank, settings), unlockState.UnlockedPoints),

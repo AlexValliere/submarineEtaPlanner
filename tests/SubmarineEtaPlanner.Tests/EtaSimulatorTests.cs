@@ -383,7 +383,7 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
-    public void FleetEtaUsesFinalAvailabilityWhenPreviewIsCapped()
+    public void FleetForecastIncludesEveryPlanThroughTargetRank()
     {
         var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 100, routeDuration: TimeSpan.FromDays(1)));
         var settings = EtaSettings.CreateDefault() with
@@ -399,9 +399,31 @@ public sealed class EtaSimulatorTests
 
         Assert.True(sub.IsComplete);
         Assert.Equal(4, sub.VoyageCount);
-        Assert.Equal(2, sub.VoyagePreview.Count);
+        Assert.Equal(4, sub.VoyagePreview.Count);
         Assert.Equal(TimeSpan.FromDays(4), sub.Remaining);
         Assert.Equal(TimeSpan.FromDays(4), result.FcCompletionAtUtc - result.GeneratedAtUtc);
+    }
+
+    [Fact]
+    public void OptimisticForecastIncludesEveryPlanThroughTargetRank()
+    {
+        var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 100, routeDuration: TimeSpan.FromDays(1)));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.OptimisticPerSub,
+            EtaModel = EtaModel.ExactRouteSearch,
+            MaxPreviewVoyagesPerSubmarine = 2,
+        };
+        settings.TargetRank = 5;
+        var fc = CreateFc(new HashSet<uint>([99]), CreateSub(rank: 1) with { NextLevelExp = 100 });
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var sub = Assert.Single(result.PerSubResults);
+
+        Assert.True(sub.IsComplete);
+        Assert.Equal(4, sub.VoyageCount);
+        Assert.Equal(4, sub.VoyagePreview.Count);
+        Assert.Equal(TimeSpan.FromDays(4), sub.Remaining);
     }
 
     [Fact]

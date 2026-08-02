@@ -206,8 +206,8 @@ public sealed partial class PlannerWindow
             tableFlags |= ImGuiTableFlags.ScrollX;
 
         var tableSize = needsHorizontalScroll
-            ? new Vector2(-1, CalculateScrollableTableHeight(result.PerSubResults.Count))
-            : new Vector2(-1, 0);
+            ? new Vector2(-1, CalculateTableHeight(result.PerSubResults.Count, true))
+            : new Vector2(-1, CalculateTableHeight(result.PerSubResults.Count, false));
         if (!ImGui.BeginTable(
                 $"table-{fcKey}",
                 7,
@@ -303,7 +303,7 @@ public sealed partial class PlannerWindow
         PlannerUi.DrawStatusPill(sub.StartingRank >= targetRank ? "Ready" : "Leveling", sub.StartingRank >= targetRank ? PlannerUi.Green : PlannerUi.Cyan);
     }
 
-    private static void DrawSubDetails(PerSubEtaResult sub, bool showDiagnostics)
+    private void DrawSubDetails(PerSubEtaResult sub, bool showDiagnostics)
     {
         if (!sub.IsComplete && sub.IncompleteReason is not null)
             PlannerUi.Callout("sub-incomplete", FontAwesomeIcon.ExclamationTriangle, "Incomplete forecast", sub.IncompleteReason, PlannerUi.Amber);
@@ -323,7 +323,7 @@ public sealed partial class PlannerWindow
             foreach (var milestone in sub.UnlockMilestones)
             {
                 DrawBulletText(
-                    $"{FormatMilestoneKind(milestone.Kind)}: {milestone.SourcePoint} → {milestone.UnlockedPoint} " +
+                    $"{FormatMilestoneKind(milestone.Kind)}: {FormatPoint(milestone.SourcePoint)} → {FormatPoint(milestone.UnlockedPoint)} " +
                     $"at {milestone.ReturnAtUtc.LocalDateTime:g}");
             }
         }
@@ -337,8 +337,8 @@ public sealed partial class PlannerWindow
             flags |= ImGuiTableFlags.ScrollX;
 
         var tableSize = needsHorizontalScroll
-            ? new Vector2(-1, CalculateScrollableTableHeight(sub.VoyagePreview.Count))
-            : new Vector2(-1, 0);
+            ? new Vector2(-1, CalculateTableHeight(sub.VoyagePreview.Count, true))
+            : new Vector2(-1, CalculateTableHeight(sub.VoyagePreview.Count, false));
         if (!ImGui.BeginTable(
                 "preview",
                 columnCount,
@@ -393,14 +393,14 @@ public sealed partial class PlannerWindow
         ImGui.EndTable();
     }
 
-    private static float CalculateScrollableTableHeight(int rowCount)
+    private static float CalculateTableHeight(int rowCount, bool hasHorizontalScrollbar)
     {
         var style = ImGui.GetStyle();
         var headerHeight = ImGui.GetTextLineHeight() + (style.CellPadding.Y * 2f);
         var rowHeight = ImGui.GetFrameHeight() + (style.CellPadding.Y * 2f);
         return headerHeight
                + (Math.Max(0, rowCount) * rowHeight)
-               + style.ScrollbarSize
+               + (hasHorizontalScrollbar ? style.ScrollbarSize : 0f)
                + (4f * ImGuiHelpers.GlobalScale);
     }
 }

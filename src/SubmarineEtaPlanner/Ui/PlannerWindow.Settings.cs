@@ -162,7 +162,7 @@ public sealed partial class PlannerWindow
     {
         var settings = this.draftSettings;
         var changed = false;
-        BeginSettingsCard("limit-card", "Safety and preview limits", "Protect the game thread from pathological searches while keeping useful forecast detail.");
+        BeginSettingsCard("limit-card", "Safety limits", "Protect the game thread from pathological searches while preserving the complete voyage forecast.");
 
         var timeLimit = settings.CalculationTimeLimitSeconds;
         SettingLabel("Calculation time limit", "Stop route search after this many seconds. Set zero for no deadline.");
@@ -179,15 +179,6 @@ public sealed partial class PlannerWindow
         if (ImGui.InputInt("Voyages##safety-cap", ref safetyCap))
         {
             settings.SimulationSafetyVoyageCapPerSubmarine = Math.Clamp(safetyCap, 1, 5000);
-            changed = true;
-        }
-
-        var previewCount = settings.MaxPreviewVoyagesPerSubmarine;
-        SettingLabel("Preview rows", "Limit the number of voyage-plan rows shown in expanded submarine details.");
-        ImGui.SetNextItemWidth(150f * ImGuiHelpers.GlobalScale);
-        if (ImGui.InputInt("Rows##preview-count", ref previewCount))
-        {
-            settings.MaxPreviewVoyagesPerSubmarine = Math.Clamp(previewCount, 1, 100);
             changed = true;
         }
 
