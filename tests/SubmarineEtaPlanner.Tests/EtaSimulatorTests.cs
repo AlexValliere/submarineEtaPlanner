@@ -588,11 +588,27 @@ public sealed class EtaSimulatorTests
         var repoJson = File.ReadAllText(repoJsonPath);
 
         Assert.Contains("SubmarineEtaPlanner", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.3.1.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.3.2.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.3.2.0.png", repoJson);
+        Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
+    }
+
+    [Fact]
+    public void VersionedPluginIconIsValidAndPublishedByPagesWorkflow()
+    {
+        var repositoryRoot = Path.GetDirectoryName(FindRepoJson())!;
+        var iconPath = Path.Combine(repositoryRoot, "images", "icon.png");
+        var icon = File.ReadAllBytes(iconPath);
+
+        Assert.Equal([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], icon.Take(8));
+        Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(16, 4)));
+        Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
+
+        var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.3.2.0.png", workflow);
     }
 
     private static EtaSimulator CreateSimulator(ISubmarineCatalog? catalog = null)

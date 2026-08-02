@@ -10,6 +10,29 @@ public sealed partial class PlannerWindow
 {
     private void DrawDashboardPage()
     {
+        var dependency = this.getSubmarineTrackerState();
+        if (!dependency.IsAvailable)
+        {
+            PlannerUi.Callout(
+                "submarine-tracker-dependency",
+                FontAwesomeIcon.ExclamationTriangle,
+                dependency.IsInstalled ? "Submarine Tracker is disabled" : "Submarine Tracker is required",
+                dependency.IsInstalled
+                    ? "Enable Submarine Tracker before refreshing the forecast. Existing results remain visible until then."
+                    : "Install and enable Submarine Tracker to provide the fleet and voyage data used by this planner.",
+                PlannerUi.Amber);
+            if (PlannerUi.IconButtonWithText(
+                    "open-submarine-tracker",
+                    dependency.IsInstalled ? FontAwesomeIcon.ToggleOn : FontAwesomeIcon.Download,
+                    dependency.IsInstalled ? "Open installed plugins" : "Find Submarine Tracker"))
+            {
+                this.openSubmarineTrackerInstaller(dependency.IsInstalled);
+            }
+            ImGui.Spacing();
+            if (this.snapshot is null)
+                return;
+        }
+
         if (this.snapshot is null && this.refreshTask is null)
             StartRefresh();
 
@@ -262,7 +285,7 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(sub.PlannedBuild);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(FormatRoute(sub.NextRoute));
+            DrawRoute(sub.NextRoute);
             ImGui.TableNextColumn();
             DrawSubmarineStatus(sub, result.TargetRank);
         }
@@ -372,7 +395,7 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.BuildCode);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(FormatRoute(plan.Route));
+            DrawRoute(plan.Route);
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.ExpGain.ToString("N0"));
             ImGui.TableNextColumn();

@@ -27,6 +27,8 @@ public sealed partial class PlannerWindow : Window
     private readonly Action saveConfiguration;
     private readonly EtaPlannerService plannerService;
     private readonly ISubmarineCatalog catalog;
+    private readonly Func<SubmarineTrackerDependencyState> getSubmarineTrackerState;
+    private readonly Action<bool> openSubmarineTrackerInstaller;
     private readonly ResultsViewState viewState = new();
     private readonly HashSet<string> expandedSubmarines = [];
 
@@ -41,17 +43,21 @@ public sealed partial class PlannerWindow : Window
     private EtaSettings draftSettings;
     private bool draftDirty;
 
-    public PlannerWindow(
+    internal PlannerWindow(
         Configuration configuration,
         Action saveConfiguration,
         EtaPlannerService plannerService,
-        ISubmarineCatalog catalog)
+        ISubmarineCatalog catalog,
+        Func<SubmarineTrackerDependencyState> getSubmarineTrackerState,
+        Action<bool> openSubmarineTrackerInstaller)
         : base("Submarine ETA Planner###SubmarineEtaPlanner", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         this.configuration = configuration;
         this.saveConfiguration = saveConfiguration;
         this.plannerService = plannerService;
         this.catalog = catalog;
+        this.getSubmarineTrackerState = getSubmarineTrackerState;
+        this.openSubmarineTrackerInstaller = openSubmarineTrackerInstaller;
         this.draftSettings = CloneSettings(configuration.Settings);
         IsOpen = configuration.WindowOpen;
         Size = new Vector2(1040, 700);
@@ -245,7 +251,7 @@ public sealed partial class PlannerWindow : Window
         PlannerPage.Dashboard => "Forecast every tracked fleet from one calm command deck.",
         PlannerPage.Simulation => "Choose the model, target rank, and fleet assumptions.",
         PlannerPage.Routes => "Control voyage duration and unlock priorities.",
-        PlannerPage.Limits => "Balance preview detail against calculation time.",
+        PlannerPage.Limits => "Keep long-running calculations within safe boundaries.",
         PlannerPage.DataSource => "Use the default tracker database or provide an override.",
         PlannerPage.BuildProfile => "Assign the build used throughout each rank range.",
         PlannerPage.Display => "Tune diagnostics and result presentation.",
@@ -277,6 +283,16 @@ public sealed partial class PlannerWindow : Window
     {
         if (!IsOpen)
             return;
+
+        var dependency = this.getSubmarineTrackerState();
+        if (!dependency.IsAvailable)
+        {
+            Plugin.Log.Warning(
+                dependency.IsInstalled
+                    ? "SubmarineTracker is installed but not loaded; forecast refresh skipped."
+                    : "SubmarineTracker is not installed; forecast refresh skipped.");
+            return;
+        }
 
         this.refreshPending = false;
         this.refreshCancellation?.Dispose();
@@ -387,6 +403,21 @@ public sealed partial class PlannerWindow : Window
         => route.Count == 0 ? "-" : string.Join(" → ", route.Select(this.catalog.PointName));
 
     private string FormatPoint(uint point) => this.catalog.PointName(point);
+
+    private void DrawRoute(IReadOnlyList<uint> route)
+    {
+        var routeText = FormatRoute(route);
+        ImGui.TextColored(PlannerUi.Cyan, routeText);
+        if (route.Count == 0 || !ImGui.IsItemHovered())
+            return;
+
+        ImGui.BeginTooltip();
+        ImGui.TextColored(PlannerUi.Teal, "Full route");
+        ImGui.Separator();
+        for (var index = 0; index < route.Count; index++)
+            ImGui.TextUnformatted($"{index + 1}. {FormatPoint(route[index])}");
+        ImGui.EndTooltip();
+    }
 
     private static string FormatElapsed(TimeSpan elapsed)
         => elapsed.TotalSeconds < 1 ? string.Empty : $"({elapsed:mm\\:ss})";

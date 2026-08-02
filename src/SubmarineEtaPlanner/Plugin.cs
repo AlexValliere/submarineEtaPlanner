@@ -1,5 +1,6 @@
 using Dalamud.IoC;
 using Dalamud.Game.Command;
+using Dalamud.Interface;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using SubmarineEtaPlanner.Planner;
@@ -48,7 +49,13 @@ public sealed class Plugin : IDalamudPlugin
         var simulator = new EtaSimulator(buildResolver, unlockGraph, routeSelector, catalog);
         var service = new EtaPlannerService(stateReader, simulator, catalog as IRouteSearchDiagnostics);
 
-        this.plannerWindow = new PlannerWindow(Configuration, SaveConfiguration, service, catalog);
+        this.plannerWindow = new PlannerWindow(
+            Configuration,
+            SaveConfiguration,
+            service,
+            catalog,
+            GetSubmarineTrackerState,
+            OpenSubmarineTrackerInstaller);
         this.windowSystem.AddWindow(this.plannerWindow);
 
         PluginInterface.UiBuilder.Draw += Draw;
@@ -129,6 +136,18 @@ public sealed class Plugin : IDalamudPlugin
         ChatGui.Print("/seta refresh — Open the dashboard and refresh the forecast");
         ChatGui.Print("/seta help — Show this help");
     }
+
+    private static SubmarineTrackerDependencyState GetSubmarineTrackerState()
+    {
+        var tracker = PluginInterface.InstalledPlugins.FirstOrDefault(plugin =>
+            plugin.InternalName.Equals("SubmarineTracker", StringComparison.OrdinalIgnoreCase));
+        return new SubmarineTrackerDependencyState(tracker is not null, tracker?.IsLoaded == true);
+    }
+
+    private static void OpenSubmarineTrackerInstaller(bool installed)
+        => PluginInterface.OpenPluginInstallerTo(
+            installed ? PluginInstallerOpenKind.InstalledPlugins : PluginInstallerOpenKind.AllPlugins,
+            "Submarine Tracker");
 
     private void SaveConfiguration() => PluginInterface.SavePluginConfig(Configuration);
 }

@@ -4,6 +4,10 @@ Submarine ETA Planner is a read-only Dalamud plugin that estimates how long trac
 
 The plugin reads local SubmarineTracker data, simulates future voyages, and presents ETA plans grouped by FC. Practical leveling follows sector progression before selecting the highest-EXP available route, while the exact route-search model remains available for diagnostics. It never deploys submarines, clicks UI, or automates workshop actions.
 
+## Requirement
+
+[Submarine Tracker](https://github.com/Infiziert90/SubmarineTracker) must be installed and enabled. If it is missing or disabled, the planner keeps any existing results visible, blocks refreshes, and offers a shortcut to the relevant Dalamud installer page.
+
 The ocean-themed command dashboard groups tracked fleets by FC, summarizes readiness and warnings, and provides search, readiness filters, and expandable voyage forecasts. A responsive navigation rail separates the dashboard from focused Simulation, Routes, Limits, Data Source, Build Profile, and Display pages. Calculation changes are applied together with **Apply & refresh**, so editing settings does not repeatedly restart the planner.
 
 ## Chat command
@@ -27,7 +31,7 @@ Dalamud API 15 currently targets .NET 10. If your machine only has the .NET 9 SD
 dotnet test .\tests\SubmarineEtaPlanner.Tests\SubmarineEtaPlanner.Tests.csproj
 ```
 
-The plugin starts by looking for SubmarineTracker data in the standard XIVLauncher config path:
+The plugin starts by looking for Submarine Tracker data in the standard XIVLauncher config path:
 
 `pluginConfigs\SubmarineTracker\submarine-sqlite.db`
 
