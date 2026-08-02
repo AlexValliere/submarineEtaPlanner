@@ -6,6 +6,9 @@ namespace SubmarineEtaPlanner.TrackerData;
 
 public sealed class SubmarineTrackerStateReader
 {
+    public SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings)
+        => SubmarineTrackerDataFingerprint.Capture(ResolveDatabasePath(settings));
+
     public IReadOnlyList<FcState> Read(EtaSettings settings, ICollection<string> warnings)
     {
         var dbPath = ResolveDatabasePath(settings);

@@ -36,7 +36,21 @@ public sealed partial class PlannerWindow
         if (this.snapshot is null && this.refreshTask is null)
             StartRefresh();
 
+        CheckForTrackerDataChanges();
         var refreshing = this.refreshTask is { IsCompleted: false };
+        if (this.trackerDataChanged && !refreshing)
+        {
+            PlannerUi.Callout(
+                "tracker-data-changed",
+                FontAwesomeIcon.Database,
+                "New SubmarineTracker data available",
+                "Ranks, active voyages, or unlock data changed after this forecast was calculated. Existing results remain visible until you refresh.",
+                PlannerUi.Amber);
+            if (PlannerUi.IconButtonWithText("refresh-tracker-data", FontAwesomeIcon.SyncAlt, "Refresh forecast"))
+                QueueRefresh();
+            ImGui.Spacing();
+        }
+
         if (!string.IsNullOrWhiteSpace(this.lastError))
         {
             PlannerUi.Callout("dashboard-error", FontAwesomeIcon.ExclamationTriangle, "Calculation notice", this.lastError, PlannerUi.Red);

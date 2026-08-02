@@ -7,6 +7,9 @@ public sealed class EtaPlannerService(
     EtaSimulator simulator,
     IRouteSearchDiagnostics? routeSearchDiagnostics = null)
 {
+    public SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings)
+        => stateReader.GetDataFingerprint(settings);
+
     public EtaPlannerSnapshot Calculate(EtaSettings settings, DateTimeOffset now)
         => Calculate(settings, now, CancellationToken.None);
 

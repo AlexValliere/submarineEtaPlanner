@@ -3,6 +3,7 @@ using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using SubmarineEtaPlanner.Planner;
+using SubmarineEtaPlanner.TrackerData;
 using System.Diagnostics;
 using System.Numerics;
 
@@ -10,6 +11,7 @@ namespace SubmarineEtaPlanner.Ui;
 
 public sealed partial class PlannerWindow : Window
 {
+    private static readonly TimeSpan TrackerDataCheckInterval = TimeSpan.FromSeconds(5);
     private static readonly string[] EtaModelLabels = ["Recommended leveling", "Custom strategy"];
     private static readonly string[] RouteGoalLabels =
     [
@@ -36,6 +38,10 @@ public sealed partial class PlannerWindow : Window
     private Task<EtaPlannerSnapshot>? refreshTask;
     private CancellationTokenSource? refreshCancellation;
     private DateTimeOffset? refreshStartedAtUtc;
+    private SubmarineTrackerDataFingerprint? snapshotDataFingerprint;
+    private SubmarineTrackerDataFingerprint? refreshDataFingerprint;
+    private DateTimeOffset nextTrackerDataCheckAtUtc = DateTimeOffset.MinValue;
+    private bool trackerDataChanged;
     private bool refreshPending;
     private string lastError = string.Empty;
     private string fcSearch = string.Empty;
@@ -80,6 +86,7 @@ public sealed partial class PlannerWindow : Window
     {
         this.currentPage = PlannerPage.Dashboard;
         SetOpen(true);
+        RefreshIfTrackerDataChanged();
     }
 
     public void ToggleDashboard()
@@ -104,7 +111,8 @@ public sealed partial class PlannerWindow : Window
 
     public void OpenAndRefresh()
     {
-        OpenResults();
+        this.currentPage = PlannerPage.Dashboard;
+        SetOpen(true);
         QueueRefresh();
     }
 
@@ -300,6 +308,7 @@ public sealed partial class PlannerWindow : Window
         var cancellationToken = this.refreshCancellation.Token;
         this.refreshStartedAtUtc = DateTimeOffset.UtcNow;
         var settings = CloneSettings(this.configuration.Settings);
+        this.refreshDataFingerprint = this.plannerService.GetDataFingerprint(settings);
         var now = DateTimeOffset.UtcNow;
         Plugin.Log.Information("Starting submarine ETA calculation.");
         this.refreshTask = Task.Run(() =>
@@ -335,6 +344,9 @@ public sealed partial class PlannerWindow : Window
             else
             {
                 this.snapshot = result;
+                this.snapshotDataFingerprint = this.refreshDataFingerprint;
+                this.trackerDataChanged = false;
+                this.nextTrackerDataCheckAtUtc = DateTimeOffset.MinValue;
             }
         }
         catch (OperationCanceledException)
@@ -352,6 +364,43 @@ public sealed partial class PlannerWindow : Window
 
         if (this.refreshPending && IsOpen)
             StartRefresh();
+    }
+
+    private void RefreshIfTrackerDataChanged()
+    {
+        if (this.snapshot is null)
+        {
+            QueueRefresh();
+            return;
+        }
+
+        CheckForTrackerDataChanges(force: true);
+        if (this.trackerDataChanged)
+            QueueRefresh();
+    }
+
+    private void CheckForTrackerDataChanges(bool force = false)
+    {
+        if (this.snapshot is null)
+        {
+            this.trackerDataChanged = false;
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!force && now < this.nextTrackerDataCheckAtUtc)
+            return;
+
+        this.nextTrackerDataCheckAtUtc = now + TrackerDataCheckInterval;
+        try
+        {
+            var current = this.plannerService.GetDataFingerprint(this.configuration.Settings);
+            this.trackerDataChanged = this.snapshotDataFingerprint is null || current != this.snapshotDataFingerprint;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Warning(ex, "Could not check whether SubmarineTracker data changed.");
+        }
     }
 
     private static EtaSettings CloneSettings(EtaSettings settings) => new()
