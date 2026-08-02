@@ -16,7 +16,8 @@ The plugin reads local SubmarineTracker data, simulates future voyages, and pres
 - Use Recommended leveling for expected-EXP-per-hour routing and main leveling-route unlocks.
 - Use Custom strategy for advanced EXP, route-goal, duration, and build-profile controls.
 - Search and filter FCs, review readiness and warnings, and expand complete voyage forecasts.
-- Keep existing results visible during background refreshes.
+- List every tracked FC immediately, then publish each forecast as soon as it is ready.
+- Calculate FCs sequentially with an independent per-FC timeout, while keeping previous results visible during refreshes.
 
 ## Installation
 
@@ -44,9 +45,15 @@ Submarine ETA Planner requires [XIVLauncher](https://goatcorp.github.io/) and Da
 4. Select **Apply & refresh**.
 5. Return to the dashboard and expand an FC or submarine to inspect its forecast.
 
+## Progressive calculations
+
+Forecasts run one FC at a time so a difficult fleet cannot consume the entire refresh deadline. The dashboard lists all tracked FCs immediately, marks each one as queued or calculating, and publishes completed results without waiting for the remaining FCs. FCs already at the target rank are handled first, followed by leveling FCs closest to the target.
+
+The **Limits → Per-FC time limit** setting bounds each FC independently. If an FC reaches that limit, its partial or previous result remains visible and calculation continues with the next FC. Probability sampling stops early after at least 64 trials when the P10, P50, and P90 estimates have stabilized; uncertain forecasts may continue up to 256 trials.
+
 ## Probabilistic unlock forecasts
 
-Sector discovery is not guaranteed. The planner runs up to 256 deterministic, repeatable simulations using the FC-wide unlocked-sector state and every known active voyage. It requires at least 64 completed samples for a complete result; otherwise the existing calculation deadline produces an explicit partial forecast. It reports:
+Sector discovery is not guaranteed. The planner runs 64 to 256 deterministic, repeatable simulations using the FC-wide unlocked-sector state and every known active voyage. It stops when the percentile estimates stabilize or the per-FC calculation deadline is reached; insufficient samples produce an explicit partial forecast. It reports:
 
 - **P50 / Median**: half of modeled outcomes finish by this time.
 - **P10-P90**: the likely range containing the middle 80% of modeled outcomes.

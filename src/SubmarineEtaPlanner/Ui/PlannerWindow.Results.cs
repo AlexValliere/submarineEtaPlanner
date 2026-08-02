@@ -62,10 +62,15 @@ public sealed partial class PlannerWindow
             var elapsed = this.refreshStartedAtUtc is null
                 ? TimeSpan.Zero
                 : DateTimeOffset.UtcNow - this.refreshStartedAtUtc.Value;
-            var title = this.snapshot is null ? "Charting the first forecast" : "Refreshing forecast";
-            var body = this.snapshot is null
-                ? $"Reading SubmarineTracker data and calculating routes {FormatElapsed(elapsed)}"
-                : $"Existing results remain available while the new forecast is calculated {FormatElapsed(elapsed)}";
+            var title = this.refreshBaseSnapshot is null ? "Charting the first forecast" : "Refreshing forecast";
+            var active = this.snapshot?.FcProgress.FirstOrDefault(progress => progress.Status == FcCalculationStatus.Calculating);
+            var completed = this.snapshot?.FcProgress.Count(progress =>
+                progress.Status is FcCalculationStatus.Complete or FcCalculationStatus.Partial or FcCalculationStatus.TimedOut or FcCalculationStatus.Failed) ?? 0;
+            var total = this.snapshot?.FreeCompanies.Count ?? 0;
+            var body = active is null
+                ? $"Reading SubmarineTracker data {FormatElapsed(elapsed)}"
+                : $"FC {Math.Min(completed + 1, total)} of {total}: {active.FcDisplayName} · " +
+                  $"{FormatElapsed(DateTimeOffset.UtcNow - (active.StartedAtUtc ?? DateTimeOffset.UtcNow))}";
             PlannerUi.Callout("dashboard-loading", FontAwesomeIcon.SyncAlt, title, body, PlannerUi.Cyan);
             ImGui.Spacing();
             if (this.snapshot is null)
@@ -86,11 +91,11 @@ public sealed partial class PlannerWindow
             var metrics = currentSnapshot.Metrics;
             ImGui.TextColored(
                 PlannerUi.Muted,
-                $"Calculated in {metrics.ElapsedMilliseconds:N0} ms  •  {metrics.RouteQueries:N0} route queries  •  " +
+                $"{(currentSnapshot.IsRunning ? "Progress" : "Calculated")} in {metrics.ElapsedMilliseconds:N0} ms  •  {metrics.RouteQueries:N0} route queries  •  " +
                 $"{metrics.RouteCacheHits:N0} cache hits  •  {metrics.RoutesEvaluated:N0} routes checked");
         }
 
-        if (currentSnapshot.Warnings.Count > 0 || !currentSnapshot.IsComplete)
+        if (!currentSnapshot.IsRunning && (currentSnapshot.Warnings.Count > 0 || !currentSnapshot.IsComplete))
         {
             ImGui.Spacing();
             var warningText = new List<string>();
@@ -101,25 +106,28 @@ public sealed partial class PlannerWindow
                 "snapshot-warnings",
                 FontAwesomeIcon.ExclamationTriangle,
                 currentSnapshot.IsComplete ? "Forecast warnings" : "Partial forecast",
-                string.Join("  •  ", warningText),
+                string.Join("  •  ", warningText.Distinct()),
                 PlannerUi.Amber);
         }
 
-        var visibleResults = currentSnapshot.Results
-            .Where(result => ResultsViewState.ShouldInclude(
-                result,
-                this.configuration.Settings.TargetRank,
-                this.configuration.ResultsFilter))
-            .Where(result => string.IsNullOrWhiteSpace(this.fcSearch) ||
-                             result.FcDisplayName.Contains(this.fcSearch, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(result => result.FcDisplayName)
+        var resultsByFc = currentSnapshot.Results.ToDictionary(result => Convert.ToHexString(result.FcId));
+        var progressByFc = currentSnapshot.FcProgress.ToDictionary(progress => progress.FcIdKey);
+        var visibleEntries = currentSnapshot.FreeCompanies
+            .Where(fc => ShouldIncludeFc(fc, this.configuration.Settings.TargetRank, this.configuration.ResultsFilter))
+            .Where(fc => string.IsNullOrWhiteSpace(this.fcSearch) ||
+                         fc.DisplayName.Contains(this.fcSearch, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(fc => fc.DisplayName)
+            .Select(fc => (
+                Fc: fc,
+                Result: resultsByFc.GetValueOrDefault(fc.FcIdKey),
+                Progress: progressByFc.GetValueOrDefault(fc.FcIdKey)))
             .ToArray();
 
         ImGui.Spacing();
-        ImGui.TextColored(PlannerUi.Muted, $"{visibleResults.Length} shown of {currentSnapshot.Results.Count} tracked free companies");
+        ImGui.TextColored(PlannerUi.Muted, $"{visibleEntries.Length} shown of {currentSnapshot.FreeCompanies.Count} tracked free companies");
         ImGui.Spacing();
 
-        if (currentSnapshot.Results.Count == 0)
+        if (currentSnapshot.FreeCompanies.Count == 0)
         {
             PlannerUi.Callout(
                 "empty-data",
@@ -130,7 +138,7 @@ public sealed partial class PlannerWindow
             return;
         }
 
-        if (visibleResults.Length == 0)
+        if (visibleEntries.Length == 0)
         {
             PlannerUi.Callout(
                 "empty-filter",
@@ -141,9 +149,12 @@ public sealed partial class PlannerWindow
             return;
         }
 
-        foreach (var result in visibleResults)
+        foreach (var entry in visibleEntries)
         {
-            DrawFcResult(result);
+            if (entry.Result is not null)
+                DrawFcResult(entry.Result, entry.Progress);
+            else
+                DrawPendingFc(entry.Fc, entry.Progress);
             ImGui.Spacing();
         }
 
@@ -152,12 +163,12 @@ public sealed partial class PlannerWindow
 
     private void DrawSummaryCards(EtaPlannerSnapshot currentSnapshot)
     {
-        var total = currentSnapshot.Results.Count;
-        var leveling = currentSnapshot.Results.Count(result =>
-            !ResultsViewState.IsReady(result, this.configuration.Settings.TargetRank));
+        var total = currentSnapshot.FreeCompanies.Count;
+        var leveling = currentSnapshot.FreeCompanies.Count(fc =>
+            !IsReadyNow(fc, this.configuration.Settings.TargetRank));
         var ready = total - leveling;
-        var warnings = currentSnapshot.Results.Count(result =>
-            !result.IsComplete || result.Warnings.Count > 0 || result.PerSubResults.Any(sub => sub.Warnings.Count > 0));
+        var warnings = currentSnapshot.FcProgress.Count(progress =>
+            progress.Status is FcCalculationStatus.Partial or FcCalculationStatus.TimedOut or FcCalculationStatus.Failed);
 
         if (!ImGui.BeginTable("summary-cards", 4, ImGuiTableFlags.SizingStretchSame))
             return;
@@ -204,20 +215,31 @@ public sealed partial class PlannerWindow
         }
     }
 
-    private void DrawFcResult(EtaResult result)
+    private void DrawFcResult(EtaResult result, FcCalculationProgress? calculationProgress = null)
     {
         if (this.viewState.ExpansionOverride is not null)
             ImGui.SetNextItemOpen(this.viewState.ExpansionOverride.Value, ImGuiCond.Always);
 
         var ready = ResultsViewState.IsReady(result, result.TargetRank);
-        var statusText = result.IsComplete
+        var resultStatusText = result.IsComplete
             ? ready
                 ? "Ready now"
                 : $"Median {FormatRelative(result.FcCompletionAtUtc, result.GeneratedAtUtc)}"
             : result.IncompleteReason?.Contains("time limit", StringComparison.OrdinalIgnoreCase) == true
                 ? "Timed out"
                 : "Incomplete";
-        var statusColor = !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan;
+        var isRefreshingFc = calculationProgress?.Status is FcCalculationStatus.Queued or FcCalculationStatus.Calculating;
+        var statusText = calculationProgress?.Status switch
+        {
+            FcCalculationStatus.Queued => "Queued for refresh",
+            FcCalculationStatus.Calculating => $"Refreshing {FormatProgressElapsed(calculationProgress)}",
+            FcCalculationStatus.TimedOut => "Timed out",
+            FcCalculationStatus.Failed => "Refresh failed",
+            _ => resultStatusText,
+        };
+        var statusColor = calculationProgress?.Status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed
+            ? PlannerUi.Amber
+            : !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan;
         var fcKey = Convert.ToHexString(result.FcId);
 
         ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackground);
@@ -228,7 +250,12 @@ public sealed partial class PlannerWindow
         if (!open)
             return;
 
-        PlannerUi.DrawStatusPill(statusText, statusColor);
+        PlannerUi.DrawStatusPill(resultStatusText, !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan);
+        if (calculationProgress?.Status is FcCalculationStatus.Queued or FcCalculationStatus.Calculating or FcCalculationStatus.TimedOut or FcCalculationStatus.Failed)
+        {
+            ImGui.SameLine();
+            PlannerUi.DrawStatusPill(statusText, statusColor);
+        }
         if (!ready && result.CompletionForecast is not null)
         {
             ImGui.SameLine();
@@ -241,6 +268,27 @@ public sealed partial class PlannerWindow
         {
             ImGui.SameLine();
             ImGui.TextColored(PlannerUi.Amber, result.IncompleteReason);
+        }
+
+        if (isRefreshingFc)
+        {
+            PlannerUi.Callout(
+                $"refreshing-fc-{fcKey}",
+                FontAwesomeIcon.SyncAlt,
+                calculationProgress!.Status == FcCalculationStatus.Calculating ? "Refreshing this FC" : "Waiting for its turn",
+                calculationProgress.Status == FcCalculationStatus.Calculating
+                    ? $"The previous result remains visible while a new forecast is calculated ({FormatProgressElapsed(calculationProgress)})."
+                    : "The previous result remains visible until sequential calculation reaches this FC.",
+                PlannerUi.Cyan);
+        }
+        else if (calculationProgress?.Status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed)
+        {
+            PlannerUi.Callout(
+                $"fc-calculation-notice-{fcKey}",
+                FontAwesomeIcon.ExclamationTriangle,
+                calculationProgress.Status == FcCalculationStatus.TimedOut ? "Per-FC timeout reached" : "FC forecast failed",
+                calculationProgress.Message ?? "The previous or partial result remains visible.",
+                PlannerUi.Amber);
         }
 
         if (result.ActiveUnlockAttempts.Count > 0)
@@ -472,6 +520,63 @@ public sealed partial class PlannerWindow
         }
 
         ImGui.EndTable();
+    }
+
+    private void DrawPendingFc(FcState fc, FcCalculationProgress? progress)
+    {
+        var fcKey = fc.FcIdKey;
+        var status = progress?.Status ?? FcCalculationStatus.Queued;
+        var statusText = status switch
+        {
+            FcCalculationStatus.Calculating => $"Calculating {FormatProgressElapsed(progress)}",
+            FcCalculationStatus.TimedOut => "Timed out",
+            FcCalculationStatus.Failed => "Failed",
+            FcCalculationStatus.Cancelled => "Cancelled",
+            _ => "Queued",
+        };
+        var color = status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed
+            ? PlannerUi.Amber
+            : PlannerUi.Cyan;
+
+        ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackground);
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerUi.PanelBackgroundAlt);
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, PlannerUi.PanelBackgroundAlt);
+        var open = ImGui.CollapsingHeader($"{fc.DisplayName}   •   {statusText}###fc-pending-{fcKey}");
+        ImGui.PopStyleColor(3);
+        if (!open)
+            return;
+
+        PlannerUi.DrawStatusPill(statusText, color);
+        ImGui.SameLine();
+        ImGui.TextColored(
+            PlannerUi.Muted,
+            $"{fc.Submarines.Count} submarine{(fc.Submarines.Count == 1 ? string.Empty : "s")} tracked");
+        PlannerUi.Callout(
+            $"fc-pending-callout-{fcKey}",
+            status == FcCalculationStatus.Calculating ? FontAwesomeIcon.SyncAlt : FontAwesomeIcon.Clock,
+            status == FcCalculationStatus.Calculating ? "Forecasting this FC" : "Sequential forecast",
+            progress?.Message ?? "This FC will begin after the current calculation finishes or times out.",
+            color);
+    }
+
+    private static bool ShouldIncludeFc(FcState fc, int targetRank, FcResultFilter filter)
+        => filter switch
+        {
+            FcResultFilter.Leveling => !IsReadyNow(fc, targetRank),
+            FcResultFilter.Ready => IsReadyNow(fc, targetRank),
+            _ => true,
+        };
+
+    private static bool IsReadyNow(FcState fc, int targetRank)
+        => fc.Submarines.Count > 0 && fc.Submarines.All(submarine => submarine.Rank >= targetRank);
+
+    private static string FormatProgressElapsed(FcCalculationProgress? progress)
+    {
+        if (progress?.StartedAtUtc is null)
+            return string.Empty;
+
+        var end = progress.CompletedAtUtc ?? DateTimeOffset.UtcNow;
+        return FormatElapsed(end - progress.StartedAtUtc.Value);
     }
 
     private void DrawNextRoute(PerSubEtaResult sub)

@@ -175,10 +175,10 @@ public sealed partial class PlannerWindow
     {
         var settings = this.draftSettings;
         var changed = false;
-        BeginSettingsCard("limit-card", "Safety limits", "Protect the game thread from pathological searches while preserving the complete voyage forecast.");
+        BeginSettingsCard("limit-card", "Safety limits", "Bound each FC independently so one difficult fleet cannot block every other forecast.");
 
         var timeLimit = settings.CalculationTimeLimitSeconds;
-        SettingLabel("Calculation time limit", "Stop route search after this many seconds. Set zero for no deadline.");
+        SettingLabel("Per-FC time limit", "Move to the next FC after this many seconds. Set zero for no deadline.");
         ImGui.SetNextItemWidth(150f * ImGuiHelpers.GlobalScale);
         if (ImGui.InputInt("Seconds##time-limit", ref timeLimit))
         {

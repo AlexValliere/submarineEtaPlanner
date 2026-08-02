@@ -4,6 +4,7 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using SubmarineEtaPlanner.Planner;
 using SubmarineEtaPlanner.TrackerData;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
 
@@ -33,8 +34,10 @@ public sealed partial class PlannerWindow : Window
     private readonly Action<bool> openSubmarineTrackerInstaller;
     private readonly ResultsViewState viewState = new();
     private readonly HashSet<string> expandedSubmarines = [];
+    private readonly ConcurrentQueue<EtaPlannerSnapshot> refreshProgress = new();
 
     private EtaPlannerSnapshot? snapshot;
+    private EtaPlannerSnapshot? refreshBaseSnapshot;
     private Task<EtaPlannerSnapshot>? refreshTask;
     private CancellationTokenSource? refreshCancellation;
     private DateTimeOffset? refreshStartedAtUtc;
@@ -131,6 +134,7 @@ public sealed partial class PlannerWindow : Window
 
     public override void Draw()
     {
+        ApplyRefreshProgressUpdates();
         CompleteRefreshIfReady();
         using var theme = PlannerUi.PushTheme();
 
@@ -307,6 +311,10 @@ public sealed partial class PlannerWindow : Window
         this.refreshCancellation = new CancellationTokenSource();
         var cancellationToken = this.refreshCancellation.Token;
         this.refreshStartedAtUtc = DateTimeOffset.UtcNow;
+        this.refreshBaseSnapshot = this.snapshot;
+        while (this.refreshProgress.TryDequeue(out _))
+        {
+        }
         var settings = CloneSettings(this.configuration.Settings);
         this.refreshDataFingerprint = this.plannerService.GetDataFingerprint(settings);
         var now = DateTimeOffset.UtcNow;
@@ -314,7 +322,11 @@ public sealed partial class PlannerWindow : Window
         this.refreshTask = Task.Run(() =>
         {
             var stopwatch = Stopwatch.StartNew();
-            var result = this.plannerService.Calculate(settings, now, cancellationToken);
+            var result = this.plannerService.Calculate(
+                settings,
+                now,
+                cancellationToken,
+                progress => this.refreshProgress.Enqueue(progress));
             Plugin.Log.Information(
                 "Submarine ETA calculation completed in {ElapsedMilliseconds} ms for {FreeCompanyCount} FC(s).",
                 stopwatch.ElapsedMilliseconds,
@@ -325,6 +337,7 @@ public sealed partial class PlannerWindow : Window
 
     private void CompleteRefreshIfReady()
     {
+        ApplyRefreshProgressUpdates();
         var task = this.refreshTask;
         if (task is null || !task.IsCompleted)
             return;
@@ -335,22 +348,17 @@ public sealed partial class PlannerWindow : Window
         {
             var result = task.GetAwaiter().GetResult();
             this.lastError = string.Empty;
-            if (!result.IsComplete &&
-                this.configuration.Settings.TimeoutResultBehavior == TimeoutResultBehavior.KeepLastComplete &&
-                this.snapshot is { IsComplete: true })
-            {
-                this.lastError = result.IncompleteReason ?? "Refresh returned partial results; keeping the last complete table.";
-            }
-            else
-            {
-                this.snapshot = result;
-                this.snapshotDataFingerprint = this.refreshDataFingerprint;
-                this.trackerDataChanged = false;
-                this.nextTrackerDataCheckAtUtc = DateTimeOffset.MinValue;
-            }
+            this.snapshot = MergeProgressSnapshot(result);
+            this.snapshotDataFingerprint = this.refreshDataFingerprint;
+            this.trackerDataChanged = false;
+            this.nextTrackerDataCheckAtUtc = DateTimeOffset.MinValue;
         }
         catch (OperationCanceledException)
         {
+            if (this.refreshBaseSnapshot is not null)
+                this.snapshot = this.refreshBaseSnapshot;
+            else if (this.snapshot is not null)
+                this.snapshot = MarkSnapshotCancelled(this.snapshot);
             if (!this.refreshPending)
                 this.lastError = "Refresh cancelled. Existing results were kept.";
         }
@@ -362,9 +370,69 @@ public sealed partial class PlannerWindow : Window
                 this.snapshot = new EtaPlannerSnapshot(DateTimeOffset.UtcNow, [], [], [ex.Message], CalculationStatus.Failed, ex.Message);
         }
 
+        this.refreshBaseSnapshot = null;
+
         if (this.refreshPending && IsOpen)
             StartRefresh();
     }
+
+    private void ApplyRefreshProgressUpdates()
+    {
+        EtaPlannerSnapshot? latest = null;
+        while (this.refreshProgress.TryDequeue(out var update))
+            latest = update;
+
+        if (latest is not null)
+            this.snapshot = MergeProgressSnapshot(latest);
+    }
+
+    private EtaPlannerSnapshot MergeProgressSnapshot(EtaPlannerSnapshot progress)
+    {
+        var results = progress.Results.ToDictionary(result => Convert.ToHexString(result.FcId));
+        if (this.refreshBaseSnapshot is not null)
+        {
+            var currentFcIds = progress.FreeCompanies.Select(fc => fc.FcIdKey).ToHashSet();
+            foreach (var previous in this.refreshBaseSnapshot.Results)
+            {
+                var key = Convert.ToHexString(previous.FcId);
+                if (!currentFcIds.Contains(key))
+                    continue;
+
+                if (!results.TryGetValue(key, out var replacement) ||
+                    (this.configuration.Settings.TimeoutResultBehavior == TimeoutResultBehavior.KeepLastComplete &&
+                     previous.IsComplete &&
+                     !replacement.IsComplete))
+                {
+                    results[key] = previous;
+                }
+            }
+        }
+
+        return progress with
+        {
+            Results = progress.FreeCompanies
+                .Where(fc => results.ContainsKey(fc.FcIdKey))
+                .Select(fc => results[fc.FcIdKey])
+                .ToArray(),
+        };
+    }
+
+    private static EtaPlannerSnapshot MarkSnapshotCancelled(EtaPlannerSnapshot current)
+        => current with
+        {
+            Status = CalculationStatus.Partial,
+            IncompleteReason = "Refresh cancelled.",
+            IsRunning = false,
+            FcProgress = current.FcProgress.Select(progress =>
+                progress.Status is FcCalculationStatus.Queued or FcCalculationStatus.Calculating
+                    ? progress with
+                    {
+                        Status = FcCalculationStatus.Cancelled,
+                        CompletedAtUtc = DateTimeOffset.UtcNow,
+                        Message = "Refresh cancelled.",
+                    }
+                    : progress).ToArray(),
+        };
 
     private void RefreshIfTrackerDataChanged()
     {

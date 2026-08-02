@@ -10,7 +10,7 @@ namespace SubmarineEtaPlanner.SubmarineTrackerRuntime;
 public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDiagnostics
 {
     private const int FixedVoyageTimeSeconds = 43200;
-    private const int RouteSearchCacheLimit = 8192;
+    private const int RouteSearchCacheLimit = 32768;
     private readonly ExcelSheet<SubmarineExploration> explorationSheet;
     private readonly ExcelSheet<SubmarinePart> partSheet;
     private readonly ExcelSheet<SubmarineRank> rankSheet;

@@ -35,7 +35,12 @@ public sealed class EtaSimulatorTests
     public void FleetModeSharesUnlockState()
     {
         var simulator = CreateSimulator();
-        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet, EtaModel = EtaModel.ExactRouteSearch };
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.Fleet,
+            EtaModel = EtaModel.ExactRouteSearch,
+            UnlockSuccessProbability = 1.0,
+        };
         settings.TargetRank = 22;
         var fc = CreateFc(Enumerable.Range(1, 15).Select(i => (uint)i).ToHashSet(), CreateSub(1, "A", 20), CreateSub(2, "B", 20));
 
@@ -49,7 +54,12 @@ public sealed class EtaSimulatorTests
     public void UnlockMilestonesAreStampedAtVoyageReturn()
     {
         var simulator = CreateSimulator();
-        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet, EtaModel = EtaModel.ExactRouteSearch };
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.Fleet,
+            EtaModel = EtaModel.ExactRouteSearch,
+            UnlockSuccessProbability = 1.0,
+        };
         settings.TargetRank = 22;
         var fc = CreateFc(Enumerable.Range(1, 15).Select(i => (uint)i).ToHashSet(), CreateSub(1, "A", 20));
 
@@ -609,7 +619,7 @@ public sealed class EtaSimulatorTests
         Assert.NotNull(result.CompletionForecast);
         Assert.True(result.CompletionForecast.P10AtUtc <= result.CompletionForecast.P50AtUtc);
         Assert.True(result.CompletionForecast.P50AtUtc <= result.CompletionForecast.P90AtUtc);
-        Assert.Equal(256, result.ProbabilitySampleCount);
+        Assert.InRange(result.ProbabilitySampleCount, 64, 256);
         Assert.Equal(2, attempt.SubmarineIds.Count);
         Assert.Equal(1 - Math.Pow(0.67, 2), attempt.CombinedSuccessProbability, 6);
     }
@@ -715,10 +725,10 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.4.0.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.4.1.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.0.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.1.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
@@ -735,7 +745,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.0.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.1.0.png", workflow);
     }
 
     private static EtaSimulator CreateSimulator(ISubmarineCatalog? catalog = null)

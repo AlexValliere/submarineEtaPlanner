@@ -62,6 +62,12 @@ public sealed class EtaSimulator(
             trials.Add(trial);
             if (!trial.IsComplete && IsTimedOut(deadlineUtc))
                 break;
+            if ((sample + 1) >= MinimumProbabilitySamples &&
+                (sample + 1) % 32 == 0 &&
+                ProbabilityForecastConverged(trials, now))
+            {
+                break;
+            }
         }
 
         return AggregateProbabilityTrials(fc, settings, now, trials);
@@ -904,6 +910,28 @@ public sealed class EtaSimulator(
         }
 
         return new EtaPercentiles(At(0.10), At(0.50), At(0.90), sampleCount);
+    }
+
+    private static bool ProbabilityForecastConverged(IReadOnlyList<EtaResult> trials, DateTimeOffset now)
+    {
+        var completed = trials.Where(result => result.IsComplete).Select(result => result.FcCompletionAtUtc).ToArray();
+        if (completed.Length < MinimumProbabilitySamples || completed.Length < 64)
+            return false;
+
+        var previousCount = completed.Length - 32;
+        if (previousCount < 32)
+            return false;
+
+        var current = CreatePercentiles(completed, completed.Length);
+        var previous = CreatePercentiles(completed.Take(previousCount), previousCount);
+        var medianDuration = current.P50AtUtc - now;
+        var tolerance = TimeSpan.FromTicks(Math.Max(
+            TimeSpan.FromHours(6).Ticks,
+            (long)(Math.Abs(medianDuration.Ticks) * 0.01)));
+
+        return (current.P10AtUtc - previous.P10AtUtc).Duration() <= tolerance &&
+               (current.P50AtUtc - previous.P50AtUtc).Duration() <= tolerance &&
+               (current.P90AtUtc - previous.P90AtUtc).Duration() <= tolerance;
     }
 
     private static int CreateDeterministicSeed(FcState fc, EtaSettings settings, int sample)

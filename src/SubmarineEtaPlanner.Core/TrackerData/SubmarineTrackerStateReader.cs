@@ -4,7 +4,14 @@ using SubmarineEtaPlanner.Planner;
 
 namespace SubmarineEtaPlanner.TrackerData;
 
-public sealed class SubmarineTrackerStateReader
+public interface ISubmarineTrackerStateReader
+{
+    SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings);
+
+    IReadOnlyList<FcState> Read(EtaSettings settings, ICollection<string> warnings);
+}
+
+public sealed class SubmarineTrackerStateReader : ISubmarineTrackerStateReader
 {
     public SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings)
         => SubmarineTrackerDataFingerprint.Capture(ResolveDatabasePath(settings));
