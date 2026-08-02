@@ -588,7 +588,7 @@ public sealed class EtaSimulatorTests
         var repoJson = File.ReadAllText(repoJsonPath);
 
         Assert.Contains("SubmarineEtaPlanner", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.3.0.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.3.1.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
