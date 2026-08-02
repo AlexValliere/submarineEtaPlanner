@@ -1,4 +1,5 @@
 using Dalamud.IoC;
+using Dalamud.Game.Command;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using SubmarineEtaPlanner.Planner;
@@ -11,6 +12,8 @@ namespace SubmarineEtaPlanner;
 
 public sealed class Plugin : IDalamudPlugin
 {
+    private const string CommandName = "/seta";
+
     public string Name => "Submarine ETA Planner";
 
     [PluginService]
@@ -21,6 +24,12 @@ public sealed class Plugin : IDalamudPlugin
 
     [PluginService]
     internal static IDataManager Data { get; private set; } = null!;
+
+    [PluginService]
+    internal static ICommandManager CommandManager { get; private set; } = null!;
+
+    [PluginService]
+    internal static IChatGui ChatGui { get; private set; } = null!;
 
     private readonly PlannerWindow plannerWindow;
     private readonly Dalamud.Interface.Windowing.WindowSystem windowSystem = new("SubmarineEtaPlanner");
@@ -45,12 +54,18 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.Draw += Draw;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;
+        CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Toggle Submarine ETA Planner. Subcommands: settings, refresh, help.",
+            ShowInHelp = true,
+        });
     }
 
     internal Configuration Configuration { get; }
 
     public void Dispose()
     {
+        CommandManager.RemoveHandler(CommandName);
         PluginInterface.UiBuilder.Draw -= Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
@@ -80,6 +95,39 @@ public sealed class Plugin : IDalamudPlugin
     {
         this.plannerWindow.OpenResults();
         SaveConfiguration();
+    }
+
+    private void OnCommand(string command, string arguments)
+    {
+        var subcommand = arguments.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToLowerInvariant();
+        switch (subcommand)
+        {
+            case null:
+                this.plannerWindow.ToggleDashboard();
+                break;
+            case "settings":
+                this.plannerWindow.OpenSettings();
+                break;
+            case "refresh":
+                this.plannerWindow.OpenAndRefresh();
+                break;
+            case "help":
+                PrintCommandHelp();
+                break;
+            default:
+                ChatGui.PrintError($"Unknown Submarine ETA Planner command: {subcommand}");
+                PrintCommandHelp();
+                break;
+        }
+    }
+
+    private static void PrintCommandHelp()
+    {
+        ChatGui.Print("Submarine ETA Planner commands:");
+        ChatGui.Print("/seta — Toggle the dashboard");
+        ChatGui.Print("/seta settings — Open simulation settings");
+        ChatGui.Print("/seta refresh — Open the dashboard and refresh the forecast");
+        ChatGui.Print("/seta help — Show this help");
     }
 
     private void SaveConfiguration() => PluginInterface.SavePluginConfig(Configuration);

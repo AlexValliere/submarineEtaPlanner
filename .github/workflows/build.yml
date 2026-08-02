@@ -62,7 +62,9 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "public/SubmarineEtaPlanner" | Out-Null
+          New-Item -ItemType Directory -Force -Path "public/images" | Out-Null
           Copy-Item repo.json public/repo.json
+          Copy-Item images/icon.png public/images/icon.png
           Copy-Item artifacts/latest.zip public/SubmarineEtaPlanner/latest.zip
 
       - uses: actions/upload-pages-artifact@v3

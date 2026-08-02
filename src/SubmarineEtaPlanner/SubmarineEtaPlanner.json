@@ -2,10 +2,11 @@
   "Author": "Alex",
   "Name": "Submarine ETA Planner",
   "Punchline": "Estimate submarine ETAs to rank 114.",
-  "Description": "Read-only ETA planner for tracked FC submarines using SubmarineTracker-compatible voyage, build, EXP, and unlock calculations.",
+  "Description": "Read-only ETA planner for tracked FC submarines using SubmarineTracker-compatible voyage, build, EXP, and unlock calculations. Open it with /seta.",
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
   "Tags": [
     "Submarine",
     "ETA",

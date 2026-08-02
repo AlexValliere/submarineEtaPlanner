@@ -4,7 +4,14 @@ Submarine ETA Planner is a read-only Dalamud plugin that estimates how long trac
 
 The plugin reads local SubmarineTracker data, simulates future voyages, and presents ETA plans grouped by FC. Practical leveling follows sector progression before selecting the highest-EXP available route, while the exact route-search model remains available for diagnostics. It never deploys submarines, clicks UI, or automates workshop actions.
 
-The main window has separate Results and Settings tabs. Results can be searched, filtered to leveling or ready FCs, and collapsed or expanded as a group. Calculation changes are applied together with **Apply and refresh**, so editing settings does not repeatedly restart the planner.
+The ocean-themed command dashboard groups tracked fleets by FC, summarizes readiness and warnings, and provides search, readiness filters, and expandable voyage forecasts. A responsive navigation rail separates the dashboard from focused Simulation, Routes, Limits, Data Source, Build Profile, and Display pages. Calculation changes are applied together with **Apply & refresh**, so editing settings does not repeatedly restart the planner.
+
+## Chat command
+
+- `/seta` toggles the dashboard.
+- `/seta settings` opens simulation settings.
+- `/seta refresh` opens the dashboard and refreshes the forecast.
+- `/seta help` lists the available commands.
 
 ## Development
 
