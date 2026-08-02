@@ -49,6 +49,8 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
 
     public IReadOnlyList<UnlockRule> UnlockRules { get; }
 
+    public int MaximumRank => checked((int)this.lastRank);
+
     public SubmarineBuild ResolveBuild(string buildCode, int rank)
     {
         var parts = ParseBuildCode(buildCode);

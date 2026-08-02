@@ -11,7 +11,7 @@ public sealed class EtaSimulatorTests
     {
         var catalog = new CompatSubmarineCatalog();
 
-        var result = catalog.ApplyExp(10, 0, 100_000, 114);
+        var result = catalog.ApplyExp(10, 0, 100_000, 50);
 
         Assert.True(result.Rank > 10);
         Assert.True(result.CurrentExp < result.NextLevelExp || result.NextLevelExp == 0);
@@ -22,12 +22,13 @@ public sealed class EtaSimulatorTests
     {
         var simulator = CreateSimulator();
         var settings = EtaSettings.CreateDefault();
-        var fc = CreateFc(CreateSub(rank: 113, currentExp: 500_000));
+        settings.TargetRank = 90;
+        var fc = CreateFc(CreateSub(rank: 89, currentExp: 500_000));
 
         var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
 
-        Assert.All(result.PerSubResults, sub => Assert.True(sub.FinalRank >= 114));
-        Assert.DoesNotContain(result.PlannedRoutes, p => p.RankBefore >= 114);
+        Assert.All(result.PerSubResults, sub => Assert.True(sub.FinalRank >= settings.TargetRank));
+        Assert.DoesNotContain(result.PlannedRoutes, p => p.RankBefore >= settings.TargetRank);
     }
 
     [Fact]
@@ -431,8 +432,9 @@ public sealed class EtaSimulatorTests
     {
         var simulator = CreateSimulator();
         var settings = EtaSettings.CreateDefault();
+        settings.TargetRank = 80;
         var now = DateTimeOffset.UnixEpoch;
-        var sub = CreateSub(rank: 114) with
+        var sub = CreateSub(rank: settings.TargetRank) with
         {
             ReturnAtUtc = now.AddDays(2),
             CurrentRoute = [1],
@@ -554,13 +556,14 @@ public sealed class EtaSimulatorTests
     {
         var simulator = CreateSimulator();
         var settings = EtaSettings.CreateDefault();
-        var ready = simulator.Simulate(CreateFc(CreateSub(rank: 114)), settings, DateTimeOffset.UnixEpoch);
-        var leveling = simulator.Simulate(CreateFc(CreateSub(rank: 113)), settings, DateTimeOffset.UnixEpoch);
+        settings.TargetRank = 80;
+        var ready = simulator.Simulate(CreateFc(CreateSub(rank: settings.TargetRank)), settings, DateTimeOffset.UnixEpoch);
+        var leveling = simulator.Simulate(CreateFc(CreateSub(rank: settings.TargetRank - 1)), settings, DateTimeOffset.UnixEpoch);
         var viewState = new ResultsViewState();
 
-        Assert.True(ResultsViewState.ShouldInclude(leveling, 114, FcResultFilter.Leveling));
-        Assert.False(ResultsViewState.ShouldInclude(ready, 114, FcResultFilter.Leveling));
-        Assert.True(ResultsViewState.ShouldInclude(ready, 114, FcResultFilter.Ready));
+        Assert.True(ResultsViewState.ShouldInclude(leveling, settings.TargetRank, FcResultFilter.Leveling));
+        Assert.False(ResultsViewState.ShouldInclude(ready, settings.TargetRank, FcResultFilter.Leveling));
+        Assert.True(ResultsViewState.ShouldInclude(ready, settings.TargetRank, FcResultFilter.Ready));
 
         viewState.ExpandAll();
         Assert.True(viewState.ExpansionOverride);
@@ -588,6 +591,7 @@ public sealed class EtaSimulatorTests
         var repoJson = File.ReadAllText(repoJsonPath);
 
         Assert.Contains("SubmarineEtaPlanner", repoJson);
+        Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("\"AssemblyVersion\": \"0.3.2.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
@@ -679,6 +683,8 @@ public sealed class EtaSimulatorTests
 
         public IReadOnlyList<UnlockRule> UnlockRules => this.unlockRules;
 
+        public int MaximumRank => 149;
+
         public IReadOnlyList<uint> LastMustInclude { get; private set; } = [];
 
         public int PartBuildResolutionCount { get; private set; }
@@ -749,6 +755,8 @@ public sealed class EtaSimulatorTests
     private sealed class MultiRouteCatalog(IReadOnlyList<RouteCandidate> routes) : ISubmarineCatalog
     {
         public IReadOnlyList<UnlockRule> UnlockRules => [];
+
+        public int MaximumRank => 149;
 
         public SubmarineBuild ResolveBuild(string buildCode, int rank)
             => new(buildCode, rank, 100, 100, 100, 999, 100);

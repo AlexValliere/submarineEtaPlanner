@@ -4,6 +4,8 @@ namespace SubmarineEtaPlanner.SubmarineTrackerCompat;
 
 public sealed class CompatSubmarineCatalog : ISubmarineCatalog
 {
+    public int MaximumRank => 149;
+
     private static readonly Dictionary<char, PartStats> PartCatalog = new()
     {
         ['S'] = new PartStats(85, 85, 70, 85, 80),

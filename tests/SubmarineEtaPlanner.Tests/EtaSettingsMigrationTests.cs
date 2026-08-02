@@ -60,12 +60,27 @@ public sealed class EtaSettingsMigrationTests
         var changed = EtaSettingsMigration.Migrate(settings, ref version);
 
         Assert.True(changed);
-        Assert.Equal(6, version);
+        Assert.Equal(EtaSettingsMigration.CurrentVersion, version);
         Assert.Equal(0, settings.PracticalMaxVoyageHours);
         Assert.Equal(4, settings.BuildProfile.Count);
 
         changed = EtaSettingsMigration.Migrate(settings, ref version);
         Assert.False(changed);
         Assert.Equal(4, settings.BuildProfile.Count);
+    }
+
+    [Fact]
+    public void VersionSevenMigrationPreservesLegacyMrojzReadinessPreference()
+    {
+        var version = 6;
+        var settings = EtaSettings.CreateDefault();
+        settings.ShowPost114MrojzReadiness = false;
+
+        var changed = EtaSettingsMigration.Migrate(settings, ref version);
+
+        Assert.True(changed);
+        Assert.Equal(EtaSettingsMigration.CurrentVersion, version);
+        Assert.False(settings.ShowMrojzReadiness);
+        Assert.Null(settings.ShowPost114MrojzReadiness);
     }
 }

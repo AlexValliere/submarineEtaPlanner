@@ -2,7 +2,7 @@ namespace SubmarineEtaPlanner.Planner;
 
 public static class EtaSettingsMigration
 {
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
 
     public static bool Migrate(EtaSettings settings, ref int version)
     {
@@ -39,6 +39,13 @@ public static class EtaSettingsMigration
                 .ToList();
             if (settings.BuildProfile.Count == 0)
                 settings.BuildProfile = EtaSettings.CreateDefault().BuildProfile;
+        }
+
+        if (version < 7)
+        {
+            if (settings.ShowPost114MrojzReadiness is { } legacyReadiness)
+                settings.ShowMrojzReadiness = legacyReadiness;
+            settings.ShowPost114MrojzReadiness = null;
         }
 
         version = CurrentVersion;

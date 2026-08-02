@@ -2,6 +2,8 @@ namespace SubmarineEtaPlanner.Planner;
 
 public interface ISubmarineCatalog
 {
+    int MaximumRank { get; }
+
     SubmarineBuild ResolveBuild(string buildCode, int rank);
 
     SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank);

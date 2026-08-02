@@ -371,7 +371,7 @@ public sealed partial class PlannerWindow : Window
         OptimizeExpPerHour = settings.OptimizeExpPerHour,
         UnknownCurrentVoyagePolicy = settings.UnknownCurrentVoyagePolicy,
         ManualCurrentRouteOverrides = settings.ManualCurrentRouteOverrides.ToDictionary(pair => pair.Key, pair => pair.Value.ToList()),
-        ShowPost114MrojzReadiness = settings.ShowPost114MrojzReadiness,
+        ShowMrojzReadiness = settings.ShowMrojzReadiness,
         SubmarineTrackerDatabasePathOverride = settings.SubmarineTrackerDatabasePathOverride,
         MaxPreviewVoyagesPerSubmarine = settings.MaxPreviewVoyagesPerSubmarine,
         SimulationSafetyVoyageCapPerSubmarine = settings.SimulationSafetyVoyageCapPerSubmarine,

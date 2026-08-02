@@ -224,7 +224,11 @@ public sealed record EtaSettings
 
     public Dictionary<string, List<uint>> ManualCurrentRouteOverrides { get; set; } = [];
 
-    public bool ShowPost114MrojzReadiness { get; set; } = true;
+    public bool ShowMrojzReadiness { get; set; } = true;
+
+    public bool? ShowPost114MrojzReadiness { get; set; }
+
+    public bool ShouldSerializeShowPost114MrojzReadiness() => false;
 
     public string? SubmarineTrackerDatabasePathOverride { get; set; }
 

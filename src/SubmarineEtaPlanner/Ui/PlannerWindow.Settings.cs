@@ -48,11 +48,12 @@ public sealed partial class PlannerWindow
         }
 
         var target = settings.TargetRank;
-        SettingLabel("Target rank", "The rank every tracked submarine should reach.");
+        var maximumRank = Math.Max(1, this.catalog.MaximumRank);
+        SettingLabel("Target rank", $"Choose any supported submarine rank from 1 to {maximumRank}.");
         ImGui.SetNextItemWidth(150f * ImGuiHelpers.GlobalScale);
         if (ImGui.InputInt("##target-rank", ref target))
         {
-            settings.TargetRank = Math.Clamp(target, 1, 149);
+            settings.TargetRank = Math.Clamp(target, 1, maximumRank);
             changed = true;
         }
 
@@ -231,12 +232,12 @@ public sealed partial class PlannerWindow
             this.saveConfiguration();
         }
 
-        var showReadiness = this.configuration.Settings.ShowPost114MrojzReadiness;
-        SettingLabel("Post-target readiness", "Show whether the planned WSCC build is ready for MROJZ farming after rank 114.");
-        if (ImGui.Checkbox("Show post-114 MROJZ readiness##show-readiness", ref showReadiness))
+        var showReadiness = this.configuration.Settings.ShowMrojzReadiness;
+        SettingLabel("MROJZ readiness", "Show whether the build planned at the selected target rank is ready for MROJZ farming.");
+        if (ImGui.Checkbox("Show WSCC/MROJZ readiness##show-readiness", ref showReadiness))
         {
-            this.configuration.Settings.ShowPost114MrojzReadiness = showReadiness;
-            this.draftSettings.ShowPost114MrojzReadiness = showReadiness;
+            this.configuration.Settings.ShowMrojzReadiness = showReadiness;
+            this.draftSettings.ShowMrojzReadiness = showReadiness;
             this.saveConfiguration();
         }
 
@@ -287,7 +288,7 @@ public sealed partial class PlannerWindow
             {
                 this.draftSettings = EtaSettings.CreateDefault();
                 this.draftSettings.ShowRouteDiagnostics = this.configuration.Settings.ShowRouteDiagnostics;
-                this.draftSettings.ShowPost114MrojzReadiness = this.configuration.Settings.ShowPost114MrojzReadiness;
+                this.draftSettings.ShowMrojzReadiness = this.configuration.Settings.ShowMrojzReadiness;
                 this.draftSettings.TimeoutResultBehavior = this.configuration.Settings.TimeoutResultBehavior;
                 this.draftDirty = true;
             }
@@ -390,7 +391,10 @@ public sealed partial class PlannerWindow
 
         if (PlannerUi.IconButtonWithText("add-build-range", FontAwesomeIcon.Plus, "Add range"))
         {
-            settings.BuildProfile.Add(new BuildProfileStep(114, 999, "WSCC"));
+            var nextRank = settings.BuildProfile.Count == 0
+                ? 1
+                : Math.Clamp(settings.BuildProfile.Max(step => step.MaxRank) + 1, 1, 999);
+            settings.BuildProfile.Add(new BuildProfileStep(nextRank, 999, "SSSS"));
             changed = true;
         }
         ImGui.SameLine();

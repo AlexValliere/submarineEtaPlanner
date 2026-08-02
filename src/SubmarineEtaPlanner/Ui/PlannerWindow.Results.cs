@@ -317,7 +317,7 @@ public sealed partial class PlannerWindow
             return;
         }
 
-        if (this.configuration.Settings.ShowPost114MrojzReadiness && sub.PostTargetFarmingReady)
+        if (this.configuration.Settings.ShowMrojzReadiness && sub.PostTargetFarmingReady)
         {
             PlannerUi.DrawStatusPill("WSCC/MROJZ", PlannerUi.Green);
             return;
