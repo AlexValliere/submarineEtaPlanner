@@ -239,7 +239,7 @@ public sealed partial class PlannerWindow
                 ? "Timed out"
                 : "Incomplete";
         var isRefreshingFc = calculationProgress?.Status is FcCalculationStatus.Queued or FcCalculationStatus.Calculating;
-        var statusText = calculationProgress?.Status switch
+        var calculationStatusText = calculationProgress?.Status switch
         {
             FcCalculationStatus.Queued => "Queued for refresh",
             FcCalculationStatus.Calculating => $"Refreshing {FormatProgressElapsed(calculationProgress)}",
@@ -249,6 +249,10 @@ public sealed partial class PlannerWindow
             FcCalculationStatus.Failed => "Refresh failed",
             _ => resultStatusText,
         };
+        var collapsedStatusText = ResultsViewState.SelectCollapsedStatus(
+            resultStatusText,
+            calculationProgress?.Status,
+            calculationStatusText);
         var statusColor = calculationProgress?.Status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed or FcCalculationStatus.AwaitingTrackerUpdate
             ? PlannerUi.Amber
             : !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan;
@@ -257,7 +261,7 @@ public sealed partial class PlannerWindow
         ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackground);
         ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerUi.PanelBackgroundAlt);
         ImGui.PushStyleColor(ImGuiCol.HeaderActive, PlannerUi.PanelBackgroundAlt);
-        var open = ImGui.CollapsingHeader($"{result.FcDisplayName}   •   {statusText}###fc-{fcKey}");
+        var open = ImGui.CollapsingHeader($"{result.FcDisplayName}   •   {collapsedStatusText}###fc-{fcKey}");
         ImGui.PopStyleColor(3);
         if (!open)
             return;
@@ -266,7 +270,7 @@ public sealed partial class PlannerWindow
         if (calculationProgress?.Status is FcCalculationStatus.Queued or FcCalculationStatus.Calculating or FcCalculationStatus.Reused or FcCalculationStatus.AwaitingTrackerUpdate or FcCalculationStatus.TimedOut or FcCalculationStatus.Failed)
         {
             ImGui.SameLine();
-            PlannerUi.DrawStatusPill(statusText, statusColor);
+            PlannerUi.DrawStatusPill(calculationStatusText, statusColor);
             if (calculationProgress.Status == FcCalculationStatus.Reused && ImGui.IsItemHovered())
                 ImGui.SetTooltip($"Forecast originally calculated {result.GeneratedAtUtc.LocalDateTime:g}.");
         }

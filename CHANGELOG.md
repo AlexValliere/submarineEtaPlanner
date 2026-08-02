@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.5.0
+
+- Restored median ETA and ready-now headlines for unchanged forecasts reused during incremental refreshes.
+- Kept reuse visible through dashboard metrics and the expanded `Up to date` status pill.
+
 ## 0.4.4.0
 
 - Fixed recommended-leveling forecasts getting stuck when a main-path sector had an earlier sibling unlock prerequisite.

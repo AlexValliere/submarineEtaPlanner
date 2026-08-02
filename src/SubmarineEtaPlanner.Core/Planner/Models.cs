@@ -328,4 +328,17 @@ public sealed class ResultsViewState
             FcResultFilter.Ready => IsReady(result, targetRank),
             _ => true,
         };
+
+    public static string SelectCollapsedStatus(
+        string resultStatus,
+        FcCalculationStatus? calculationStatus,
+        string calculationStatusText)
+        => calculationStatus is
+            FcCalculationStatus.Queued or
+            FcCalculationStatus.Calculating or
+            FcCalculationStatus.AwaitingTrackerUpdate or
+            FcCalculationStatus.TimedOut or
+            FcCalculationStatus.Failed
+                ? calculationStatusText
+                : resultStatus;
 }

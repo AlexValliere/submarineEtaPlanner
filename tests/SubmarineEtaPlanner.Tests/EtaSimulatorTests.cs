@@ -861,6 +861,51 @@ public sealed class EtaSimulatorTests
         Assert.False(viewState.ExpansionOverride);
     }
 
+    [Theory]
+    [InlineData(null, "Median 12d")]
+    [InlineData(FcCalculationStatus.Reused, "Median 12d")]
+    [InlineData(FcCalculationStatus.Complete, "Median 12d")]
+    [InlineData(FcCalculationStatus.Partial, "Median 12d")]
+    [InlineData(FcCalculationStatus.Cancelled, "Median 12d")]
+    [InlineData(FcCalculationStatus.Queued, "Queued for refresh")]
+    [InlineData(FcCalculationStatus.Calculating, "Refreshing")]
+    [InlineData(FcCalculationStatus.AwaitingTrackerUpdate, "Waiting for SubmarineTracker")]
+    [InlineData(FcCalculationStatus.TimedOut, "Timed out")]
+    [InlineData(FcCalculationStatus.Failed, "Refresh failed")]
+    public void CollapsedResultStatusOnlyYieldsToActionableCalculationStates(
+        FcCalculationStatus? calculationStatus,
+        string expected)
+    {
+        var calculationText = calculationStatus switch
+        {
+            FcCalculationStatus.Queued => "Queued for refresh",
+            FcCalculationStatus.Calculating => "Refreshing",
+            FcCalculationStatus.AwaitingTrackerUpdate => "Waiting for SubmarineTracker",
+            FcCalculationStatus.TimedOut => "Timed out",
+            FcCalculationStatus.Failed => "Refresh failed",
+            FcCalculationStatus.Reused => "Up to date",
+            _ => "Calculation complete",
+        };
+
+        var selected = ResultsViewState.SelectCollapsedStatus(
+            "Median 12d",
+            calculationStatus,
+            calculationText);
+
+        Assert.Equal(expected, selected);
+    }
+
+    [Fact]
+    public void ReusedReadyResultKeepsReadyNowAsCollapsedStatus()
+    {
+        var selected = ResultsViewState.SelectCollapsedStatus(
+            "Ready now",
+            FcCalculationStatus.Reused,
+            "Up to date");
+
+        Assert.Equal("Ready now", selected);
+    }
+
     [Fact]
     public void SubmarineVoyageDurationIncludesTwelveHourBaseline()
     {
@@ -882,13 +927,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.4.4.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.4.5.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.4.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.5.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("ordered multi-target unlock gates", repoJson);
+        Assert.Contains("forecasts reused during incremental database refreshes", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -904,7 +949,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.4.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.5.0.png", workflow);
         Assert.Contains("Copy-Item \"$out/CalculatedData.msgpack\" $packageDir", workflow);
     }
 
