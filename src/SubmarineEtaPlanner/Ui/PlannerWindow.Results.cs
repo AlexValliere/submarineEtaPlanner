@@ -198,9 +198,22 @@ public sealed partial class PlannerWindow
             ImGui.TextColored(PlannerUi.Amber, result.IncompleteReason);
         }
 
+        var minimumTableWidth = 860f * ImGuiHelpers.GlobalScale;
+        var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
         var tableFlags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.BordersOuter | ImGuiTableFlags.RowBg |
-                         ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingStretchProp;
-        if (!ImGui.BeginTable($"table-{fcKey}", 7, tableFlags, new Vector2(-1, 0), 860f * ImGuiHelpers.GlobalScale))
+                         ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
+        if (needsHorizontalScroll)
+            tableFlags |= ImGuiTableFlags.ScrollX;
+
+        var tableSize = needsHorizontalScroll
+            ? new Vector2(-1, CalculateScrollableTableHeight(result.PerSubResults.Count))
+            : new Vector2(-1, 0);
+        if (!ImGui.BeginTable(
+                $"table-{fcKey}",
+                7,
+                tableFlags,
+                tableSize,
+                needsHorizontalScroll ? minimumTableWidth : 0f))
             return;
 
         ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthStretch, 1.35f);
@@ -316,9 +329,22 @@ public sealed partial class PlannerWindow
         }
 
         var columnCount = showDiagnostics ? 9 : 7;
+        var minimumTableWidth = (showDiagnostics ? 980f : 760f) * ImGuiHelpers.GlobalScale;
+        var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
         var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable |
-                    ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingStretchProp;
-        if (!ImGui.BeginTable("preview", columnCount, flags, new Vector2(-1, 0), (showDiagnostics ? 980f : 760f) * ImGuiHelpers.GlobalScale))
+                    ImGuiTableFlags.SizingStretchProp;
+        if (needsHorizontalScroll)
+            flags |= ImGuiTableFlags.ScrollX;
+
+        var tableSize = needsHorizontalScroll
+            ? new Vector2(-1, CalculateScrollableTableHeight(sub.VoyagePreview.Count))
+            : new Vector2(-1, 0);
+        if (!ImGui.BeginTable(
+                "preview",
+                columnCount,
+                flags,
+                tableSize,
+                needsHorizontalScroll ? minimumTableWidth : 0f))
             return;
 
         ImGui.TableSetupColumn("#", ImGuiTableColumnFlags.WidthFixed, 34f * ImGuiHelpers.GlobalScale);
@@ -365,5 +391,16 @@ public sealed partial class PlannerWindow
         }
 
         ImGui.EndTable();
+    }
+
+    private static float CalculateScrollableTableHeight(int rowCount)
+    {
+        var style = ImGui.GetStyle();
+        var headerHeight = ImGui.GetTextLineHeight() + (style.CellPadding.Y * 2f);
+        var rowHeight = ImGui.GetFrameHeight() + (style.CellPadding.Y * 2f);
+        return headerHeight
+               + (Math.Max(0, rowCount) * rowHeight)
+               + style.ScrollbarSize
+               + (4f * ImGuiHelpers.GlobalScale);
     }
 }
