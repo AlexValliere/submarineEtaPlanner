@@ -232,15 +232,6 @@ public sealed partial class PlannerWindow
             this.saveConfiguration();
         }
 
-        var showReadiness = this.configuration.Settings.ShowMrojzReadiness;
-        SettingLabel("MROJZ readiness", "Show whether the build planned at the selected target rank is ready for MROJZ farming.");
-        if (ImGui.Checkbox("Show WSCC/MROJZ readiness##show-readiness", ref showReadiness))
-        {
-            this.configuration.Settings.ShowMrojzReadiness = showReadiness;
-            this.draftSettings.ShowMrojzReadiness = showReadiness;
-            this.saveConfiguration();
-        }
-
         var timeoutBehavior = this.configuration.Settings.TimeoutResultBehavior;
         SettingLabel("Timeout result", "Keep the last complete forecast or replace it with the newest partial result.");
         if (DrawEnumCombo("##timeout-behavior", TimeoutBehaviorLabels, ref timeoutBehavior))
@@ -288,7 +279,6 @@ public sealed partial class PlannerWindow
             {
                 this.draftSettings = EtaSettings.CreateDefault();
                 this.draftSettings.ShowRouteDiagnostics = this.configuration.Settings.ShowRouteDiagnostics;
-                this.draftSettings.ShowMrojzReadiness = this.configuration.Settings.ShowMrojzReadiness;
                 this.draftSettings.TimeoutResultBehavior = this.configuration.Settings.TimeoutResultBehavior;
                 this.draftDirty = true;
             }

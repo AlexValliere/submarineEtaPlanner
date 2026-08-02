@@ -269,7 +269,6 @@ public sealed class EtaSimulator(
                 subPlans.ToArray(),
                 unlockState.UnlockMilestones.Where(m => m.SubmarineId == state.Source.SubmarineId).ToArray(),
                 subWarnings,
-                catalog.IsPostTargetFarmingReady(buildResolver.ResolveBuildForRank(settings.TargetRank, settings), unlockState.UnlockedPoints),
                 status,
                 reason);
         }).ToArray();
@@ -613,7 +612,6 @@ public sealed class EtaSimulator(
             plans.ToArray(),
             unlockState.UnlockMilestones.Where(m => m.SubmarineId == sub.SubmarineId).ToArray(),
             finalWarnings,
-            catalog.IsPostTargetFarmingReady(buildResolver.ResolveBuildForRank(settings.TargetRank, settings), unlockState.UnlockedPoints),
             status,
             reason);
     }

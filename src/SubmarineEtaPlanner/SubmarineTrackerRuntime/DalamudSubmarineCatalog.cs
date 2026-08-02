@@ -11,8 +11,6 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
 {
     private const int FixedVoyageTimeSeconds = 43200;
     private const int RouteSearchCacheLimit = 8192;
-    private static readonly uint[] Mrojz = [13, 18, 15, 10, 26];
-
     private readonly ExcelSheet<SubmarineExploration> explorationSheet;
     private readonly ExcelSheet<SubmarinePart> partSheet;
     private readonly ExcelSheet<SubmarineRank> rankSheet;
@@ -313,9 +311,6 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
         var name = sector.Destination.ExtractText();
         return string.IsNullOrWhiteSpace(name) ? point.ToString() : name;
     }
-
-    public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints)
-        => build.Code.Equals("WSCC", StringComparison.OrdinalIgnoreCase) && Mrojz.All(unlockedPoints.Contains);
 
     public int GetPointRequiredRank(uint point)
         => this.sectorById.TryGetValue(point, out var sector) ? (int)sector.RankReq : int.MaxValue;

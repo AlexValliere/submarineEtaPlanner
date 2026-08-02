@@ -2,7 +2,7 @@ namespace SubmarineEtaPlanner.Planner;
 
 public static class EtaSettingsMigration
 {
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
 
     public static bool Migrate(EtaSettings settings, ref int version)
     {
@@ -41,14 +41,23 @@ public static class EtaSettingsMigration
                 settings.BuildProfile = EtaSettings.CreateDefault().BuildProfile;
         }
 
-        if (version < 7)
-        {
-            if (settings.ShowPost114MrojzReadiness is { } legacyReadiness)
-                settings.ShowMrojzReadiness = legacyReadiness;
-            settings.ShowPost114MrojzReadiness = null;
-        }
+        if (version < 8 && IsLegacyFarmingBuildProfile(settings.BuildProfile))
+            settings.BuildProfile = EtaSettings.CreateDefault().BuildProfile;
 
         version = CurrentVersion;
         return true;
+    }
+
+    private static bool IsLegacyFarmingBuildProfile(IReadOnlyList<BuildProfileStep> profile)
+    {
+        BuildProfileStep[] legacyProfile =
+        [
+            new BuildProfileStep(1, 14, "SSSS"),
+            new BuildProfileStep(15, 24, "SSUS"),
+            new BuildProfileStep(25, 113, "SSUW"),
+            new BuildProfileStep(114, 999, "WSCC"),
+        ];
+        return profile.Count == legacyProfile.Length &&
+               profile.Zip(legacyProfile).All(pair => pair.First == pair.Second);
     }
 }

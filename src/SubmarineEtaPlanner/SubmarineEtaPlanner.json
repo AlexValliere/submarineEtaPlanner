@@ -1,5 +1,5 @@
 {
-  "Author": "Alex",
+  "Author": "Alex Vallière",
   "Name": "Submarine ETA Planner",
   "Punchline": "Estimate submarine ETAs to your chosen rank.",
   "Description": "Read-only ETA planner for tracked FC submarines using SubmarineTracker voyage, build, EXP, and unlock data. Requires Submarine Tracker to be installed and enabled. Open it with /seta.",

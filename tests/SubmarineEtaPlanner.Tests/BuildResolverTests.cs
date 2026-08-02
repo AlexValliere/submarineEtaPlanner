@@ -12,8 +12,8 @@ public sealed class BuildResolverTests
     [InlineData(15, "SSUS")]
     [InlineData(24, "SSUS")]
     [InlineData(25, "SSUW")]
-    [InlineData(113, "SSUW")]
-    [InlineData(114, "WSCC")]
+    [InlineData(149, "SSUW")]
+    [InlineData(999, "SSUW")]
     public void ReturnsDefaultBuildForRankBoundaries(int rank, string expected)
     {
         var resolver = new BuildResolver(new CompatSubmarineCatalog());

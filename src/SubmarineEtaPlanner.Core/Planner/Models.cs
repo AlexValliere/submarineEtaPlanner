@@ -167,7 +167,6 @@ public sealed record PerSubEtaResult(
     IReadOnlyList<VoyagePlan> VoyagePreview,
     IReadOnlyList<UnlockMilestone> UnlockMilestones,
     IReadOnlyList<string> Warnings,
-    bool PostTargetFarmingReady,
     CalculationStatus Status,
     string? IncompleteReason)
 {
@@ -224,12 +223,6 @@ public sealed record EtaSettings
 
     public Dictionary<string, List<uint>> ManualCurrentRouteOverrides { get; set; } = [];
 
-    public bool ShowMrojzReadiness { get; set; } = true;
-
-    public bool? ShowPost114MrojzReadiness { get; set; }
-
-    public bool ShouldSerializeShowPost114MrojzReadiness() => false;
-
     public string? SubmarineTrackerDatabasePathOverride { get; set; }
 
     public int MaxPreviewVoyagesPerSubmarine { get; set; } = 20;
@@ -255,8 +248,7 @@ public sealed record EtaSettings
         [
             new BuildProfileStep(1, 14, "SSSS"),
             new BuildProfileStep(15, 24, "SSUS"),
-            new BuildProfileStep(25, 113, "SSUW"),
-            new BuildProfileStep(114, 999, "WSCC"),
+            new BuildProfileStep(25, 999, "SSUW"),
         ],
     };
 }

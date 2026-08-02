@@ -591,6 +591,7 @@ public sealed class EtaSimulatorTests
         var repoJson = File.ReadAllText(repoJsonPath);
 
         Assert.Contains("SubmarineEtaPlanner", repoJson);
+        Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("\"AssemblyVersion\": \"0.3.2.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
@@ -747,8 +748,6 @@ public sealed class EtaSimulatorTests
 
         public string PointName(uint point) => point.ToString();
 
-        public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints) => false;
-
         public int GetPointRequiredRank(uint point) => 1;
     }
 
@@ -785,8 +784,6 @@ public sealed class EtaSimulatorTests
             => (rank, currentExp, 100);
 
         public string PointName(uint point) => point.ToString();
-
-        public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints) => false;
 
         public int GetPointRequiredRank(uint point) => 1;
     }

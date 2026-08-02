@@ -62,25 +62,44 @@ public sealed class EtaSettingsMigrationTests
         Assert.True(changed);
         Assert.Equal(EtaSettingsMigration.CurrentVersion, version);
         Assert.Equal(0, settings.PracticalMaxVoyageHours);
-        Assert.Equal(4, settings.BuildProfile.Count);
+        Assert.Equal(3, settings.BuildProfile.Count);
 
         changed = EtaSettingsMigration.Migrate(settings, ref version);
         Assert.False(changed);
-        Assert.Equal(4, settings.BuildProfile.Count);
+        Assert.Equal(3, settings.BuildProfile.Count);
     }
 
     [Fact]
-    public void VersionSevenMigrationPreservesLegacyMrojzReadinessPreference()
+    public void VersionEightMigrationReplacesOnlyLegacyFarmingBuildProfile()
     {
-        var version = 6;
+        var version = 7;
         var settings = EtaSettings.CreateDefault();
-        settings.ShowPost114MrojzReadiness = false;
+        settings.BuildProfile =
+        [
+            new BuildProfileStep(1, 14, "SSSS"),
+            new BuildProfileStep(15, 24, "SSUS"),
+            new BuildProfileStep(25, 113, "SSUW"),
+            new BuildProfileStep(114, 999, "WSCC"),
+        ];
 
         var changed = EtaSettingsMigration.Migrate(settings, ref version);
 
         Assert.True(changed);
         Assert.Equal(EtaSettingsMigration.CurrentVersion, version);
-        Assert.False(settings.ShowMrojzReadiness);
-        Assert.Null(settings.ShowPost114MrojzReadiness);
+        Assert.Equal(3, settings.BuildProfile.Count);
+        Assert.Equal(new BuildProfileStep(25, 999, "SSUW"), settings.BuildProfile[^1]);
     }
+
+    [Fact]
+    public void VersionEightMigrationPreservesCustomBuildProfile()
+    {
+        var version = 7;
+        var settings = EtaSettings.CreateDefault();
+        settings.BuildProfile = [new BuildProfileStep(1, 999, "CCCC")];
+
+        EtaSettingsMigration.Migrate(settings, ref version);
+
+        Assert.Equal([new BuildProfileStep(1, 999, "CCCC")], settings.BuildProfile);
+    }
+
 }

@@ -18,8 +18,6 @@ public interface ISubmarineCatalog
 
     string PointName(uint point);
 
-    bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints);
-
     int GetPointRequiredRank(uint point);
 
     IReadOnlyList<UnlockRule> UnlockRules { get; }

@@ -317,12 +317,6 @@ public sealed partial class PlannerWindow
             return;
         }
 
-        if (this.configuration.Settings.ShowMrojzReadiness && sub.PostTargetFarmingReady)
-        {
-            PlannerUi.DrawStatusPill("WSCC/MROJZ", PlannerUi.Green);
-            return;
-        }
-
         PlannerUi.DrawStatusPill(sub.StartingRank >= targetRank ? "Ready" : "Leveling", sub.StartingRank >= targetRank ? PlannerUi.Green : PlannerUi.Cyan);
     }
 

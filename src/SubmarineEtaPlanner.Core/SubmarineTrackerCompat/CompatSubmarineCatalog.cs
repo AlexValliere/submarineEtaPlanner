@@ -18,8 +18,6 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
         .Select(i => CreateSector((uint)i))
         .ToDictionary(s => s.Point, s => s);
 
-    private static readonly uint[] Mrojz = [13, 18, 15, 10, 26];
-
     public IReadOnlyList<UnlockRule> UnlockRules { get; } =
     [
         new UnlockRule(5, 6, 10),
@@ -192,9 +190,6 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
     }
 
     public string PointName(uint point) => Sectors.TryGetValue(point, out var sector) ? $"{sector.MapCode}{sector.Point}" : point.ToString();
-
-    public bool IsPostTargetFarmingReady(SubmarineBuild build, IReadOnlySet<uint> unlockedPoints)
-        => build.Code.Equals("WSCC", StringComparison.OrdinalIgnoreCase) && Mrojz.All(unlockedPoints.Contains);
 
     public int GetPointRequiredRank(uint point)
         => Sectors.TryGetValue(point, out var sector) ? sector.RequiredRank : int.MaxValue;
