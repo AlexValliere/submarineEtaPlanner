@@ -10,7 +10,7 @@ namespace SubmarineEtaPlanner.Ui;
 
 public sealed partial class PlannerWindow : Window
 {
-    private static readonly string[] EtaModelLabels = ["Practical leveling", "Exact route search"];
+    private static readonly string[] EtaModelLabels = ["Recommended leveling", "Custom strategy"];
     private static readonly string[] RouteGoalLabels =
     [
         "Fastest leveling only",

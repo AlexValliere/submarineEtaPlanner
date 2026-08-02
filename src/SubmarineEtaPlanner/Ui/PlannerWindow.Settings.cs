@@ -40,7 +40,7 @@ public sealed partial class PlannerWindow
         BeginSettingsCard("simulation-card", "Forecast model", "These settings define the target and how submarine fleets advance toward it.");
 
         var etaModel = settings.EtaModel;
-        SettingLabel("ETA model", "Practical leveling follows proven progression rules; exact search exposes advanced route controls.");
+        SettingLabel("ETA model", "Recommended leveling applies an opinionated leveling preset; Custom strategy uses the advanced controls below.");
         if (DrawEnumCombo("##eta-model", EtaModelLabels, ref etaModel))
         {
             settings.EtaModel = etaModel;
@@ -70,8 +70,8 @@ public sealed partial class PlannerWindow
             PlannerUi.Callout(
                 "practical-summary",
                 FontAwesomeIcon.InfoCircle,
-                "Practical model defaults",
-                "Average EXP  •  maximum total EXP scoring  •  main leveling-route unlock progression",
+                "Recommended leveling preset",
+                "Average EXP  •  maximum EXP per voyage  •  main leveling-route unlocks  •  standard build progression",
                 PlannerUi.Teal);
         }
         else
@@ -93,7 +93,7 @@ public sealed partial class PlannerWindow
             }
 
             var routeGoal = settings.RouteGoal;
-            SettingLabel("Route goal", "Choose which unlock objective exact route search should pursue.");
+            SettingLabel("Route goal", "Choose which unlock objective the custom strategy should pursue.");
             if (DrawEnumCombo("##route-goal", RouteGoalLabels, ref routeGoal))
             {
                 settings.RouteGoal = routeGoal;

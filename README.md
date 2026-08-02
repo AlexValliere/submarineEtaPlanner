@@ -2,7 +2,7 @@
 
 Submarine ETA Planner is a read-only Dalamud plugin that estimates how long tracked Free Company submarines need to reach a target rank you choose.
 
-The plugin reads local SubmarineTracker data, simulates future voyages, and presents ETA plans grouped by FC. Choose the target rank on the Simulation page, apply the change, and the complete dashboard forecast updates to that rank. Practical leveling follows sector progression before selecting the highest-EXP available route, while the exact route-search model remains available for diagnostics. It never deploys submarines, clicks UI, or automates workshop actions.
+The plugin reads local SubmarineTracker data, simulates future voyages, and presents ETA plans grouped by FC. Choose the target rank on the Simulation page, apply the change, and the complete dashboard forecast updates to that rank. Recommended leveling applies a ready-to-use preset that follows main sector progression and selects the highest-EXP available route. Custom strategy exposes advanced EXP, route-goal, duration, and build-profile controls. It never deploys submarines, clicks UI, or automates workshop actions.
 
 ## Requirement
 

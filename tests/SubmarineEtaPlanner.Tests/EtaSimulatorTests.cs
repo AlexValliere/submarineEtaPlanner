@@ -593,10 +593,10 @@ public sealed class EtaSimulatorTests
         Assert.Contains("SubmarineEtaPlanner", repoJson);
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.3.3.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.3.4.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.3.3.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.3.4.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
@@ -613,7 +613,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.3.3.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.3.4.0.png", workflow);
     }
 
     private static EtaSimulator CreateSimulator(ISubmarineCatalog? catalog = null)
