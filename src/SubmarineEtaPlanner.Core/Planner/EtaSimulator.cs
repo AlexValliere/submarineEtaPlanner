@@ -6,6 +6,9 @@ public sealed class EtaSimulator(
     RouteSelector routeSelector,
     ISubmarineCatalog catalog)
 {
+    private const int TargetProbabilitySamples = 256;
+    private const int MinimumProbabilitySamples = 64;
+
     public EtaResult Simulate(FcState fc, EtaSettings settings, DateTimeOffset now)
         => Simulate(fc, settings, now, null, CancellationToken.None);
 
@@ -18,18 +21,59 @@ public sealed class EtaSimulator(
         DateTimeOffset now,
         DateTimeOffset? deadlineUtc,
         CancellationToken cancellationToken)
+        => SimulateProbabilistic(fc, settings, now, deadlineUtc, cancellationToken);
+
+    private EtaResult SimulateTrial(
+        FcState fc,
+        EtaSettings settings,
+        DateTimeOffset now,
+        DateTimeOffset? deadlineUtc,
+        CancellationToken cancellationToken,
+        Func<UnlockRule, bool> unlockSucceeded)
         => settings.SimulationMode switch
         {
-            SimulationMode.OptimisticPerSub => SimulateOptimistic(fc, settings, now, deadlineUtc, cancellationToken),
-            _ => SimulateFleet(fc, settings, now, deadlineUtc, cancellationToken),
+            SimulationMode.OptimisticPerSub => SimulateOptimistic(fc, settings, now, deadlineUtc, cancellationToken, unlockSucceeded),
+            _ => SimulateFleet(fc, settings, now, deadlineUtc, cancellationToken, unlockSucceeded),
         };
+
+    private EtaResult SimulateProbabilistic(
+        FcState fc,
+        EtaSettings settings,
+        DateTimeOffset now,
+        DateTimeOffset? deadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        var probability = Math.Clamp(settings.UnlockSuccessProbability, 0.01, 1.0);
+        var trials = new List<EtaResult>(TargetProbabilitySamples);
+        for (var sample = 0; sample < TargetProbabilitySamples; sample++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (sample > 0 && IsTimedOut(deadlineUtc))
+                break;
+
+            var random = new Random(CreateDeterministicSeed(fc, settings, sample));
+            var trial = SimulateTrial(
+                fc,
+                settings,
+                now,
+                deadlineUtc,
+                cancellationToken,
+                _ => random.NextDouble() < probability);
+            trials.Add(trial);
+            if (!trial.IsComplete && IsTimedOut(deadlineUtc))
+                break;
+        }
+
+        return AggregateProbabilityTrials(fc, settings, now, trials);
+    }
 
     private EtaResult SimulateOptimistic(
         FcState fc,
         EtaSettings settings,
         DateTimeOffset now,
         DateTimeOffset? deadlineUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<UnlockRule, bool> unlockSucceeded)
     {
         var results = new List<PerSubEtaResult>();
         var allPlans = new List<VoyagePlan>();
@@ -45,7 +89,7 @@ public sealed class EtaSimulator(
             }
 
             var unlockState = CreateUnlockState(fc);
-            var result = SimulateSingleSub(sub, unlockState, settings, now, fleetMode: false, deadlineUtc, cancellationToken);
+            var result = SimulateSingleSub(sub, unlockState, settings, now, fleetMode: false, deadlineUtc, cancellationToken, unlockSucceeded);
             results.Add(result);
             allPlans.AddRange(result.VoyagePreview);
             warnings.AddRange(result.Warnings);
@@ -59,7 +103,8 @@ public sealed class EtaSimulator(
         EtaSettings settings,
         DateTimeOffset now,
         DateTimeOffset? deadlineUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<UnlockRule, bool> unlockSucceeded)
     {
         var unlockState = CreateUnlockState(fc);
         var states = fc.Submarines.ToDictionary(
@@ -97,6 +142,7 @@ public sealed class EtaSimulator(
                     var currentBuild = catalog.ResolveBuild(state.Source.BuildParts, state.Rank) ??
                                        buildResolver.ResolveBuildForRank(state.Rank, settings);
                     var currentReturn = state.Source.ReturnAtUtc + TimeSpan.FromMinutes(settings.CollectionDelayMinutes);
+                    var reservedUnlocks = unlockGraph.ReserveRoute(currentRoute, unlockState);
                     state.PendingVoyage = new PendingVoyage(
                         currentRoute,
                         currentBuild.Code,
@@ -107,10 +153,10 @@ public sealed class EtaSimulator(
                         1,
                         settings.EtaModel,
                         DurationCapApplied: false,
-                        IsCurrentVoyage: true);
+                        IsCurrentVoyage: true,
+                        ReservedUnlockTargets: reservedUnlocks);
                     state.NextAvailableAt = currentReturn;
                     state.CurrentVoyageApplied = true;
-                    unlockGraph.ReserveRoute(currentRoute, unlockState);
                 }
             }
 
@@ -146,7 +192,7 @@ public sealed class EtaSimulator(
 
                 if (mutable.PendingVoyage is not null)
                 {
-                    var completedPlan = CompletePendingVoyage(mutable, unlockState, settings);
+                    var completedPlan = CompletePendingVoyage(mutable, unlockState, settings, unlockSucceeded);
                     mutable.PendingVoyage = null;
                     if (completedPlan is not null)
                     {
@@ -287,7 +333,8 @@ public sealed class EtaSimulator(
         DateTimeOffset now,
         bool fleetMode,
         DateTimeOffset? deadlineUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<UnlockRule, bool> unlockSucceeded)
     {
         var warnings = new List<string>();
         var plans = new List<VoyagePlan>();
@@ -339,7 +386,8 @@ public sealed class EtaSimulator(
             rank,
             currentExp,
             nextLevelExp,
-            nextAvailable);
+            nextAvailable,
+            unlockSucceeded);
         rank = appliedCurrentVoyage.Rank;
         currentExp = appliedCurrentVoyage.CurrentExp;
         nextLevelExp = appliedCurrentVoyage.NextLevelExp;
@@ -392,7 +440,8 @@ public sealed class EtaSimulator(
                 nextAvailable,
                 rank,
                 currentExp,
-                batchCount);
+                batchCount,
+                unlockSucceeded);
 
             rank = plan.RankAfter;
             currentExp = plan.ExpAfter;
@@ -427,13 +476,15 @@ public sealed class EtaSimulator(
             repeatCount,
             route.EtaModel,
             route.DurationCapApplied,
-            IsCurrentVoyage: false);
+            IsCurrentVoyage: false,
+            ReservedUnlockTargets: route.UnlockTargets);
     }
 
     private VoyagePlan? CompletePendingVoyage(
         MutableSubState state,
         UnlockState unlockState,
-        EtaSettings settings)
+        EtaSettings settings,
+        Func<UnlockRule, bool> unlockSucceeded)
     {
         var pending = state.PendingVoyage!;
         var rankBefore = state.Rank;
@@ -442,11 +493,13 @@ public sealed class EtaSimulator(
             (ulong)uint.MaxValue,
             (ulong)pending.ExpPerVoyage * (ulong)pending.RepeatCount));
         var rankResult = catalog.ApplyExp(state.Rank, state.CurrentExp, gainedExp, settings.TargetRank);
+        unlockGraph.ReleaseRouteReservations(pending.ReservedUnlockTargets, unlockState);
         var unlocks = unlockGraph.MarkRouteReturn(
             pending.Route,
             unlockState,
             state.Source.SubmarineId,
-            pending.ReturnAtUtc);
+            pending.ReturnAtUtc,
+            unlockSucceeded);
 
         state.Rank = rankResult.Rank;
         state.CurrentExp = rankResult.CurrentExp;
@@ -490,15 +543,23 @@ public sealed class EtaSimulator(
         DateTimeOffset departAt,
         int rank,
         uint currentExp,
-        int batchCount)
+        int batchCount,
+        Func<UnlockRule, bool> unlockSucceeded)
     {
         var perVoyageDuration = route.Duration + TimeSpan.FromMinutes(settings.CollectionDelayMinutes);
         var returnAt = departAt + TimeSpan.FromTicks(perVoyageDuration.Ticks * batchCount);
         var gainedExp = checked((uint)Math.Min((ulong)uint.MaxValue, (ulong)route.Exp * (ulong)batchCount));
         var rankResult = catalog.ApplyExp(rank, currentExp, gainedExp, settings.TargetRank);
-        IReadOnlyList<uint> unlocks = batchCount == 1
-            ? unlockGraph.MarkRouteReturn(route.Route, unlockState, unlockSubmarineId, returnAt)
-            : Array.Empty<uint>();
+        IReadOnlyList<uint> unlocks;
+        if (batchCount == 1)
+        {
+            unlockGraph.ReleaseRouteReservations(route.UnlockTargets, unlockState);
+            unlocks = unlockGraph.MarkRouteReturn(route.Route, unlockState, unlockSubmarineId, returnAt, unlockSucceeded);
+        }
+        else
+        {
+            unlocks = Array.Empty<uint>();
+        }
         IReadOnlyList<string> warnings = batchCount > 1
             ? [$"Batched {batchCount} identical voyages."]
             : Array.Empty<string>();
@@ -648,7 +709,8 @@ public sealed class EtaSimulator(
         int rank,
         uint currentExp,
         uint nextLevelExp,
-        DateTimeOffset nextAvailable)
+        DateTimeOffset nextAvailable,
+        Func<UnlockRule, bool> unlockSucceeded)
     {
         if (sub.ReturnAtUtc <= now)
             return new CurrentVoyageApplication(rank, currentExp, nextLevelExp, nextAvailable);
@@ -661,7 +723,7 @@ public sealed class EtaSimulator(
         var exp = catalog.CalculateExp(route, build, settings.GetEffectiveExpMode());
         var rankResult = catalog.ApplyExp(rank, currentExp, exp, settings.TargetRank);
         var returnAt = sub.ReturnAtUtc + TimeSpan.FromMinutes(settings.CollectionDelayMinutes);
-        unlockGraph.MarkRouteReturn(route, unlockState, sub.SubmarineId, returnAt);
+        unlockGraph.MarkRouteReturn(route, unlockState, sub.SubmarineId, returnAt, unlockSucceeded);
 
         return new CurrentVoyageApplication(rankResult.Rank, rankResult.CurrentExp, rankResult.NextLevelExp, returnAt);
     }
@@ -699,6 +761,186 @@ public sealed class EtaSimulator(
     {
         var warning = warnings.FirstOrDefault(IsIncompleteWarning);
         return warning ?? $"{submarineName} reached rank {finalRank}, below target rank {targetRank}.";
+    }
+
+    private EtaResult AggregateProbabilityTrials(
+        FcState fc,
+        EtaSettings settings,
+        DateTimeOffset now,
+        IReadOnlyList<EtaResult> trials)
+    {
+        if (trials.Count == 0)
+            throw new InvalidOperationException($"No probability samples were produced for {fc.DisplayName}.");
+
+        var completed = trials.Where(result => result.IsComplete).OrderBy(result => result.FcCompletionAtUtc).ToArray();
+        var usable = completed.Length > 0 ? completed : trials.OrderBy(result => result.FcCompletionAtUtc).ToArray();
+        var fcForecast = CreatePercentiles(usable.Select(result => result.FcCompletionAtUtc), usable.Length);
+        var representative = usable
+            .OrderBy(result => Math.Abs((result.FcCompletionAtUtc - fcForecast.P50AtUtc).Ticks))
+            .ThenBy(result => result.VoyageCount)
+            .First();
+
+        var perSubResults = representative.PerSubResults.Select(selected =>
+        {
+            var sampled = usable
+                .SelectMany(result => result.PerSubResults)
+                .Where(result => result.SubmarineId == selected.SubmarineId)
+                .ToArray();
+            var forecast = CreatePercentiles(sampled.Select(result => result.EtaAtUtc), sampled.Length);
+            var outcomes = sampled
+                .Where(result => result.NextRoute.Count > 0)
+                .GroupBy(result => string.Join(",", result.NextRoute))
+                .Select(group =>
+                {
+                    var route = group.First().NextRoute.ToArray();
+                    return new RouteOutcome(
+                        route,
+                        group.Count() / (double)Math.Max(1, sampled.Length),
+                        route.Where(point => !fc.UnlockedPoints.Contains(point)).Distinct().ToArray());
+                })
+                .OrderByDescending(outcome => outcome.Probability)
+                .ThenBy(outcome => string.Join(",", outcome.Route))
+                .ToArray();
+            var preview = selected.VoyagePreview.Select(plan => MarkProjectedPlan(plan, fc.UnlockedPoints)).ToArray();
+
+            return selected with
+            {
+                EtaAtUtc = forecast.P50AtUtc,
+                Remaining = forecast.P50AtUtc - now,
+                VoyagePreview = preview,
+                EtaForecast = forecast,
+                NextRouteOutcomes = outcomes,
+            };
+        }).ToArray();
+
+        var sampleWarning = completed.Length < MinimumProbabilitySamples
+            ? $"Only {completed.Length} of {MinimumProbabilitySamples} minimum probability samples completed; ETA ranges are partial."
+            : null;
+        var warnings = representative.Warnings
+            .Concat(sampleWarning is null ? [] : [sampleWarning])
+            .Distinct()
+            .ToArray();
+        var status = sampleWarning is null && representative.IsComplete
+            ? CalculationStatus.Complete
+            : CalculationStatus.Partial;
+        var reason = status == CalculationStatus.Complete
+            ? null
+            : sampleWarning ?? representative.IncompleteReason;
+
+        return representative with
+        {
+            PerSubResults = perSubResults,
+            FcCompletionAtUtc = fcForecast.P50AtUtc,
+            PlannedRoutes = representative.PlannedRoutes.Select(plan => MarkProjectedPlan(plan, fc.UnlockedPoints)).ToArray(),
+            Warnings = warnings,
+            Status = status,
+            IncompleteReason = reason,
+            CompletionForecast = fcForecast,
+            ActiveUnlockAttempts = GetActiveUnlockAttempts(fc, settings, now),
+            ProbabilitySampleCount = completed.Length,
+        };
+    }
+
+    private static VoyagePlan MarkProjectedPlan(VoyagePlan plan, IReadOnlySet<uint> initiallyUnlocked)
+    {
+        var required = plan.Route.Where(point => !initiallyUnlocked.Contains(point)).Distinct().ToArray();
+        return plan with
+        {
+            DependsOnProjectedUnlocks = required.Length > 0,
+            RequiredProjectedUnlocks = required,
+        };
+    }
+
+    private IReadOnlyList<UnlockAttemptForecast> GetActiveUnlockAttempts(
+        FcState fc,
+        EtaSettings settings,
+        DateTimeOffset now)
+    {
+        var state = CreateUnlockState(fc);
+        var attempts = new List<(UnlockRule Rule, SubmarineState Submarine)>();
+        foreach (var submarine in fc.Submarines.Where(submarine => submarine.ReturnAtUtc > now && submarine.CurrentVoyageKnown))
+        {
+            var route = submarine.ManualCurrentRouteOverride.Count > 0
+                ? submarine.ManualCurrentRouteOverride
+                : submarine.CurrentRoute;
+            foreach (var source in route.Distinct())
+            {
+                var rule = unlockGraph.GetNextLockedRuleForSource(source, state, submarine.Rank);
+                if (rule is not null)
+                    attempts.Add((rule, submarine));
+            }
+        }
+
+        var probability = Math.Clamp(settings.UnlockSuccessProbability, 0.01, 1.0);
+        return attempts
+            .GroupBy(item => (item.Rule.SourcePoint, item.Rule.UnlocksPoint))
+            .Select(group =>
+            {
+                var submarines = group.Select(item => item.Submarine).DistinctBy(submarine => submarine.SubmarineId).ToArray();
+                return new UnlockAttemptForecast(
+                    group.Key.SourcePoint,
+                    group.Key.UnlocksPoint,
+                    submarines.Select(submarine => submarine.SubmarineId).ToArray(),
+                    submarines.Select(submarine => submarine.Name).ToArray(),
+                    submarines.Min(submarine => submarine.ReturnAtUtc),
+                    submarines.Max(submarine => submarine.ReturnAtUtc),
+                    1.0 - Math.Pow(1.0 - probability, submarines.Length));
+            })
+            .OrderBy(attempt => attempt.LatestReturnAtUtc)
+            .ThenBy(attempt => attempt.TargetPoint)
+            .ToArray();
+    }
+
+    private static EtaPercentiles CreatePercentiles(IEnumerable<DateTimeOffset> values, int sampleCount)
+    {
+        var ordered = values.OrderBy(value => value).ToArray();
+        if (ordered.Length == 0)
+            throw new InvalidOperationException("Cannot calculate percentiles without samples.");
+
+        DateTimeOffset At(double percentile)
+        {
+            var index = (int)Math.Round((ordered.Length - 1) * percentile, MidpointRounding.AwayFromZero);
+            return ordered[Math.Clamp(index, 0, ordered.Length - 1)];
+        }
+
+        return new EtaPercentiles(At(0.10), At(0.50), At(0.90), sampleCount);
+    }
+
+    private static int CreateDeterministicSeed(FcState fc, EtaSettings settings, int sample)
+    {
+        unchecked
+        {
+            uint hash = 2166136261;
+            void Add(long value)
+            {
+                for (var shift = 0; shift < 64; shift += 8)
+                {
+                    hash ^= (byte)(value >> shift);
+                    hash *= 16777619;
+                }
+            }
+
+            foreach (var value in fc.FcId)
+                Add(value);
+            foreach (var point in fc.UnlockedPoints.Order())
+                Add(point);
+            foreach (var submarine in fc.Submarines.OrderBy(submarine => submarine.SubmarineId))
+            {
+                Add(submarine.SubmarineId);
+                Add(submarine.Rank);
+                Add(submarine.CurrentExp);
+                Add(submarine.ReturnAtUtc.UtcTicks);
+                foreach (var point in submarine.CurrentRoute)
+                    Add(point);
+            }
+
+            Add(settings.TargetRank);
+            Add(BitConverter.DoubleToInt64Bits(Math.Clamp(settings.UnlockSuccessProbability, 0.01, 1.0)));
+            Add((int)settings.EtaModel);
+            Add((int)settings.RouteGoal);
+            Add(sample);
+            return (int)hash;
+        }
     }
 
     private static EtaResult CreateEtaResult(
@@ -773,7 +1015,8 @@ public sealed class EtaSimulator(
         int RepeatCount,
         EtaModel EtaModel,
         bool DurationCapApplied,
-        bool IsCurrentVoyage);
+        bool IsCurrentVoyage,
+        IReadOnlyList<uint> ReservedUnlockTargets);
 
     private sealed record CurrentVoyageApplication(
         int Rank,

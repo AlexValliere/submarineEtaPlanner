@@ -213,7 +213,7 @@ public sealed partial class PlannerWindow
         var statusText = result.IsComplete
             ? ready
                 ? "Ready now"
-                : $"Complete {FormatRelative(result.FcCompletionAtUtc, result.GeneratedAtUtc)}"
+                : $"Median {FormatRelative(result.FcCompletionAtUtc, result.GeneratedAtUtc)}"
             : result.IncompleteReason?.Contains("time limit", StringComparison.OrdinalIgnoreCase) == true
                 ? "Timed out"
                 : "Incomplete";
@@ -229,10 +229,33 @@ public sealed partial class PlannerWindow
             return;
 
         PlannerUi.DrawStatusPill(statusText, statusColor);
+        if (!ready && result.CompletionForecast is not null)
+        {
+            ImGui.SameLine();
+            ImGui.TextColored(
+                PlannerUi.Muted,
+                $"Likely {FormatRelative(result.CompletionForecast.P10AtUtc, result.GeneratedAtUtc)}–" +
+                $"{FormatRelative(result.CompletionForecast.P90AtUtc, result.GeneratedAtUtc)} · {result.ProbabilitySampleCount} samples");
+        }
         if (!result.IsComplete && result.IncompleteReason is not null)
         {
             ImGui.SameLine();
             ImGui.TextColored(PlannerUi.Amber, result.IncompleteReason);
+        }
+
+        if (result.ActiveUnlockAttempts.Count > 0)
+        {
+            var attempts = result.ActiveUnlockAttempts.Select(attempt =>
+                $"{FormatPoint(attempt.TargetPoint)} via {FormatPoint(attempt.SourcePoint)}: " +
+                $"{attempt.SubmarineIds.Count} submarine{(attempt.SubmarineIds.Count == 1 ? string.Empty : "s")} " +
+                $"({string.Join(", ", attempt.SubmarineNames)}) · " +
+                $"{attempt.CombinedSuccessProbability:P0} by {attempt.LatestReturnAtUtc.LocalDateTime:g}");
+            PlannerUi.Callout(
+                $"active-unlocks-{fcKey}",
+                FontAwesomeIcon.Dice,
+                "Unlocks in progress",
+                string.Join("\n", attempts),
+                PlannerUi.Amber);
         }
 
         var minimumTableWidth = 860f * ImGuiHelpers.GlobalScale;
@@ -293,13 +316,19 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             ImGui.TextUnformatted($"{sub.StartingRank} → {sub.FinalRank}");
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(sub.StartingRank >= result.TargetRank ? "now" : FormatRelative(sub.EtaAtUtc, result.GeneratedAtUtc));
+            ImGui.TextUnformatted(sub.StartingRank >= result.TargetRank ? "now" : $"P50 {FormatRelative(sub.EtaAtUtc, result.GeneratedAtUtc)}");
+            if (sub.EtaForecast is not null && ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(
+                    $"Likely range: {FormatRelative(sub.EtaForecast.P10AtUtc, result.GeneratedAtUtc)}–" +
+                    $"{FormatRelative(sub.EtaForecast.P90AtUtc, result.GeneratedAtUtc)} ({sub.EtaForecast.SampleCount} samples)");
+            }
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(sub.VoyageCount.ToString());
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(sub.PlannedBuild);
             ImGui.TableNextColumn();
-            DrawRoute(sub.NextRoute);
+            DrawNextRoute(sub);
             ImGui.TableNextColumn();
             DrawSubmarineStatus(sub, result.TargetRank);
         }
@@ -414,6 +443,17 @@ public sealed partial class PlannerWindow
             ImGui.TextUnformatted(plan.BuildCode);
             ImGui.TableNextColumn();
             DrawRoute(plan.Route);
+            if (plan.DependsOnProjectedUnlocks)
+            {
+                ImGui.SameLine();
+                ImGui.TextColored(PlannerUi.Amber, "projected");
+                if (ImGui.IsItemHovered())
+                {
+                    ImGui.SetTooltip(
+                        $"Available only after the forecasted unlock of " +
+                        string.Join(", ", plan.RequiredProjectedUnlocks.Select(FormatPoint)) + ".");
+                }
+            }
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.ExpGain.ToString("N0"));
             ImGui.TableNextColumn();
@@ -432,6 +472,36 @@ public sealed partial class PlannerWindow
         }
 
         ImGui.EndTable();
+    }
+
+    private void DrawNextRoute(PerSubEtaResult sub)
+    {
+        var outcomes = sub.NextRouteOutcomes.Where(outcome => outcome.Route.Count > 0).ToArray();
+        var conditional = outcomes.Length > 1 || outcomes.Any(outcome => outcome.RequiredProjectedUnlocks.Count > 0);
+        if (!conditional)
+        {
+            DrawRoute(outcomes.FirstOrDefault()?.Route ?? sub.NextRoute);
+            return;
+        }
+
+        ImGui.TextColored(PlannerUi.Amber, outcomes.Length > 1 ? "Depends on unlock" : "Projected after unlock");
+        if (!ImGui.IsItemHovered())
+            return;
+
+        ImGui.BeginTooltip();
+        ImGui.TextColored(PlannerUi.Teal, "Next-route outcomes");
+        ImGui.Separator();
+        foreach (var outcome in outcomes)
+        {
+            ImGui.TextUnformatted($"{outcome.Probability:P0}  {FormatRoute(outcome.Route)}");
+            if (outcome.RequiredProjectedUnlocks.Count > 0)
+            {
+                ImGui.TextColored(
+                    PlannerUi.Amber,
+                    $"Requires: {string.Join(", ", outcome.RequiredProjectedUnlocks.Select(FormatPoint))}");
+            }
+        }
+        ImGui.EndTooltip();
     }
 
     private static float CalculateTableHeight(int rowCount, bool hasHorizontalScrollbar)

@@ -17,6 +17,7 @@ public sealed class EtaSettingsMigrationTests
         Assert.Equal(0, settings.PracticalMaxVoyageHours);
         Assert.Equal(TimeoutResultBehavior.KeepLastComplete, settings.TimeoutResultBehavior);
         Assert.True(settings.GetEffectiveOptimizeExpPerHour());
+        Assert.Equal(0.33, settings.UnlockSuccessProbability, 2);
     }
 
     [Fact]
@@ -100,6 +101,23 @@ public sealed class EtaSettingsMigrationTests
         EtaSettingsMigration.Migrate(settings, ref version);
 
         Assert.Equal([new BuildProfileStep(1, 999, "CCCC")], settings.BuildProfile);
+    }
+
+    [Fact]
+    public void VersionNineMigrationAddsAndClampsUnlockProbability()
+    {
+        var version = 8;
+        var settings = EtaSettings.CreateDefault();
+        settings.UnlockSuccessProbability = 0;
+
+        Assert.True(EtaSettingsMigration.Migrate(settings, ref version));
+        Assert.Equal(9, version);
+        Assert.Equal(0.33, settings.UnlockSuccessProbability, 2);
+
+        settings.UnlockSuccessProbability = 5;
+        version = 9;
+        Assert.True(EtaSettingsMigration.Migrate(settings, ref version));
+        Assert.Equal(1.0, settings.UnlockSuccessProbability);
     }
 
 }

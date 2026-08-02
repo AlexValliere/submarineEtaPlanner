@@ -59,7 +59,7 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
         var chaseSlots = goal == RouteGoal.UnlockSubSlotsThenLevel || settings.PrioritizeSubSlots;
         if (chaseSlots && state.KnownSubmarineSlots < 4)
         {
-            var slotObjective = GetSubmarineSlotObjective(state, rank, fleetMode);
+            var slotObjective = GetSubmarineSlotObjective(state, settings, rank, fleetMode);
             if (slotObjective is not null)
                 return slotObjective;
         }
@@ -86,9 +86,28 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
 
         var targets = GetUnlockTargetsForRoute(route, state, rank: int.MaxValue);
         foreach (var target in targets)
+        {
             state.PendingUnlockPoints.Add(target);
+            state.PendingUnlockAttempts[target] = state.PendingUnlockAttempts.GetValueOrDefault(target) + 1;
+        }
 
         return targets;
+    }
+
+    public void ReleaseRouteReservations(IEnumerable<uint> targets, UnlockState state)
+    {
+        foreach (var target in targets.Distinct())
+        {
+            var remaining = state.PendingUnlockAttempts.GetValueOrDefault(target) - 1;
+            if (remaining > 0)
+            {
+                state.PendingUnlockAttempts[target] = remaining;
+                continue;
+            }
+
+            state.PendingUnlockAttempts.Remove(target);
+            state.PendingUnlockPoints.Remove(target);
+        }
     }
 
     public IReadOnlyList<uint> MarkRouteUnlocks(
@@ -104,6 +123,14 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
         UnlockState state,
         long submarineId,
         DateTimeOffset returnAtUtc)
+        => MarkRouteReturn(route, state, submarineId, returnAtUtc, _ => true);
+
+    public IReadOnlyList<uint> MarkRouteReturn(
+        IReadOnlyList<uint> route,
+        UnlockState state,
+        long submarineId,
+        DateTimeOffset returnAtUtc,
+        Func<UnlockRule, bool> unlockSucceeded)
     {
         var unlocked = new List<uint>();
         foreach (var point in route)
@@ -142,9 +169,12 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
             }
         }
 
-        foreach (var rule in catalog.UnlockRules.Where(rule => route.Contains(rule.SourcePoint)))
+        foreach (var sourcePoint in route.Distinct())
         {
-            state.PendingUnlockPoints.Remove(rule.UnlocksPoint);
+            var rule = GetNextLockedRuleForSource(sourcePoint, state, int.MaxValue);
+            if (rule is null || !unlockSucceeded(rule))
+                continue;
+
             if (!state.UnlockedPoints.Add(rule.UnlocksPoint))
                 continue;
 
@@ -161,21 +191,38 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
     }
 
     public IReadOnlyList<uint> GetUnlockTargetsForRoute(IReadOnlyList<uint> route, UnlockState state, int rank)
-        => catalog.UnlockRules
-            .Where(rule => route.Contains(rule.SourcePoint))
-            .Where(rule => !state.UnlockedPoints.Contains(rule.UnlocksPoint))
-            .Select(rule => rule.UnlocksPoint)
+        => route
             .Distinct()
+            .Select(source => GetNextLockedRuleForSource(source, state, rank))
+            .Where(rule => rule is not null)
+            .Select(rule => rule!.UnlocksPoint)
             .ToArray();
 
-    public IReadOnlyList<uint> GetPendingUnlockSourcePoints(UnlockState state)
+    public IReadOnlyList<uint> GetSaturatedUnlockSourcePoints(UnlockState state, EtaSettings settings)
         => catalog.UnlockRules
-            .Where(rule => state.PendingUnlockPoints.Contains(rule.UnlocksPoint))
+            .Where(rule => IsTargetSaturated(rule.UnlocksPoint, state, settings))
             .Select(rule => rule.SourcePoint)
             .Distinct()
             .ToArray();
 
-    private UnlockObjective? GetSubmarineSlotObjective(UnlockState state, int rank, bool fleetMode)
+    public int GetDesiredConcurrentAttempts(EtaSettings settings)
+    {
+        var probability = Math.Clamp(settings.UnlockSuccessProbability, 0.01, 1.0);
+        if (probability >= 1.0)
+            return 1;
+
+        return Math.Clamp((int)Math.Ceiling(Math.Log(0.5) / Math.Log(1.0 - probability)), 1, 4);
+    }
+
+    public UnlockRule? GetNextLockedRuleForSource(uint sourcePoint, UnlockState state, int rank)
+        => catalog.UnlockRules
+            .Where(rule => rule.SourcePoint == sourcePoint)
+            .Where(rule => rule.SourceRequiredRank <= rank)
+            .Where(rule => !state.UnlockedPoints.Contains(rule.UnlocksPoint))
+            .OrderBy(rule => rule.UnlocksPoint)
+            .FirstOrDefault();
+
+    private UnlockObjective? GetSubmarineSlotObjective(UnlockState state, EtaSettings settings, int rank, bool fleetMode)
     {
         foreach (var rule in catalog.UnlockRules.Where(rule => rule.UnlocksSubSlot).OrderBy(rule => rule.UnlocksPoint))
         {
@@ -198,7 +245,8 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
                     pathRule.SourceRequiredRank > rank ||
                     !state.UnlockedPoints.Contains(pathRule.SourcePoint) ||
                     state.UnlockedPoints.Contains(pathRule.UnlocksPoint) ||
-                    (fleetMode && state.PendingUnlockPoints.Contains(pathRule.UnlocksPoint)))
+                    GetNextLockedRuleForSource(pathRule.SourcePoint, state, rank) != pathRule ||
+                    (fleetMode && IsTargetSaturated(pathRule.UnlocksPoint, state, settings)))
                 {
                     continue;
                 }
@@ -237,7 +285,8 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
                         pathRule.SourceRequiredRank > rank ||
                         !state.UnlockedPoints.Contains(pathRule.SourcePoint) ||
                         state.UnlockedPoints.Contains(pathRule.UnlocksPoint) ||
-                        (fleetMode && state.PendingUnlockPoints.Contains(pathRule.UnlocksPoint)))
+                        GetNextLockedRuleForSource(pathRule.SourcePoint, state, rank) != pathRule ||
+                        (fleetMode && IsTargetSaturated(pathRule.UnlocksPoint, state, settings)))
                     {
                         continue;
                     }
@@ -255,7 +304,16 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
             .Where(rule => rule.SourceRequiredRank <= rank)
             .Where(rule => state.UnlockedPoints.Contains(rule.SourcePoint))
             .Where(rule => !state.UnlockedPoints.Contains(rule.UnlocksPoint))
-            .Where(rule => !fleetMode || !state.PendingUnlockPoints.Contains(rule.UnlocksPoint))
+            .Where(rule => GetNextLockedRuleForSource(rule.SourcePoint, state, rank) == rule)
+            .Where(rule => !fleetMode || !IsTargetSaturated(rule.UnlocksPoint, state, settings))
             .OrderBy(rule => rule.UnlocksPoint);
+    }
+
+    private bool IsTargetSaturated(uint targetPoint, UnlockState state, EtaSettings settings)
+    {
+        var pending = state.PendingUnlockAttempts.TryGetValue(targetPoint, out var count)
+            ? count
+            : state.PendingUnlockPoints.Contains(targetPoint) ? 1 : 0;
+        return pending >= GetDesiredConcurrentAttempts(settings);
     }
 }

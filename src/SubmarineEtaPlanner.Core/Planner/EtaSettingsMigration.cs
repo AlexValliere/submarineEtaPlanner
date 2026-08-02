@@ -2,12 +2,21 @@ namespace SubmarineEtaPlanner.Planner;
 
 public static class EtaSettingsMigration
 {
-    public const int CurrentVersion = 8;
+    public const int CurrentVersion = 9;
 
     public static bool Migrate(EtaSettings settings, ref int version)
     {
         if (version >= CurrentVersion)
-            return false;
+        {
+            var normalizedProbability = double.IsFinite(settings.UnlockSuccessProbability)
+                ? Math.Clamp(settings.UnlockSuccessProbability, 0.01, 1.0)
+                : 0.33;
+            if (settings.UnlockSuccessProbability.Equals(normalizedProbability))
+                return false;
+
+            settings.UnlockSuccessProbability = normalizedProbability;
+            return true;
+        }
 
         if (version < 2)
         {
@@ -43,6 +52,11 @@ public static class EtaSettingsMigration
 
         if (version < 8 && IsLegacyFarmingBuildProfile(settings.BuildProfile))
             settings.BuildProfile = EtaSettings.CreateDefault().BuildProfile;
+
+        if (version < 9 || !double.IsFinite(settings.UnlockSuccessProbability))
+            settings.UnlockSuccessProbability = 0.33;
+
+        settings.UnlockSuccessProbability = Math.Clamp(settings.UnlockSuccessProbability, 0.01, 1.0);
 
         version = CurrentVersion;
         return true;

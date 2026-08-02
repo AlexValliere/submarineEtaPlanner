@@ -70,7 +70,7 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
             SectorMask.From(unlockState.UnlockedPoints),
             mustInclude,
             settings,
-            SectorMask.From(unlockGraph.GetPendingUnlockSourcePoints(unlockState)),
+            SectorMask.From(unlockGraph.GetSaturatedUnlockSourcePoints(unlockState, settings)),
             deadlineUtc,
             cancellationToken)).Route;
 

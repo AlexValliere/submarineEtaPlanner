@@ -424,6 +424,7 @@ public sealed partial class PlannerWindow : Window
         MaxPreviewVoyagesPerSubmarine = settings.MaxPreviewVoyagesPerSubmarine,
         SimulationSafetyVoyageCapPerSubmarine = settings.SimulationSafetyVoyageCapPerSubmarine,
         CalculationTimeLimitSeconds = settings.CalculationTimeLimitSeconds,
+        UnlockSuccessProbability = settings.UnlockSuccessProbability,
     };
 
     private static string NormalizeBuildCode(string value)

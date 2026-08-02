@@ -146,6 +146,18 @@ public sealed partial class PlannerWindow
             changed = true;
         }
 
+        var unlockChancePercent = (float)(settings.UnlockSuccessProbability * 100.0);
+        SettingLabel(
+            "Unlock chance per visit",
+            "Community-informed probability used for each eligible sector-discovery roll. Square Enix does not publish an exact rate.");
+        ImGui.SetNextItemWidth(220f * ImGuiHelpers.GlobalScale);
+        if (ImGui.SliderFloat("##unlock-probability", ref unlockChancePercent, 1f, 100f, "%.0f%%"))
+        {
+            settings.UnlockSuccessProbability = Math.Clamp(unlockChancePercent / 100.0, 0.01, 1.0);
+            changed = true;
+        }
+        PlannerUi.Tooltip("Default: 33%. This assumption affects unlock timing and the displayed P10-P90 ETA range.");
+
         var unknownPolicy = settings.UnknownCurrentVoyagePolicy;
         SettingLabel("Unknown current voyage", "Choose how the planner handles a deployed submarine whose route cannot be identified.");
         if (DrawEnumCombo("##unknown-voyage", UnknownVoyageLabels, ref unknownPolicy))

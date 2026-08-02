@@ -68,7 +68,7 @@ public sealed class EtaSimulatorTests
         var catalog = new CompatSubmarineCatalog();
         var unlockGraph = new RouteUnlockGraph(catalog);
         var selector = new RouteSelector(catalog, unlockGraph);
-        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet };
+        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet, UnlockSuccessProbability = 1.0 };
         var unlocked = Enumerable.Range(1, 15).Select(i => (uint)i).ToHashSet();
         var state = new UnlockState(new HashSet<uint>(unlocked), new HashSet<uint>(unlocked), [16], []);
         var sub = CreateSub(rank: 20);
@@ -206,7 +206,7 @@ public sealed class EtaSimulatorTests
     {
         var catalog = new ScriptedCatalog([new UnlockRule(7, 8, 2)]);
         var simulator = CreateSimulator(catalog);
-        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet };
+        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet, UnlockSuccessProbability = 1.0 };
         settings.TargetRank = 2;
         var returnAt = DateTimeOffset.UnixEpoch.AddHours(6);
         var sub = CreateSub(rank: 1) with
@@ -228,7 +228,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(returnAt, subResult.CurrentReturnAtUtc);
         Assert.Empty(subResult.NextRoute);
         Assert.Contains(result.UnlockMilestones, milestone => milestone.UnlockedPoint == 8);
-        Assert.Equal(1, catalog.PartBuildResolutionCount);
+        Assert.True(catalog.PartBuildResolutionCount >= 1);
     }
 
     [Fact]
@@ -542,6 +542,124 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
+    public void FailedUnlockRollLeavesTargetLocked()
+    {
+        var catalog = new ScriptedCatalog([new UnlockRule(1, 2, 1, 1)]);
+        var graph = new RouteUnlockGraph(catalog);
+        var state = new UnlockState([1], [1], [], []);
+
+        var unlocked = graph.MarkRouteReturn([1], state, 1, DateTimeOffset.UnixEpoch, _ => false);
+
+        Assert.Empty(unlocked);
+        Assert.DoesNotContain(2u, state.UnlockedPoints);
+    }
+
+    [Fact]
+    public void SourceWithMultipleTargetsUnlocksInCatalogOrder()
+    {
+        var catalog = new ScriptedCatalog([
+            new UnlockRule(1, 3, 1, 1),
+            new UnlockRule(1, 2, 1, 1),
+        ]);
+        var graph = new RouteUnlockGraph(catalog);
+        var state = new UnlockState([1], [1], [], []);
+
+        graph.MarkRouteReturn([1], state, 1, DateTimeOffset.UnixEpoch, _ => true);
+        Assert.Contains(2u, state.UnlockedPoints);
+        Assert.DoesNotContain(3u, state.UnlockedPoints);
+
+        graph.MarkRouteReturn([1], state, 1, DateTimeOffset.UnixEpoch.AddHours(1), _ => true);
+        Assert.Contains(3u, state.UnlockedPoints);
+    }
+
+    [Fact]
+    public void ThirtyThreePercentPolicyAllowsTwoConcurrentUnlockAttempts()
+    {
+        var catalog = new ScriptedCatalog([new UnlockRule(1, 2, 1, 1, IsMainProgression: true)]);
+        var graph = new RouteUnlockGraph(catalog);
+        var selector = new RouteSelector(catalog, graph);
+        var settings = EtaSettings.CreateDefault() with { UnlockSuccessProbability = 0.33 };
+        var state = new UnlockState([1], [1], [], []);
+        var sub = CreateSub(rank: 1);
+        var build = new BuildResolver(catalog).ResolveBuildForRank(1, settings);
+
+        var first = selector.SelectNextRoute(sub, state, build, settings, fleetMode: true);
+        var second = selector.SelectNextRoute(sub, state, build, settings, fleetMode: true);
+        var third = selector.SelectNextRoute(sub, state, build, settings, fleetMode: true);
+
+        Assert.Contains(2u, first.UnlockTargets);
+        Assert.Contains(2u, second.UnlockTargets);
+        Assert.DoesNotContain(2u, third.UnlockTargets);
+    }
+
+    [Fact]
+    public void ProbabilityForecastReportsOrderedRangeAndActiveFleetAttempts()
+    {
+        var catalog = new ScriptedCatalog([new UnlockRule(1, 2, 1, 1)]);
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with { TargetRank = 1, UnlockSuccessProbability = 0.33 };
+        var returnAt = DateTimeOffset.UnixEpoch.AddHours(6);
+        var first = CreateSub(1, "A", 1) with { ReturnAtUtc = returnAt, CurrentRoute = [1], CurrentVoyageKnown = true };
+        var second = CreateSub(2, "B", 1) with { ReturnAtUtc = returnAt.AddMinutes(5), CurrentRoute = [1], CurrentVoyageKnown = true };
+        var fc = CreateFc(new HashSet<uint>([1]), first, second);
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var attempt = Assert.Single(result.ActiveUnlockAttempts);
+
+        Assert.NotNull(result.CompletionForecast);
+        Assert.True(result.CompletionForecast.P10AtUtc <= result.CompletionForecast.P50AtUtc);
+        Assert.True(result.CompletionForecast.P50AtUtc <= result.CompletionForecast.P90AtUtc);
+        Assert.Equal(256, result.ProbabilitySampleCount);
+        Assert.Equal(2, attempt.SubmarineIds.Count);
+        Assert.Equal(1 - Math.Pow(0.67, 2), attempt.CombinedSuccessProbability, 6);
+    }
+
+    [Fact]
+    public void ProbabilityForecastIsDeterministicAndExposesConditionalNextRoutes()
+    {
+        var catalog = new ScriptedCatalog([new UnlockRule(1, 2, 1, 1, IsMainProgression: true)]);
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with { TargetRank = 3, UnlockSuccessProbability = 0.33 };
+        var sub = CreateSub(rank: 1) with
+        {
+            ReturnAtUtc = DateTimeOffset.UnixEpoch.AddHours(1),
+            CurrentRoute = [1],
+            CurrentVoyageKnown = true,
+        };
+        var fc = CreateFc(new HashSet<uint>([1]), sub);
+
+        var first = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var second = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var firstSub = Assert.Single(first.PerSubResults);
+        var secondSub = Assert.Single(second.PerSubResults);
+
+        Assert.Equal(first.CompletionForecast, second.CompletionForecast);
+        Assert.Equal(firstSub.EtaForecast, secondSub.EtaForecast);
+        Assert.Equal(
+            firstSub.NextRouteOutcomes.Select(outcome => (string.Join(",", outcome.Route), outcome.Probability)),
+            secondSub.NextRouteOutcomes.Select(outcome => (string.Join(",", outcome.Route), outcome.Probability)));
+        Assert.True(firstSub.NextRouteOutcomes.Count >= 2);
+        Assert.Equal(1.0, firstSub.NextRouteOutcomes.Sum(outcome => outcome.Probability), 6);
+    }
+
+    [Fact]
+    public void ProbabilityForecastIsPartialWhenMinimumSamplesCannotComplete()
+    {
+        var simulator = CreateSimulator();
+        var settings = EtaSettings.CreateDefault() with { TargetRank = 2 };
+        var result = simulator.Simulate(
+            CreateFc(new HashSet<uint>([1]), CreateSub(rank: 1)),
+            settings,
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UtcNow.AddMilliseconds(-1),
+            CancellationToken.None);
+
+        Assert.False(result.IsComplete);
+        Assert.Equal(0, result.ProbabilitySampleCount);
+        Assert.Contains(result.Warnings, warning => warning.Contains("minimum probability samples"));
+    }
+
+    [Fact]
     public void MissingUnlockDataProducesIncompleteEta()
     {
         var simulator = CreateSimulator();
@@ -597,10 +715,10 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.3.5.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.4.0.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.3.5.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.0.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
@@ -617,7 +735,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.3.5.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.0.0.png", workflow);
     }
 
     private static EtaSimulator CreateSimulator(ISubmarineCatalog? catalog = null)

@@ -107,6 +107,8 @@ public sealed record UnlockState(
 {
     public HashSet<uint> PendingExplorePoints { get; init; } = [];
 
+    public Dictionary<uint, int> PendingUnlockAttempts { get; init; } = [];
+
     public int KnownSubmarineSlots { get; set; } = 1;
 
     public UnlockState DeepClone() => new(
@@ -116,9 +118,30 @@ public sealed record UnlockState(
         new List<UnlockMilestone>(UnlockMilestones))
     {
         PendingExplorePoints = new HashSet<uint>(PendingExplorePoints),
+        PendingUnlockAttempts = new Dictionary<uint, int>(PendingUnlockAttempts),
         KnownSubmarineSlots = KnownSubmarineSlots,
     };
 }
+
+public sealed record EtaPercentiles(
+    DateTimeOffset P10AtUtc,
+    DateTimeOffset P50AtUtc,
+    DateTimeOffset P90AtUtc,
+    int SampleCount);
+
+public sealed record RouteOutcome(
+    IReadOnlyList<uint> Route,
+    double Probability,
+    IReadOnlyList<uint> RequiredProjectedUnlocks);
+
+public sealed record UnlockAttemptForecast(
+    uint SourcePoint,
+    uint TargetPoint,
+    IReadOnlyList<long> SubmarineIds,
+    IReadOnlyList<string> SubmarineNames,
+    DateTimeOffset EarliestReturnAtUtc,
+    DateTimeOffset LatestReturnAtUtc,
+    double CombinedSuccessProbability);
 
 public sealed record UnlockMilestone(
     long SubmarineId,
@@ -152,7 +175,12 @@ public sealed record VoyagePlan(
     bool DurationCapApplied,
     int RepeatCount = 1,
     uint ExpPerVoyage = 0,
-    TimeSpan PerVoyageDuration = default);
+    TimeSpan PerVoyageDuration = default)
+{
+    public bool DependsOnProjectedUnlocks { get; init; }
+
+    public IReadOnlyList<uint> RequiredProjectedUnlocks { get; init; } = [];
+}
 
 public sealed record PerSubEtaResult(
     long SubmarineId,
@@ -175,6 +203,10 @@ public sealed record PerSubEtaResult(
     public IReadOnlyList<uint> CurrentRoute { get; init; } = [];
 
     public DateTimeOffset? CurrentReturnAtUtc { get; init; }
+
+    public EtaPercentiles? EtaForecast { get; init; }
+
+    public IReadOnlyList<RouteOutcome> NextRouteOutcomes { get; init; } = [];
 }
 
 public sealed record EtaResult(
@@ -193,6 +225,12 @@ public sealed record EtaResult(
     string? IncompleteReason)
 {
     public bool IsComplete => Status == CalculationStatus.Complete;
+
+    public EtaPercentiles? CompletionForecast { get; init; }
+
+    public IReadOnlyList<UnlockAttemptForecast> ActiveUnlockAttempts { get; init; } = [];
+
+    public int ProbabilitySampleCount { get; init; }
 }
 
 public sealed record EtaSettings
@@ -234,6 +272,8 @@ public sealed record EtaSettings
     public int SimulationSafetyVoyageCapPerSubmarine { get; set; } = 500;
 
     public int CalculationTimeLimitSeconds { get; set; } = 20;
+
+    public double UnlockSuccessProbability { get; set; } = 0.33;
 
     public ExpMode GetEffectiveExpMode() => EtaModel == EtaModel.PracticalLeveling ? ExpMode.Average : ExpMode;
 
