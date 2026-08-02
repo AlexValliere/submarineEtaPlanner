@@ -596,6 +596,7 @@ public sealed class EtaSimulatorTests
         Assert.Contains("SubmarineEtaPlanner", repoJson);
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
+        Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
         Assert.Contains("\"AssemblyVersion\": \"0.3.5.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);

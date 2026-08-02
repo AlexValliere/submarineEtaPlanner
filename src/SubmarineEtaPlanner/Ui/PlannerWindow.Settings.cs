@@ -205,8 +205,8 @@ public sealed partial class PlannerWindow
         PlannerUi.Callout(
             "data-safety",
             FontAwesomeIcon.InfoCircle,
-            "Read-only integration",
-            "The planner reads tracker state only. It never deploys submarines, changes routes, or automates workshop actions.",
+            "Forecast data source",
+            "The planner uses Submarine Tracker state to calculate voyage and leveling forecasts.",
             PlannerUi.Teal);
         EndSettingsCard();
     }
