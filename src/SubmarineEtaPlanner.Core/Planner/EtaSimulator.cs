@@ -270,7 +270,11 @@ public sealed class EtaSimulator(
                 unlockState.UnlockMilestones.Where(m => m.SubmarineId == state.Source.SubmarineId).ToArray(),
                 subWarnings,
                 status,
-                reason);
+                reason)
+            {
+                CurrentRoute = GetCurrentRoute(state.Source, now),
+                CurrentReturnAtUtc = GetCurrentReturnAtUtc(state.Source, now),
+            };
         }).ToArray();
 
         return CreateEtaResult(fc, settings, now, results, plans, unlockState.UnlockMilestones, warnings);
@@ -613,8 +617,28 @@ public sealed class EtaSimulator(
             unlockState.UnlockMilestones.Where(m => m.SubmarineId == sub.SubmarineId).ToArray(),
             finalWarnings,
             status,
-            reason);
+            reason)
+        {
+            CurrentRoute = GetCurrentRoute(sub, now),
+            CurrentReturnAtUtc = GetCurrentReturnAtUtc(sub, now),
+        };
     }
+
+    private static IReadOnlyList<uint> GetCurrentRoute(SubmarineState sub, DateTimeOffset now)
+    {
+        if (sub.ReturnAtUtc <= now || !sub.CurrentVoyageKnown)
+            return [];
+
+        var route = sub.ManualCurrentRouteOverride.Count > 0
+            ? sub.ManualCurrentRouteOverride
+            : sub.CurrentRoute;
+        return route.ToArray();
+    }
+
+    private static DateTimeOffset? GetCurrentReturnAtUtc(SubmarineState sub, DateTimeOffset now)
+        => sub.ReturnAtUtc > now && sub.CurrentVoyageKnown && GetCurrentRoute(sub, now).Count > 0
+            ? sub.ReturnAtUtc
+            : null;
 
     private CurrentVoyageApplication ApplyCurrentVoyageIfKnown(
         SubmarineState sub,

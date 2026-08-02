@@ -171,6 +171,10 @@ public sealed record PerSubEtaResult(
     string? IncompleteReason)
 {
     public bool IsComplete => Status == CalculationStatus.Complete;
+
+    public IReadOnlyList<uint> CurrentRoute { get; init; } = [];
+
+    public DateTimeOffset? CurrentReturnAtUtc { get; init; }
 }
 
 public sealed record EtaResult(
@@ -240,7 +244,7 @@ public sealed record EtaSettings
             ? (DurationLimitHours > 0 ? DurationLimitHours : Math.Max(0, PracticalMaxVoyageHours))
             : DurationLimitHours;
 
-    public bool GetEffectiveOptimizeExpPerHour() => EtaModel != EtaModel.PracticalLeveling && OptimizeExpPerHour;
+    public bool GetEffectiveOptimizeExpPerHour() => EtaModel == EtaModel.PracticalLeveling || OptimizeExpPerHour;
 
     public static EtaSettings CreateDefault() => new()
     {

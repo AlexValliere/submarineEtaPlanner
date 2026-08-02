@@ -244,7 +244,7 @@ public sealed partial class PlannerWindow
         ImGui.TableSetupColumn("ETA", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Voyages", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Next route", ImGuiTableColumnFlags.WidthStretch, 1f);
+        ImGui.TableSetupColumn("Next after return", ImGuiTableColumnFlags.WidthStretch, 1f);
         ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 116f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupScrollFreeze(1, 1);
         ImGui.TableHeadersRow();
@@ -322,6 +322,16 @@ public sealed partial class PlannerWindow
 
     private void DrawSubDetails(PerSubEtaResult sub, bool showDiagnostics)
     {
+        if (sub.CurrentRoute.Count > 0 && sub.CurrentReturnAtUtc is not null)
+        {
+            PlannerUi.Callout(
+                "current-voyage",
+                FontAwesomeIcon.Ship,
+                $"Current voyage · returns {sub.CurrentReturnAtUtc.Value.LocalDateTime:g}",
+                FormatRoute(sub.CurrentRoute),
+                PlannerUi.Cyan);
+        }
+
         if (!sub.IsComplete && sub.IncompleteReason is not null)
             PlannerUi.Callout("sub-incomplete", FontAwesomeIcon.ExclamationTriangle, "Incomplete forecast", sub.IncompleteReason, PlannerUi.Amber);
 

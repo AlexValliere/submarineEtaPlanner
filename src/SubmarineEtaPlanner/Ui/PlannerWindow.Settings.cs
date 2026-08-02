@@ -71,7 +71,7 @@ public sealed partial class PlannerWindow
                 "practical-summary",
                 FontAwesomeIcon.InfoCircle,
                 "Recommended leveling preset",
-                "Average EXP  •  maximum EXP per voyage  •  main leveling-route unlocks  •  standard build progression",
+                "Average EXP  •  expected EXP/hour scoring  •  main leveling-route unlocks  •  standard build progression",
                 PlannerUi.Teal);
         }
         else
