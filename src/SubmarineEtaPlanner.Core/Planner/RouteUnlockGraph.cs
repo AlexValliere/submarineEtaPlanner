@@ -244,16 +244,23 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
                 if (pathRule is null ||
                     pathRule.SourceRequiredRank > rank ||
                     !state.UnlockedPoints.Contains(pathRule.SourcePoint) ||
-                    state.UnlockedPoints.Contains(pathRule.UnlocksPoint) ||
-                    GetNextLockedRuleForSource(pathRule.SourcePoint, state, rank) != pathRule ||
-                    (fleetMode && IsTargetSaturated(pathRule.UnlocksPoint, state, settings)))
+                    state.UnlockedPoints.Contains(pathRule.UnlocksPoint))
                 {
                     continue;
                 }
 
+                var requiredRule = GetOrderedPrerequisite(pathRule, state, rank);
+                if (requiredRule is null)
+                    continue;
+
+                // A saturated prerequisite blocks the entire slot path for this fleet event.
+                // Remaining submarines should level instead of skipping to a later target.
+                if (fleetMode && IsTargetSaturated(requiredRule.UnlocksPoint, state, settings))
+                    return null;
+
                 return new UnlockObjective(
-                    pathRule.SourcePoint,
-                    pathRule.UnlocksPoint,
+                    requiredRule.SourcePoint,
+                    requiredRule.UnlocksPoint,
                     UnlockObjectiveKind.ExploreSubmarineSlot);
             }
         }
@@ -284,14 +291,21 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
                     if (pathRule is null ||
                         pathRule.SourceRequiredRank > rank ||
                         !state.UnlockedPoints.Contains(pathRule.SourcePoint) ||
-                        state.UnlockedPoints.Contains(pathRule.UnlocksPoint) ||
-                        GetNextLockedRuleForSource(pathRule.SourcePoint, state, rank) != pathRule ||
-                        (fleetMode && IsTargetSaturated(pathRule.UnlocksPoint, state, settings)))
+                        state.UnlockedPoints.Contains(pathRule.UnlocksPoint))
                     {
                         continue;
                     }
 
-                    return [pathRule];
+                    var requiredRule = GetOrderedPrerequisite(pathRule, state, rank);
+                    if (requiredRule is null)
+                        continue;
+
+                    // Do not skip an earlier sibling while enough attempts are already in flight.
+                    // Returning no unlock objective lets the route selector choose a leveling route.
+                    if (fleetMode && IsTargetSaturated(requiredRule.UnlocksPoint, state, settings))
+                        return [];
+
+                    return [requiredRule];
                 }
 
                 return [];
@@ -307,6 +321,14 @@ public sealed class RouteUnlockGraph(ISubmarineCatalog catalog)
             .Where(rule => GetNextLockedRuleForSource(rule.SourcePoint, state, rank) == rule)
             .Where(rule => !fleetMode || !IsTargetSaturated(rule.UnlocksPoint, state, settings))
             .OrderBy(rule => rule.UnlocksPoint);
+    }
+
+    private UnlockRule? GetOrderedPrerequisite(UnlockRule desiredRule, UnlockState state, int rank)
+    {
+        // A source with multiple targets can only unlock its lowest currently locked target.
+        // That target may be an unflagged sibling which must precede the desired main-path or
+        // submarine-slot target (for example, 53 -> 54 before 53 -> 55).
+        return GetNextLockedRuleForSource(desiredRule.SourcePoint, state, rank);
     }
 
     private bool IsTargetSaturated(uint targetPoint, UnlockState state, EtaSettings settings)

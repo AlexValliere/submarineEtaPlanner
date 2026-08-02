@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.4.0
+
+- Fixed recommended-leveling forecasts getting stuck when a main-path sector had an earlier sibling unlock prerequisite.
+- Applied the same ordered prerequisite handling to submarine-slot progression.
+- Clarified the distinction between total voyage EXP, per-voyage EXP, and EXP/hour in route diagnostics.
+
 ## 0.4.3.0
 
 - Added deterministic semantic fingerprints for each FC and its submarines.

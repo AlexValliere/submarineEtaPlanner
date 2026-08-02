@@ -498,7 +498,7 @@ public sealed partial class PlannerWindow
         if (showDiagnostics)
         {
             ImGui.TableSetupColumn("Per voyage", ImGuiTableColumnFlags.WidthFixed, 165f * ImGuiHelpers.GlobalScale);
-            ImGui.TableSetupColumn("EXP/h", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("EXP/hour", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
         }
         ImGui.TableHeadersRow();
 
@@ -527,6 +527,8 @@ public sealed partial class PlannerWindow
             }
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.ExpGain.ToString("N0"));
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Total EXP represented by this row. Batched rows combine repeated voyages.");
             ImGui.TableNextColumn();
             ImGui.TextUnformatted($"{plan.RankBefore}→{plan.RankAfter}");
             ImGui.TableNextColumn();
@@ -537,8 +539,12 @@ public sealed partial class PlannerWindow
                 var perDuration = plan.PerVoyageDuration == TimeSpan.Zero ? plan.Duration : plan.PerVoyageDuration;
                 var perExp = plan.ExpPerVoyage == 0 ? plan.ExpGain : plan.ExpPerVoyage;
                 ImGui.TextUnformatted($"{FormatDuration(perDuration)} / {perExp:N0} EXP");
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Duration and EXP for one voyage before repeats.");
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(plan.ExpPerHour.ToString("N0"));
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Expected EXP per real-time hour; this is a route-comparison rate, not EXP awarded per voyage.");
             }
         }
 

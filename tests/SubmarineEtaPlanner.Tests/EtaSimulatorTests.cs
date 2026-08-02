@@ -505,6 +505,163 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
+    public void MainProgressionUnlocksEarlierSiblingBeforeMainTarget()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(1, 2, 1, 1),
+            new UnlockRule(1, 3, 1, 1, IsMainProgression: true),
+        ]);
+        var graph = new RouteUnlockGraph(catalog);
+        var settings = EtaSettings.CreateDefault();
+        var state = new UnlockState([1], [1], [], []) { KnownSubmarineSlots = 4 };
+
+        var sibling = graph.GetNextObjective(state, settings, rank: 1, targetRank: 3, fleetMode: false);
+        Assert.NotNull(sibling);
+        Assert.Equal(2u, sibling.TargetPoint);
+
+        state.UnlockedPoints.Add(2);
+        var mainTarget = graph.GetNextObjective(state, settings, rank: 1, targetRank: 3, fleetMode: false);
+        Assert.NotNull(mainTarget);
+        Assert.Equal(3u, mainTarget.TargetPoint);
+    }
+
+    [Fact]
+    public void MainProgressionResolvesChainedSiblingGatesInCatalogOrder()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(1, 2, 1, 1),
+            new UnlockRule(1, 3, 1, 1, IsMainProgression: true),
+            new UnlockRule(3, 4, 1, 1),
+            new UnlockRule(3, 5, 1, 1, IsMainProgression: true),
+        ]);
+        var graph = new RouteUnlockGraph(catalog);
+        var settings = EtaSettings.CreateDefault();
+        var state = new UnlockState([1], [1], [], []) { KnownSubmarineSlots = 4 };
+        var objectives = new List<uint>();
+
+        for (var i = 0; i < 4; i++)
+        {
+            var objective = graph.GetNextObjective(state, settings, rank: 1, targetRank: 5, fleetMode: false);
+            Assert.NotNull(objective);
+            objectives.Add(objective.TargetPoint);
+            state.UnlockedPoints.Add(objective.TargetPoint);
+        }
+
+        Assert.Equal([2u, 3u, 4u, 5u], objectives);
+    }
+
+    [Fact]
+    public void SaturatedSiblingMakesRemainingSubmarinesUseLevelingRoutes()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(1, 2, 1, 1),
+            new UnlockRule(1, 3, 1, 1, IsMainProgression: true),
+        ]);
+        var graph = new RouteUnlockGraph(catalog);
+        var selector = new RouteSelector(catalog, graph);
+        var settings = EtaSettings.CreateDefault() with { UnlockSuccessProbability = 1.0 };
+        var state = new UnlockState([1, 99], [1, 99], [2], []) { KnownSubmarineSlots = 4 };
+        state.PendingUnlockAttempts[2] = 1;
+
+        var route = selector.SelectNextRoute(
+            CreateSub(rank: 1),
+            state,
+            catalog.ResolveBuild("TEST", 1),
+            settings,
+            fleetMode: true);
+
+        Assert.Equal([99u], route.Route);
+        Assert.DoesNotContain(3u, route.UnlockTargets);
+    }
+
+    [Fact]
+    public void MainProgressionHandlesKnownLaterMapSiblingChains()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(49, 53, 1, 1, IsMainProgression: true),
+            new UnlockRule(53, 54, 1, 1),
+            new UnlockRule(53, 55, 1, 1, IsMainProgression: true),
+            new UnlockRule(55, 56, 1, 1),
+            new UnlockRule(55, 57, 1, 1, IsMainProgression: true),
+        ]);
+        var graph = new RouteUnlockGraph(catalog);
+        var settings = EtaSettings.CreateDefault();
+        var state = new UnlockState([49, 53], [49, 53], [], []) { KnownSubmarineSlots = 4 };
+        var objectives = new List<uint>();
+
+        for (var i = 0; i < 4; i++)
+        {
+            var objective = graph.GetNextObjective(state, settings, rank: 70, targetRank: 114, fleetMode: false);
+            Assert.NotNull(objective);
+            objectives.Add(objective.TargetPoint);
+            state.UnlockedPoints.Add(objective.TargetPoint);
+        }
+
+        Assert.Equal([54u, 55u, 56u, 57u], objectives);
+    }
+
+    [Fact]
+    public void CotedShapedForecastProgressesBeyondSecondMapAfterSiblingUnlocks()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(49, 53, 1, 1, IsMainProgression: true),
+            new UnlockRule(53, 54, 1, 1),
+            new UnlockRule(53, 55, 1, 1, IsMainProgression: true),
+            new UnlockRule(55, 56, 1, 1),
+            new UnlockRule(55, 57, 1, 1, IsMainProgression: true),
+        ]);
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with
+        {
+            TargetRank = 75,
+            UnlockSuccessProbability = 1.0,
+            SimulationSafetyVoyageCapPerSubmarine = 10,
+        };
+        var fc = CreateFc(new HashSet<uint>([49, 53]), CreateSub(rank: 70));
+
+        var result = simulator.Simulate(fc, settings, DateTimeOffset.UnixEpoch);
+        var unlocked = result.UnlockMilestones
+            .Where(milestone => milestone.Kind == UnlockMilestoneKind.SectorUnlocked)
+            .Select(milestone => milestone.UnlockedPoint)
+            .ToArray();
+
+        Assert.True(result.IsComplete);
+        Assert.Equal([54u, 55u, 56u, 57u], unlocked);
+        Assert.Contains(result.PlannedRoutes, route => route.Route.Contains(55u));
+    }
+
+    [Fact]
+    public void SubmarineSlotPathUnlocksEarlierSiblingBeforeSlotTarget()
+    {
+        var catalog = new ScriptedCatalog(
+        [
+            new UnlockRule(1, 2, 1, 1),
+            new UnlockRule(1, 3, 1, 1, UnlocksSubSlot: true),
+        ]);
+        var graph = new RouteUnlockGraph(catalog);
+        var settings = EtaSettings.CreateDefault() with
+        {
+            RouteGoal = RouteGoal.UnlockSubSlotsThenLevel,
+            PrioritizeSubSlots = true,
+        };
+        var state = new UnlockState([1], [1], [], []) { KnownSubmarineSlots = 1 };
+
+        var sibling = graph.GetNextObjective(state, settings, rank: 1, targetRank: 10, fleetMode: false);
+        Assert.NotNull(sibling);
+        Assert.Equal(2u, sibling.TargetPoint);
+
+        state.UnlockedPoints.Add(2);
+        var slotTarget = graph.GetNextObjective(state, settings, rank: 1, targetRank: 10, fleetMode: false);
+        Assert.NotNull(slotTarget);
+        Assert.Equal(3u, slotTarget.TargetPoint);
+    }
+
+    [Fact]
     public void SubmarineSlotRequiresExploringTheUnlockedTarget()
     {
         var catalog = new ScriptedCatalog(
@@ -725,13 +882,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.4.3.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.4.4.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.3.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.4.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("per-FC incremental refreshes", repoJson);
+        Assert.Contains("ordered multi-target unlock gates", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -747,7 +904,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.3.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.4.0.png", workflow);
         Assert.Contains("Copy-Item \"$out/CalculatedData.msgpack\" $packageDir", workflow);
     }
 
