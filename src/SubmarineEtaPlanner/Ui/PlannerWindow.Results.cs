@@ -220,15 +220,26 @@ public sealed partial class PlannerWindow
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
             var chevron = subOpen ? FontAwesomeIcon.ChevronDown : FontAwesomeIcon.ChevronRight;
-            if (ImGui.Selectable(
-                    $"{chevron.ToIconString()}  {sub.SubmarineName}##row-{subKey}",
-                    false,
-                    ImGuiSelectableFlags.SpanAllColumns))
+            var rowStart = ImGui.GetCursorScreenPos();
+            var rowClicked = ImGui.Selectable(
+                $"##row-{subKey}",
+                false,
+                ImGuiSelectableFlags.SpanAllColumns,
+                new Vector2(0, ImGui.GetFrameHeight()));
+            var rowHovered = ImGui.IsItemHovered();
+            var rowEnd = ImGui.GetCursorScreenPos();
+            ImGui.SetCursorScreenPos(rowStart + new Vector2(3f * ImGuiHelpers.GlobalScale, 1f * ImGuiHelpers.GlobalScale));
+            PlannerUi.Icon(chevron, PlannerUi.Teal);
+            ImGui.SameLine();
+            ImGui.TextUnformatted(sub.SubmarineName);
+            ImGui.SetCursorScreenPos(rowEnd);
+            if (rowClicked)
             {
                 if (!this.expandedSubmarines.Add(subKey))
                     this.expandedSubmarines.Remove(subKey);
             }
-            PlannerUi.Tooltip(subOpen ? "Hide voyage forecast" : "Show voyage forecast");
+            if (rowHovered)
+                ImGui.SetTooltip(subOpen ? "Hide voyage forecast" : "Show voyage forecast");
             ImGui.TableNextColumn();
             ImGui.TextUnformatted($"{sub.StartingRank} → {sub.FinalRank}");
             ImGui.TableNextColumn();
@@ -254,7 +265,7 @@ public sealed partial class PlannerWindow
             ImGui.PushID(subKey);
             ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
             ImGui.Spacing();
-            ImGui.TextColored(PlannerUi.Teal, $"{FontAwesomeIcon.Ship.ToIconString()}  {sub.SubmarineName} voyage forecast");
+            PlannerUi.IconText(FontAwesomeIcon.Ship, $"{sub.SubmarineName} voyage forecast", PlannerUi.Teal);
             DrawSubDetails(sub, this.configuration.Settings.ShowRouteDiagnostics);
             ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
             ImGui.PopID();

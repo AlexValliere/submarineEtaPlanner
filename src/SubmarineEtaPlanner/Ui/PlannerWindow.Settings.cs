@@ -280,10 +280,10 @@ public sealed partial class PlannerWindow
             var actionsDisabled = !this.draftDirty;
             if (actionsDisabled)
                 ImGui.BeginDisabled();
-            if (ImGui.Button($"{FontAwesomeIcon.Check.ToIconString()}  Apply & refresh"))
+            if (PlannerUi.IconButtonWithText("apply-settings", FontAwesomeIcon.Check, "Apply & refresh"))
                 ApplyDraftSettings();
             ImGui.SameLine();
-            if (ImGui.Button($"{FontAwesomeIcon.Undo.ToIconString()}  Revert"))
+            if (PlannerUi.IconButtonWithText("revert-settings", FontAwesomeIcon.Undo, "Revert"))
             {
                 this.draftSettings = CloneSettings(this.configuration.Settings);
                 this.draftDirty = false;
@@ -292,7 +292,7 @@ public sealed partial class PlannerWindow
                 ImGui.EndDisabled();
 
             ImGui.SameLine();
-            if (ImGui.Button($"{FontAwesomeIcon.SyncAlt.ToIconString()}  Reset defaults"))
+            if (PlannerUi.IconButtonWithText("reset-settings", FontAwesomeIcon.SyncAlt, "Reset defaults"))
             {
                 this.draftSettings = EtaSettings.CreateDefault();
                 this.draftSettings.ShowRouteDiagnostics = this.configuration.Settings.ShowRouteDiagnostics;
@@ -397,13 +397,13 @@ public sealed partial class PlannerWindow
             changed = true;
         }
 
-        if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}  Add range"))
+        if (PlannerUi.IconButtonWithText("add-build-range", FontAwesomeIcon.Plus, "Add range"))
         {
             settings.BuildProfile.Add(new BuildProfileStep(114, 999, "WSCC"));
             changed = true;
         }
         ImGui.SameLine();
-        if (ImGui.Button($"{FontAwesomeIcon.Undo.ToIconString()}  Reset profile"))
+        if (PlannerUi.IconButtonWithText("reset-build-profile", FontAwesomeIcon.Undo, "Reset profile"))
         {
             settings.BuildProfile = EtaSettings.CreateDefault().BuildProfile;
             changed = true;

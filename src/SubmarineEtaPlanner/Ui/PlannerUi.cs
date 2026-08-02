@@ -1,5 +1,6 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
+using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility;
 using System.Numerics;
 
@@ -78,7 +79,7 @@ internal static class PlannerUi
         drawList.AddCircle(end - new Vector2(35f, 28f) * scale, 25f * scale, ColorU32(new Vector4(Cyan.X, Cyan.Y, Cyan.Z, 0.12f)), 40, 1f * scale);
 
         ImGui.SetCursorScreenPos(origin + new Vector2(18f, 14f) * scale);
-        ImGui.TextColored(Teal, $"{FontAwesomeIcon.Ship.ToIconString()}  {title}");
+        IconText(FontAwesomeIcon.Ship, title, Teal);
         ImGui.SetCursorScreenPos(origin + new Vector2(18f, 41f) * scale);
         ImGui.TextColored(Muted, subtitle);
         ImGui.SetCursorScreenPos(origin + new Vector2(18f, 67f) * scale);
@@ -89,12 +90,11 @@ internal static class PlannerUi
         var clicked = false;
         if (showRefresh)
         {
-            var buttonLabel = refreshing
-                ? $"{FontAwesomeIcon.Times.ToIconString()}  Cancel"
-                : $"{FontAwesomeIcon.SyncAlt.ToIconString()}  Refresh";
+            var buttonIcon = refreshing ? FontAwesomeIcon.Times : FontAwesomeIcon.SyncAlt;
+            var buttonLabel = refreshing ? "Cancel" : "Refresh";
             var buttonSize = ImGui.CalcTextSize(buttonLabel) + new Vector2(22f, 12f) * scale;
             ImGui.SetCursorScreenPos(new Vector2(end.X - buttonSize.X - 18f * scale, origin.Y + 18f * scale));
-            clicked = ImGui.Button($"{buttonLabel}##header-refresh", buttonSize);
+            clicked = ImGuiComponents.IconButtonWithText(buttonIcon, $"{buttonLabel}##header-refresh", buttonSize);
         }
 
         ImGui.SetCursorScreenPos(new Vector2(origin.X, end.Y));
@@ -104,8 +104,7 @@ internal static class PlannerUi
 
     internal static void DrawBrandMark(bool compact)
     {
-        var icon = FontAwesomeIcon.Ship.ToIconString();
-        ImGui.TextColored(Teal, icon);
+        Icon(FontAwesomeIcon.Ship, Teal);
         if (!compact)
         {
             ImGui.SameLine();
@@ -126,8 +125,10 @@ internal static class PlannerUi
             ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.10f, 0.45f, 0.45f, 1f));
         }
 
-        var text = compact ? icon.ToIconString() : $"{icon.ToIconString()}  {label}";
-        var clicked = ImGui.Button($"{text}##{id}", new Vector2(-1, 36f * ImGuiHelpers.GlobalScale));
+        var size = new Vector2(-1, 36f * ImGuiHelpers.GlobalScale);
+        var clicked = compact
+            ? ImGuiComponents.IconButton(id, icon, size)
+            : ImGuiComponents.IconButtonWithText(icon, $"{label}##{id}", size);
         if (compact)
             Tooltip(label);
 
@@ -148,7 +149,7 @@ internal static class PlannerUi
         ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(accent.X, accent.Y, accent.Z, 0.55f));
         if (ImGui.BeginChild(id, new Vector2(-1, 78f * ImGuiHelpers.GlobalScale), true, ImGuiWindowFlags.NoScrollbar))
         {
-            ImGui.TextColored(accent, icon.ToIconString());
+            Icon(icon, accent);
             ImGui.SameLine();
             ImGui.TextUnformatted(value);
             ImGui.TextColored(Muted, label);
@@ -181,7 +182,7 @@ internal static class PlannerUi
         ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(accent.X, accent.Y, accent.Z, 0.65f));
         if (ImGui.BeginChild(id, new Vector2(-1, height), true, ImGuiWindowFlags.NoScrollbar))
         {
-            ImGui.TextColored(accent, $"{icon.ToIconString()}  {title}");
+            IconText(icon, title, accent);
             ImGui.TextWrapped(body);
         }
         ImGui.EndChild();
@@ -190,9 +191,25 @@ internal static class PlannerUi
 
     internal static bool IconButton(string id, FontAwesomeIcon icon, string tooltip)
     {
-        var clicked = ImGui.Button($"{icon.ToIconString()}##{id}");
+        var clicked = ImGuiComponents.IconButton(id, icon);
         Tooltip(tooltip);
         return clicked;
+    }
+
+    internal static bool IconButtonWithText(string id, FontAwesomeIcon icon, string label)
+        => ImGuiComponents.IconButtonWithText(icon, $"{label}##{id}", Vector2.Zero);
+
+    internal static void Icon(FontAwesomeIcon icon, Vector4 color)
+    {
+        using var font = Plugin.PluginInterface.UiBuilder.IconFontHandle.Push();
+        ImGui.TextColored(color, icon.ToIconString());
+    }
+
+    internal static void IconText(FontAwesomeIcon icon, string text, Vector4 color)
+    {
+        Icon(icon, color);
+        ImGui.SameLine();
+        ImGui.TextColored(color, text);
     }
 
     internal static bool SegmentedButton(string id, string label, bool selected)
