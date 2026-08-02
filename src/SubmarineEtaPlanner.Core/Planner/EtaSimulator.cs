@@ -4,7 +4,7 @@ public sealed class EtaSimulator(
     BuildResolver buildResolver,
     RouteUnlockGraph unlockGraph,
     RouteSelector routeSelector,
-    ISubmarineCatalog catalog)
+    ISubmarineCatalog catalog) : IEtaSimulator
 {
     private const int TargetProbabilitySamples = 256;
     private const int MinimumProbabilitySamples = 64;

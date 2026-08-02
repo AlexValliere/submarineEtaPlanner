@@ -38,6 +38,21 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             Assert.Equal(new SubmarineBuildParts(1, 2, 3, 4), submarine.BuildParts);
             Assert.Equal(new uint[] { 1, 3 }, submarine.CurrentRoute);
             Assert.True(submarine.CurrentVoyageKnown);
+            Assert.False(fc.DataFingerprint.IsEmpty);
+            Assert.Equal(
+                fc.DataFingerprint,
+                new SubmarineTrackerStateReader().Read(settings, new List<string>())[0].DataFingerprint);
+
+            using (var connection = new SQLiteConnection($"Data Source={databasePath}"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "UPDATE submarine SET Rank = 74 WHERE SubmarineId = 42";
+                command.ExecuteNonQuery();
+            }
+
+            var changed = new SubmarineTrackerStateReader().Read(settings, new List<string>())[0];
+            Assert.NotEqual(fc.DataFingerprint, changed.DataFingerprint);
             Assert.Empty(warnings);
         }
         finally

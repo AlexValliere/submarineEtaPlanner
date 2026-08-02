@@ -6,8 +6,8 @@
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
-  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.2.0.png",
-  "Changelog": "Public-release hardening: added licensing and AI transparency, verified route-data provenance, added live-data compatibility warnings, and expanded SQLite integration coverage.",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.3.0.png",
+  "Changelog": "Added per-FC incremental refreshes so unchanged forecasts are reused when SubmarineTracker data changes, while explicit refreshes remain full recalculations.",
   "Tags": [
     "Submarine",
     "ETA",

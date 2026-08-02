@@ -74,6 +74,8 @@ public sealed record FcState(
     public string FcIdKey => Convert.ToHexString(FcId);
 
     public bool UnlockDataKnown { get; init; } = true;
+
+    public FcDataFingerprint DataFingerprint { get; init; }
 }
 
 public sealed record SubmarineState(
@@ -301,7 +303,10 @@ public sealed record CalculationMetrics(
     long ElapsedMilliseconds,
     long RouteQueries,
     long RouteCacheHits,
-    long RoutesEvaluated);
+    long RoutesEvaluated,
+    int CalculatedFreeCompanies = 0,
+    int ReusedFreeCompanies = 0,
+    int AwaitingTrackerFreeCompanies = 0);
 
 public sealed class ResultsViewState
 {

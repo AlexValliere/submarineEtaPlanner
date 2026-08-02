@@ -4,7 +4,7 @@ namespace SubmarineEtaPlanner.Planner;
 
 public sealed class EtaPlannerService(
     ISubmarineTrackerStateReader stateReader,
-    EtaSimulator simulator,
+    IEtaSimulator simulator,
     IRouteSearchDiagnostics? routeSearchDiagnostics = null,
     IPlannerDataDiagnostics? dataDiagnostics = null)
 {
@@ -22,17 +22,84 @@ public sealed class EtaPlannerService(
         DateTimeOffset now,
         CancellationToken cancellationToken,
         Action<EtaPlannerSnapshot>? reportProgress)
+        => Calculate(settings, now, cancellationToken, reportProgress, null, ForecastRefreshMode.Full);
+
+    public EtaPlannerSnapshot Calculate(
+        EtaSettings settings,
+        DateTimeOffset now,
+        CancellationToken cancellationToken,
+        Action<EtaPlannerSnapshot>? reportProgress,
+        EtaPlannerSnapshot? previousSnapshot,
+        ForecastRefreshMode refreshMode)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         routeSearchDiagnostics?.ResetRouteSearchMetrics();
         var warnings = new List<string>();
         if (dataDiagnostics is not null)
             warnings.AddRange(dataDiagnostics.GetPlannerDataWarnings());
-        var fcStates = stateReader.Read(settings, warnings);
+        var fcStates = stateReader.Read(settings, warnings)
+            .Select(EnsureFingerprint)
+            .ToArray();
+        var settingsFingerprint = CalculationSettingsFingerprint.Create(settings);
         var results = new Dictionary<string, EtaResult>();
-        var progress = fcStates.ToDictionary(
-            fc => fc.FcIdKey,
-            fc => new FcCalculationProgress(fc.FcIdKey, fc.DisplayName, FcCalculationStatus.Queued));
+        var progress = new Dictionary<string, FcCalculationProgress>();
+        var calculatedCount = 0;
+        var reusedCount = 0;
+        var awaitingTrackerCount = 0;
+
+        var canReuse = refreshMode == ForecastRefreshMode.Incremental &&
+                       previousSnapshot is not null &&
+                       previousSnapshot.CalculationSettingsFingerprint == settingsFingerprint;
+        var previousStates = canReuse
+            ? previousSnapshot!.FreeCompanies.ToDictionary(fc => fc.FcIdKey)
+            : new Dictionary<string, FcState>();
+        var previousResults = canReuse
+            ? previousSnapshot!.Results.ToDictionary(result => Convert.ToHexString(result.FcId))
+            : new Dictionary<string, EtaResult>();
+        var previousProgress = canReuse
+            ? previousSnapshot!.FcProgress.ToDictionary(item => item.FcIdKey)
+            : new Dictionary<string, FcCalculationProgress>();
+
+        foreach (var fc in fcStates)
+        {
+            if (CanReuseCompletedResult(
+                    fc,
+                    settings.TargetRank,
+                    now,
+                    previousSnapshot,
+                    previousStates,
+                    previousResults,
+                    previousProgress,
+                    out var previousResult,
+                    out var awaitingTracker))
+            {
+                results[fc.FcIdKey] = previousResult!;
+                if (awaitingTracker)
+                {
+                    awaitingTrackerCount++;
+                    progress[fc.FcIdKey] = new FcCalculationProgress(
+                        fc.FcIdKey,
+                        fc.DisplayName,
+                        FcCalculationStatus.AwaitingTrackerUpdate,
+                        CompletedAtUtc: now,
+                        Message: "A recorded voyage has returned, but SubmarineTracker has not written its outcome yet.");
+                }
+                else
+                {
+                    reusedCount++;
+                    progress[fc.FcIdKey] = new FcCalculationProgress(
+                        fc.FcIdKey,
+                        fc.DisplayName,
+                        FcCalculationStatus.Reused,
+                        CompletedAtUtc: now,
+                        Message: $"Up to date; reused forecast from {previousResult!.GeneratedAtUtc.LocalDateTime:g}.");
+                }
+            }
+            else
+            {
+                progress[fc.FcIdKey] = new FcCalculationProgress(fc.FcIdKey, fc.DisplayName, FcCalculationStatus.Queued);
+            }
+        }
 
         EtaPlannerSnapshot CreateSnapshot(bool isRunning)
         {
@@ -41,15 +108,23 @@ public sealed class EtaPlannerService(
                 .Select(fc => results[fc.FcIdKey])
                 .ToArray();
             var progressArray = fcStates.Select(fc => progress[fc.FcIdKey]).ToArray();
+            var hasIncompleteProgress = progressArray.Any(item => item.Status is
+                FcCalculationStatus.Partial or
+                FcCalculationStatus.TimedOut or
+                FcCalculationStatus.Failed or
+                FcCalculationStatus.Cancelled or
+                FcCalculationStatus.AwaitingTrackerUpdate);
             var status = !isRunning &&
-                         resultArray.Length == fcStates.Count &&
+                         !hasIncompleteProgress &&
+                         resultArray.Length == fcStates.Length &&
                          resultArray.All(result => result.IsComplete) &&
                          warnings.All(warning => !IsIncompleteWarning(warning))
                 ? CalculationStatus.Complete
                 : CalculationStatus.Partial;
             var reason = isRunning || status == CalculationStatus.Complete
                 ? null
-                : progressArray.FirstOrDefault(item => item.Status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed)?.Message ??
+                : progressArray.FirstOrDefault(item => item.Status == FcCalculationStatus.AwaitingTrackerUpdate)?.Message ??
+                  progressArray.FirstOrDefault(item => item.Status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed)?.Message ??
                   resultArray.FirstOrDefault(result => !result.IsComplete)?.IncompleteReason ??
                   warnings.FirstOrDefault(IsIncompleteWarning) ??
                   "Calculation stopped before every tracked FC completed.";
@@ -61,10 +136,19 @@ public sealed class EtaPlannerService(
                 warnings.ToArray(),
                 status,
                 reason,
-                new CalculationMetrics(stopwatch.ElapsedMilliseconds, routeMetrics.Queries, routeMetrics.CacheHits, routeMetrics.RoutesEvaluated))
+                new CalculationMetrics(
+                    stopwatch.ElapsedMilliseconds,
+                    routeMetrics.Queries,
+                    routeMetrics.CacheHits,
+                    routeMetrics.RoutesEvaluated,
+                    calculatedCount,
+                    reusedCount,
+                    awaitingTrackerCount))
             {
                 FcProgress = progressArray,
                 IsRunning = isRunning,
+                CalculationSettingsFingerprint = settingsFingerprint,
+                RefreshMode = refreshMode,
             };
         }
 
@@ -73,6 +157,7 @@ public sealed class EtaPlannerService(
         Publish(isRunning: true);
 
         var calculationOrder = fcStates
+            .Where(fc => progress[fc.FcIdKey].Status == FcCalculationStatus.Queued)
             .OrderBy(fc => IsReadyNow(fc, settings.TargetRank) ? 0 : 1)
             .ThenByDescending(fc => fc.Submarines.Count == 0 ? 0 : fc.Submarines.Min(submarine => submarine.Rank))
             .ThenBy(fc => fc.DisplayName, StringComparer.OrdinalIgnoreCase)
@@ -97,6 +182,7 @@ public sealed class EtaPlannerService(
             try
             {
                 var result = simulator.Simulate(fc, settings, now, deadlineUtc, cancellationToken);
+                calculatedCount++;
                 results[fc.FcIdKey] = result;
                 var timedOut = !result.IsComplete &&
                                (IsTimedOut(deadlineUtc) ||
@@ -126,6 +212,7 @@ public sealed class EtaPlannerService(
             }
             catch (Exception ex)
             {
+                calculatedCount++;
                 var message = $"Forecast failed: {ex.Message}";
                 warnings.Add($"{fc.DisplayName}: {message}");
                 progress[fc.FcIdKey] = progress[fc.FcIdKey] with
@@ -144,6 +231,59 @@ public sealed class EtaPlannerService(
         return finalSnapshot;
     }
 
+    private static FcState EnsureFingerprint(FcState fc)
+        => fc.DataFingerprint.IsEmpty ? fc with { DataFingerprint = FcDataFingerprint.Create(fc) } : fc;
+
+    private static bool CanReuseCompletedResult(
+        FcState fc,
+        int targetRank,
+        DateTimeOffset now,
+        EtaPlannerSnapshot? previousSnapshot,
+        IReadOnlyDictionary<string, FcState> previousStates,
+        IReadOnlyDictionary<string, EtaResult> previousResults,
+        IReadOnlyDictionary<string, FcCalculationProgress> previousProgress,
+        out EtaResult? previousResult,
+        out bool awaitingTracker)
+    {
+        previousResult = null;
+        awaitingTracker = false;
+        if (previousSnapshot is null ||
+            !previousStates.TryGetValue(fc.FcIdKey, out var previousState) ||
+            previousState.DataFingerprint != fc.DataFingerprint ||
+            !previousResults.TryGetValue(fc.FcIdKey, out previousResult) ||
+            !previousResult.IsComplete)
+        {
+            return false;
+        }
+
+        var wasAwaitingTracker = previousProgress.TryGetValue(fc.FcIdKey, out var oldProgress) &&
+                                 oldProgress.Status == FcCalculationStatus.AwaitingTrackerUpdate;
+        if (oldProgress is not null &&
+            oldProgress.Status is not (FcCalculationStatus.Complete or FcCalculationStatus.Reused or FcCalculationStatus.AwaitingTrackerUpdate))
+        {
+            previousResult = null;
+            return false;
+        }
+
+        awaitingTracker = wasAwaitingTracker || fc.Submarines.Any(submarine =>
+            submarine.Rank < targetRank &&
+            submarine.CurrentRoute.Count > 0 &&
+            submarine.ReturnAtUtc > previousSnapshot.GeneratedAtUtc &&
+            submarine.ReturnAtUtc <= now);
+        if (awaitingTracker)
+            return true;
+
+        var wasAlreadyIdle = previousState.Submarines.Any(submarine =>
+            submarine.Rank < targetRank && submarine.ReturnAtUtc <= previousSnapshot.GeneratedAtUtc);
+        if (wasAlreadyIdle)
+        {
+            previousResult = null;
+            return false;
+        }
+
+        return true;
+    }
+
     private static bool IsTimedOut(DateTimeOffset? deadlineUtc)
         => deadlineUtc is not null && DateTimeOffset.UtcNow >= deadlineUtc.Value;
 
@@ -156,10 +296,18 @@ public sealed class EtaPlannerService(
         => fc.Submarines.Count > 0 && fc.Submarines.All(submarine => submarine.Rank >= targetRank);
 }
 
+public enum ForecastRefreshMode
+{
+    Incremental,
+    Full,
+}
+
 public enum FcCalculationStatus
 {
     Queued,
     Calculating,
+    Reused,
+    AwaitingTrackerUpdate,
     Complete,
     Partial,
     TimedOut,
@@ -189,4 +337,8 @@ public sealed record EtaPlannerSnapshot(
     public IReadOnlyList<FcCalculationProgress> FcProgress { get; init; } = [];
 
     public bool IsRunning { get; init; }
+
+    public CalculationSettingsFingerprint CalculationSettingsFingerprint { get; init; }
+
+    public ForecastRefreshMode RefreshMode { get; init; } = ForecastRefreshMode.Full;
 }

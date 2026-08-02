@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.3.0
+
+- Added deterministic semantic fingerprints for each FC and its submarines.
+- Reused unchanged complete forecasts when refreshing after SubmarineTracker database changes.
+- Added up-to-date and waiting-for-SubmarineTracker states while preserving previous results.
+- Kept explicit UI and `/seta refresh` actions as full recalculations.
+
 ## 0.4.2.0
 
 - Added an MIT project license, complete SubmarineTracker notice, route-data provenance, and AI-use disclosure.

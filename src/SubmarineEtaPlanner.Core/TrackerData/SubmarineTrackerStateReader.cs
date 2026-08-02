@@ -27,16 +27,21 @@ public sealed class SubmarineTrackerStateReader : ISubmarineTrackerStateReader
 
         try
         {
-            var fcs = ReadFreeCompanies(dbPath, warnings);
-            var subs = ReadSubmarines(dbPath, settings, warnings)
+            using var connection = OpenReadOnly(dbPath);
+            using var transaction = connection.BeginTransaction();
+            var fcs = ReadFreeCompanies(connection, transaction, warnings);
+            var subs = ReadSubmarines(connection, transaction, settings, warnings)
                 .GroupBy(s => Convert.ToHexString(s.FcId))
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<SubmarineState>)g.OrderBy(s => s.Name).ToArray());
 
-            return fcs.Select(fc =>
+            var states = fcs.Select(fc =>
             {
                 subs.TryGetValue(fc.FcIdKey, out var fcSubs);
-                return fc with { Submarines = fcSubs ?? [] };
+                var complete = fc with { Submarines = fcSubs ?? [] };
+                return complete with { DataFingerprint = FcDataFingerprint.Create(complete) };
             }).OrderBy(fc => fc.DisplayName).ToArray();
+            transaction.Commit();
+            return states;
         }
         catch (Exception ex)
         {
@@ -54,10 +59,13 @@ public sealed class SubmarineTrackerStateReader : ISubmarineTrackerStateReader
         return Path.Combine(appData, "XIVLauncher", "pluginConfigs", "SubmarineTracker", "submarine-sqlite.db");
     }
 
-    private static IReadOnlyList<FcState> ReadFreeCompanies(string dbPath, ICollection<string> warnings)
+    private static IReadOnlyList<FcState> ReadFreeCompanies(
+        SQLiteConnection connection,
+        SQLiteTransaction transaction,
+        ICollection<string> warnings)
     {
-        using var connection = OpenReadOnly(dbPath);
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = "SELECT FreeCompanyId, FreeCompanyTag, World, UnlockedSectors, ExploredSectors FROM freecompany";
 
         using var reader = command.ExecuteReader();
@@ -86,10 +94,14 @@ public sealed class SubmarineTrackerStateReader : ISubmarineTrackerStateReader
         return fcs;
     }
 
-    private static IReadOnlyList<SubmarineState> ReadSubmarines(string dbPath, EtaSettings settings, ICollection<string> warnings)
+    private static IReadOnlyList<SubmarineState> ReadSubmarines(
+        SQLiteConnection connection,
+        SQLiteTransaction transaction,
+        EtaSettings settings,
+        ICollection<string> warnings)
     {
-        using var connection = OpenReadOnly(dbPath);
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             SELECT FreeCompanyId, SubmarineId, Return, Name, Rank, Route, Hull, Stern, Bow, Bridge, CExp, NExp
             FROM submarine

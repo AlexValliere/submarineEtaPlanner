@@ -35,6 +35,16 @@ public interface IPlannerDataDiagnostics
     IReadOnlyList<string> GetPlannerDataWarnings();
 }
 
+public interface IEtaSimulator
+{
+    EtaResult Simulate(
+        FcState fc,
+        EtaSettings settings,
+        DateTimeOffset now,
+        DateTimeOffset? deadlineUtc,
+        CancellationToken cancellationToken);
+}
+
 public sealed record SubmarineBuild(string Code, int Rank, int Surveillance, int Retrieval, int Favor, int Range, int Speed);
 
 public sealed record RouteCandidate(

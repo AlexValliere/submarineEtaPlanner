@@ -45,7 +45,7 @@ public sealed partial class PlannerWindow : Window
     private SubmarineTrackerDataFingerprint? refreshDataFingerprint;
     private DateTimeOffset nextTrackerDataCheckAtUtc = DateTimeOffset.MinValue;
     private bool trackerDataChanged;
-    private bool refreshPending;
+    private ForecastRefreshMode? pendingRefreshMode;
     private string lastError = string.Empty;
     private string fcSearch = string.Empty;
     private PlannerPage currentPage = PlannerPage.Dashboard;
@@ -168,7 +168,7 @@ public sealed partial class PlannerWindow : Window
         {
             if (refreshing)
             {
-                this.refreshPending = false;
+                this.pendingRefreshMode = null;
                 this.refreshCancellation?.Cancel();
             }
             else
@@ -279,19 +279,22 @@ public sealed partial class PlannerWindow : Window
         QueueRefresh();
     }
 
-    private void QueueRefresh()
+    private void QueueRefresh(ForecastRefreshMode mode = ForecastRefreshMode.Full)
     {
+        if (this.snapshot is null)
+            mode = ForecastRefreshMode.Full;
+
         if (this.refreshTask is { IsCompleted: false })
         {
-            this.refreshPending = true;
+            this.pendingRefreshMode = StrongerRefreshMode(this.pendingRefreshMode, mode);
             this.refreshCancellation?.Cancel();
             return;
         }
 
-        StartRefresh();
+        StartRefresh(mode);
     }
 
-    private void StartRefresh()
+    private void StartRefresh(ForecastRefreshMode mode = ForecastRefreshMode.Full)
     {
         if (!IsOpen)
             return;
@@ -306,12 +309,13 @@ public sealed partial class PlannerWindow : Window
             return;
         }
 
-        this.refreshPending = false;
+        this.pendingRefreshMode = null;
         this.refreshCancellation?.Dispose();
         this.refreshCancellation = new CancellationTokenSource();
         var cancellationToken = this.refreshCancellation.Token;
         this.refreshStartedAtUtc = DateTimeOffset.UtcNow;
         this.refreshBaseSnapshot = this.snapshot;
+        var previousSnapshot = this.refreshBaseSnapshot;
         while (this.refreshProgress.TryDequeue(out _))
         {
         }
@@ -326,7 +330,9 @@ public sealed partial class PlannerWindow : Window
                 settings,
                 now,
                 cancellationToken,
-                progress => this.refreshProgress.Enqueue(progress));
+                progress => this.refreshProgress.Enqueue(progress),
+                previousSnapshot,
+                mode);
             Plugin.Log.Information(
                 "Submarine ETA calculation completed in {ElapsedMilliseconds} ms for {FreeCompanyCount} FC(s).",
                 stopwatch.ElapsedMilliseconds,
@@ -359,7 +365,7 @@ public sealed partial class PlannerWindow : Window
                 this.snapshot = this.refreshBaseSnapshot;
             else if (this.snapshot is not null)
                 this.snapshot = MarkSnapshotCancelled(this.snapshot);
-            if (!this.refreshPending)
+            if (this.pendingRefreshMode is null)
                 this.lastError = "Refresh cancelled. Existing results were kept.";
         }
         catch (Exception ex)
@@ -372,8 +378,8 @@ public sealed partial class PlannerWindow : Window
 
         this.refreshBaseSnapshot = null;
 
-        if (this.refreshPending && IsOpen)
-            StartRefresh();
+        if (this.pendingRefreshMode is { } pendingMode && IsOpen)
+            StartRefresh(pendingMode);
     }
 
     private void ApplyRefreshProgressUpdates()
@@ -438,14 +444,19 @@ public sealed partial class PlannerWindow : Window
     {
         if (this.snapshot is null)
         {
-            QueueRefresh();
+            QueueRefresh(ForecastRefreshMode.Full);
             return;
         }
 
         CheckForTrackerDataChanges(force: true);
         if (this.trackerDataChanged)
-            QueueRefresh();
+            QueueRefresh(ForecastRefreshMode.Incremental);
     }
+
+    private static ForecastRefreshMode StrongerRefreshMode(
+        ForecastRefreshMode? pending,
+        ForecastRefreshMode requested)
+        => pending is null || (int)requested > (int)pending.Value ? requested : pending.Value;
 
     private void CheckForTrackerDataChanges(bool force = false)
     {
@@ -463,12 +474,32 @@ public sealed partial class PlannerWindow : Window
         try
         {
             var current = this.plannerService.GetDataFingerprint(this.configuration.Settings);
-            this.trackerDataChanged = this.snapshotDataFingerprint is null || current != this.snapshotDataFingerprint;
+            this.trackerDataChanged = this.snapshotDataFingerprint is null ||
+                                      current != this.snapshotDataFingerprint ||
+                                      HasCrossedVoyageReturnBoundary(this.snapshot, now, this.configuration.Settings.TargetRank);
         }
         catch (Exception ex)
         {
             Plugin.Log.Warning(ex, "Could not check whether SubmarineTracker data changed.");
         }
+    }
+
+    private static bool HasCrossedVoyageReturnBoundary(
+        EtaPlannerSnapshot snapshot,
+        DateTimeOffset now,
+        int targetRank)
+    {
+        var awaitingFcIds = snapshot.FcProgress
+            .Where(progress => progress.Status == FcCalculationStatus.AwaitingTrackerUpdate)
+            .Select(progress => progress.FcIdKey)
+            .ToHashSet();
+        return snapshot.FreeCompanies.Any(fc =>
+            !awaitingFcIds.Contains(fc.FcIdKey) &&
+            fc.Submarines.Any(submarine =>
+                submarine.Rank < targetRank &&
+                submarine.CurrentRoute.Count > 0 &&
+                submarine.ReturnAtUtc > snapshot.GeneratedAtUtc &&
+                submarine.ReturnAtUtc <= now));
     }
 
     private static EtaSettings CloneSettings(EtaSettings settings) => new()
