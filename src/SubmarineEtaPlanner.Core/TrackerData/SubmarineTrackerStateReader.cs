@@ -137,7 +137,6 @@ public sealed class SubmarineTrackerStateReader : ISubmarineTrackerStateReader
         {
             DataSource = dbPath,
             ReadOnly = true,
-            JournalMode = SQLiteJournalModeEnum.Wal,
         };
 
         var connection = new SQLiteConnection(builder.ToString());

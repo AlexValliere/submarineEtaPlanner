@@ -5,7 +5,8 @@ namespace SubmarineEtaPlanner.Planner;
 public sealed class EtaPlannerService(
     ISubmarineTrackerStateReader stateReader,
     EtaSimulator simulator,
-    IRouteSearchDiagnostics? routeSearchDiagnostics = null)
+    IRouteSearchDiagnostics? routeSearchDiagnostics = null,
+    IPlannerDataDiagnostics? dataDiagnostics = null)
 {
     public SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings)
         => stateReader.GetDataFingerprint(settings);
@@ -25,6 +26,8 @@ public sealed class EtaPlannerService(
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         routeSearchDiagnostics?.ResetRouteSearchMetrics();
         var warnings = new List<string>();
+        if (dataDiagnostics is not null)
+            warnings.AddRange(dataDiagnostics.GetPlannerDataWarnings());
         var fcStates = stateReader.Read(settings, warnings);
         var results = new Dictionary<string, EtaResult>();
         var progress = fcStates.ToDictionary(

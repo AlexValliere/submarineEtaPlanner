@@ -21,7 +21,7 @@ public sealed class EtaPlannerProgressTests
         [
             CreateFc([2], "BETA", 2),
             CreateFc([1], "ALPHA", 1),
-        ]), simulator);
+        ]), simulator, dataDiagnostics: new StubDataDiagnostics(["Catalog compatibility notice."]));
         var settings = EtaSettings.CreateDefault() with
         {
             TargetRank = 1,
@@ -40,6 +40,7 @@ public sealed class EtaPlannerProgressTests
         Assert.Equal(2, initial.FreeCompanies.Count);
         Assert.Empty(initial.Results);
         Assert.All(initial.FcProgress, progress => Assert.Equal(FcCalculationStatus.Queued, progress.Status));
+        Assert.Contains("Catalog compatibility notice.", initial.Warnings);
         Assert.All(snapshots, snapshot => Assert.InRange(
             snapshot.FcProgress.Count(progress => progress.Status == FcCalculationStatus.Calculating),
             0,
@@ -74,5 +75,10 @@ public sealed class EtaPlannerProgressTests
             => SubmarineTrackerDataFingerprint.Capture("test.db");
 
         public IReadOnlyList<FcState> Read(EtaSettings settings, ICollection<string> warnings) => freeCompanies;
+    }
+
+    private sealed class StubDataDiagnostics(IReadOnlyList<string> warnings) : IPlannerDataDiagnostics
+    {
+        public IReadOnlyList<string> GetPlannerDataWarnings() => warnings;
     }
 }

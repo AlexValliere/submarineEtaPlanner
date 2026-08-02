@@ -30,6 +30,11 @@ public interface IRouteSearchDiagnostics
     RouteSearchMetrics GetRouteSearchMetrics();
 }
 
+public interface IPlannerDataDiagnostics
+{
+    IReadOnlyList<string> GetPlannerDataWarnings();
+}
+
 public sealed record SubmarineBuild(string Code, int Rank, int Surveillance, int Retrieval, int Favor, int Range, int Speed);
 
 public sealed record RouteCandidate(

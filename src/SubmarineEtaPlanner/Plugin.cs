@@ -47,7 +47,11 @@ public sealed class Plugin : IDalamudPlugin
         var unlockGraph = new RouteUnlockGraph(catalog);
         var routeSelector = new RouteSelector(catalog, unlockGraph);
         var simulator = new EtaSimulator(buildResolver, unlockGraph, routeSelector, catalog);
-        var service = new EtaPlannerService(stateReader, simulator, catalog as IRouteSearchDiagnostics);
+        var service = new EtaPlannerService(
+            stateReader,
+            simulator,
+            catalog as IRouteSearchDiagnostics,
+            catalog as IPlannerDataDiagnostics);
 
         this.plannerWindow = new PlannerWindow(
             Configuration,

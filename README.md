@@ -1,6 +1,7 @@
 # Submarine ETA Planner
 
 [![Build](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml/badge.svg)](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-teal.svg)](LICENSE)
 
 Submarine ETA Planner is a Dalamud plugin that only forecasts how long tracked Free Company submarines need to reach a target rank you choose.
 
@@ -64,6 +65,12 @@ The default discovery chance is **33% per eligible source visit**. This is a com
 
 The plugin performs no runtime web requests. It does not learn from, upload, or otherwise transmit SubmarineTracker loot history.
 
+## Transparency
+
+The project is licensed under the [MIT License](LICENSE). SubmarineTracker attribution, its complete MIT notice, and the exact provenance of the bundled route data are recorded in [Third Party Notices](THIRD_PARTY_NOTICES.md) and [Route Data Provenance](docs/ROUTE_DATA_PROVENANCE.md).
+
+Development used substantial AI assistance under human direction and in-game validation. The installer icon was generated with AI image tooling. See [AI Usage Disclosure](AI_USAGE.md) for the complete declaration.
+
 ## Chat commands
 
 - `/seta` toggles the dashboard.
@@ -94,6 +101,10 @@ dotnet restore
 dotnet test
 dotnet build -c Release
 ```
+
+Public release verification is documented in [Public Release Checklist](docs/PUBLIC_RELEASE_CHECKLIST.md). The official Dalamud testing-track manifest and disclosure text are prepared in [D17 Submission Template](docs/D17_SUBMISSION.md).
+
+Release history is available in the [Changelog](CHANGELOG.md).
 
 Dalamud API 15 currently targets .NET 10. If your machine only has the .NET 9 SDK, validate the planner core with:
 

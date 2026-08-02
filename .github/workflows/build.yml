@@ -38,6 +38,10 @@ jobs:
       - name: Test
         run: dotnet test tests/SubmarineEtaPlanner.Tests/SubmarineEtaPlanner.Tests.csproj --configuration Release --no-restore
 
+      - name: Verify bundled route data
+        shell: pwsh
+        run: ./tools/Verify-RouteData.ps1
+
       - name: Build
         run: dotnet build src/SubmarineEtaPlanner/SubmarineEtaPlanner.csproj --configuration Release --no-restore
 
@@ -55,8 +59,14 @@ jobs:
             Copy-Item "$out/*.dll" $packageDir
             Copy-Item "$out/SubmarineEtaPlanner.deps.json" $packageDir
             Copy-Item "$out/SubmarineEtaPlanner.json" $packageDir
+            Copy-Item "$out/CalculatedData.msgpack" $packageDir
             Compress-Archive -Path "$packageDir/*" -DestinationPath "artifacts/latest.zip" -Force
           }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SubmarineEtaPlanner-${{ github.sha }}
+          path: artifacts/latest.zip
 
       - name: Stage Pages
         shell: pwsh
@@ -65,7 +75,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "public/images" | Out-Null
           Copy-Item repo.json public/repo.json
           Copy-Item images/icon.png public/images/icon.png
-          Copy-Item images/icon.png public/images/icon-0.4.1.0.png
+          Copy-Item images/icon.png public/images/icon-0.4.2.0.png
           Copy-Item artifacts/latest.zip public/SubmarineEtaPlanner/latest.zip
 
       - uses: actions/upload-pages-artifact@v3

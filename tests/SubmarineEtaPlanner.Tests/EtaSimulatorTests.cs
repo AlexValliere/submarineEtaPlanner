@@ -725,11 +725,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.4.1.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.4.2.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.1.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.2.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
+        Assert.Contains("installer icon was created with AI assistance", repoJson);
+        Assert.Contains("Public-release hardening", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -745,7 +747,30 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.1.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.2.0.png", workflow);
+        Assert.Contains("Copy-Item \"$out/CalculatedData.msgpack\" $packageDir", workflow);
+    }
+
+    [Fact]
+    public void PublicReleaseAssetsIncludeLicensesAndVerifiedRouteData()
+    {
+        var repositoryRoot = Path.GetDirectoryName(FindRepoJson())!;
+        var license = File.ReadAllText(Path.Combine(repositoryRoot, "LICENSE"));
+        var notices = File.ReadAllText(Path.Combine(repositoryRoot, "THIRD_PARTY_NOTICES.md"));
+        var aiDisclosure = File.ReadAllText(Path.Combine(repositoryRoot, "AI_USAGE.md"));
+        var routeData = File.ReadAllBytes(Path.Combine(
+            repositoryRoot,
+            "src",
+            "SubmarineEtaPlanner",
+            "CalculatedData.msgpack"));
+        var routeHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(routeData));
+
+        Assert.Contains("Copyright (c) 2026 Alex Vallière", license);
+        Assert.Contains("Permission is hereby granted", license);
+        Assert.Contains("Copyright (c) 2023 Infi", notices);
+        Assert.Contains("aa3b40ce3e7eb9c2db9b5ad4ce2cb489755d7a5a", notices);
+        Assert.Contains("Copilot", aiDisclosure);
+        Assert.Equal("24996254FAB3FFC4A74F1AFA2C9212732888A0C6387DAB026B75EA566B6D67FF", routeHash);
     }
 
     private static EtaSimulator CreateSimulator(ISubmarineCatalog? catalog = null)

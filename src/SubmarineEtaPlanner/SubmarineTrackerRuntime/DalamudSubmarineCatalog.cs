@@ -7,7 +7,7 @@ using SubmarineEtaPlanner.Planner;
 
 namespace SubmarineEtaPlanner.SubmarineTrackerRuntime;
 
-public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDiagnostics
+public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDiagnostics, IPlannerDataDiagnostics
 {
     private const int FixedVoyageTimeSeconds = 43200;
     private const int RouteSearchCacheLimit = 32768;
@@ -23,6 +23,7 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
     private readonly Dictionary<RouteSearchCacheKey, RouteCandidate?> routeSearchCache = [];
     private readonly Dictionary<int, long[]> durationTicksBySpeed = [];
     private readonly Dictionary<ExpProfile, uint[]> sectorExpByProfile = [];
+    private readonly IReadOnlyList<string> plannerDataWarnings;
     private long routeQueries;
     private long routeCacheHits;
     private long routesEvaluated;
@@ -43,11 +44,16 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
         this.calculatedRoutes = LoadCalculatedRoutes(pluginDirectory);
         this.routeIndex = RouteCandidateIndex.Build(this.calculatedRoutes, this.sectorById);
         UnlockRules = BuildUnlockRules();
+        this.plannerDataWarnings = BuildPlannerDataWarnings();
+        foreach (var warning in this.plannerDataWarnings)
+            this.log.Warning(warning);
     }
 
     public IReadOnlyList<UnlockRule> UnlockRules { get; }
 
     public int MaximumRank => checked((int)this.lastRank);
+
+    public IReadOnlyList<string> GetPlannerDataWarnings() => this.plannerDataWarnings;
 
     public SubmarineBuild ResolveBuild(string buildCode, int rank)
     {
@@ -366,6 +372,54 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
         }
 
         return rules;
+    }
+
+    private IReadOnlyList<string> BuildPlannerDataWarnings()
+    {
+        var warnings = new List<string>();
+        if (this.calculatedRoutes.Maps.Count == 0 || this.routeIndex.RouteCount == 0)
+        {
+            warnings.Add("Bundled submarine route data could not be loaded. Route forecasts are incomplete.");
+            return warnings;
+        }
+
+        var liveDestinations = this.sectorById.Values
+            .Where(sector => !sector.StartingPoint && sector.ExpReward != 0)
+            .Select(sector => sector.RowId)
+            .ToHashSet();
+        var cachedDestinations = this.calculatedRoutes.Maps.Values
+            .SelectMany(routes => routes)
+            .SelectMany(route => route.Sectors)
+            .ToHashSet();
+        var missingRouteDestinations = liveDestinations
+            .Except(cachedDestinations)
+            .Order()
+            .ToArray();
+        if (missingRouteDestinations.Length > 0)
+        {
+            warnings.Add(
+                $"Bundled route data is older than the live game data and is missing " +
+                $"{missingRouteDestinations.Length} destination(s): {FormatSectorIds(missingRouteDestinations)}. " +
+                "Forecasts involving those destinations are incomplete until the route data is updated.");
+        }
+
+        var cachedMaximum = cachedDestinations.Count == 0 ? 0 : cachedDestinations.Max();
+        var unlockMaximum = UnlockRules.Count == 0 ? 0 : UnlockRules.Max(rule => rule.UnlocksPoint);
+        if (cachedMaximum > unlockMaximum)
+        {
+            warnings.Add(
+                $"Bundled unlock rules end at sector {unlockMaximum}, but route data reaches sector {cachedMaximum}. " +
+                "Forecasts involving newer unlocks are incomplete until the unlock catalog is updated.");
+        }
+
+        return warnings;
+    }
+
+    private static string FormatSectorIds(IReadOnlyList<uint> sectorIds)
+    {
+        const int displayLimit = 8;
+        var displayed = string.Join(", ", sectorIds.Take(displayLimit));
+        return sectorIds.Count <= displayLimit ? displayed : $"{displayed}, …";
     }
 
     private uint FindVoyageStart(uint sector)
