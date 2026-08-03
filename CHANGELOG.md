@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.9.0
+
+- Added practical first-install defaults centered on target rank 90 and realistic turnaround timing.
+- Added a confirmed all-tabs reset that stages defaults for review before Apply & refresh.
+- Preserved every saved setting for existing users during upgrade.
+
 ## 0.4.8.0
 
 - Added exact ranked route search to reuse build-specific route scoring across forecast trials.

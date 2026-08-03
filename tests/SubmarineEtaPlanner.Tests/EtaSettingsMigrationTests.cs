@@ -10,14 +10,72 @@ public sealed class EtaSettingsMigrationTests
     {
         var settings = EtaSettings.CreateDefault();
 
+        Assert.Equal(90, settings.TargetRank);
         Assert.Equal(ExpMode.Average, settings.ExpMode);
+        Assert.Equal(120, settings.CollectionDelayMinutes);
+        Assert.Equal(SimulationMode.Fleet, settings.SimulationMode);
         Assert.Equal(RouteGoal.UnlockLevelingRoutesThenLevel, settings.RouteGoal);
         Assert.Equal(RouteGoal.UnlockLevelingRoutesThenLevel, settings.GetEffectiveRouteGoal());
         Assert.Equal(EtaModel.PracticalLeveling, settings.EtaModel);
         Assert.Equal(0, settings.PracticalMaxVoyageHours);
+        Assert.Equal(0, settings.DurationLimitHours);
+        Assert.True(settings.PrioritizeSubSlots);
         Assert.Equal(TimeoutResultBehavior.KeepLastComplete, settings.TimeoutResultBehavior);
+        Assert.True(settings.ShowRouteDiagnostics);
         Assert.True(settings.GetEffectiveOptimizeExpPerHour());
         Assert.Equal(0.33, settings.UnlockSuccessProbability, 2);
+        Assert.Equal(20, settings.CalculationTimeLimitSeconds);
+        Assert.Equal(500, settings.SimulationSafetyVoyageCapPerSubmarine);
+        Assert.Equal(
+            [
+                new BuildProfileStep(1, 14, "SSSS"),
+                new BuildProfileStep(15, 24, "SSUS"),
+                new BuildProfileStep(25, 999, "SSUW"),
+            ],
+            settings.BuildProfile);
+        Assert.Empty(settings.ManualCurrentRouteOverrides);
+        Assert.Null(settings.SubmarineTrackerDatabasePathOverride);
+    }
+
+    [Fact]
+    public void CurrentVersionMigrationPreservesExistingUserSettings()
+    {
+        var version = EtaSettingsMigration.CurrentVersion;
+        var settings = EtaSettings.CreateDefault() with
+        {
+            TargetRank = 114,
+            CollectionDelayMinutes = 15,
+            SimulationMode = SimulationMode.OptimisticPerSub,
+            EtaModel = EtaModel.ExactRouteSearch,
+            PracticalMaxVoyageHours = 48,
+            PrioritizeSubSlots = false,
+            CalculationTimeLimitSeconds = 20,
+            SimulationSafetyVoyageCapPerSubmarine = 900,
+            ShowRouteDiagnostics = false,
+            TimeoutResultBehavior = TimeoutResultBehavior.ShowPartial,
+            UnlockSuccessProbability = 0.5,
+            BuildProfile = [new BuildProfileStep(1, 999, "CCCC")],
+            SubmarineTrackerDatabasePathOverride = "custom.db",
+            ManualCurrentRouteOverrides = new Dictionary<string, List<uint>> { ["sub"] = [1, 2, 3] },
+        };
+
+        var changed = EtaSettingsMigration.Migrate(settings, ref version);
+
+        Assert.False(changed);
+        Assert.Equal(114, settings.TargetRank);
+        Assert.Equal(15, settings.CollectionDelayMinutes);
+        Assert.Equal(SimulationMode.OptimisticPerSub, settings.SimulationMode);
+        Assert.Equal(EtaModel.ExactRouteSearch, settings.EtaModel);
+        Assert.Equal(48, settings.PracticalMaxVoyageHours);
+        Assert.False(settings.PrioritizeSubSlots);
+        Assert.Equal(20, settings.CalculationTimeLimitSeconds);
+        Assert.Equal(900, settings.SimulationSafetyVoyageCapPerSubmarine);
+        Assert.False(settings.ShowRouteDiagnostics);
+        Assert.Equal(TimeoutResultBehavior.ShowPartial, settings.TimeoutResultBehavior);
+        Assert.Equal(0.5, settings.UnlockSuccessProbability);
+        Assert.Equal([new BuildProfileStep(1, 999, "CCCC")], settings.BuildProfile);
+        Assert.Equal("custom.db", settings.SubmarineTrackerDatabasePathOverride);
+        Assert.Equal([1u, 2u, 3u], settings.ManualCurrentRouteOverrides["sub"]);
     }
 
     [Fact]

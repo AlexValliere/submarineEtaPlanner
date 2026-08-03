@@ -233,24 +233,48 @@ public sealed partial class PlannerWindow
 
     private void DrawDisplaySettings()
     {
-        BeginSettingsCard("display-card", "Result presentation", "Display preferences save immediately and do not restart the forecast.");
+        var previewingReset = this.resetDefaultsPreviewActive;
+        BeginSettingsCard(
+            "display-card",
+            "Result presentation",
+            previewingReset
+                ? "Review the staged display defaults. They will be saved with Apply & refresh."
+                : "Display preferences save immediately and do not restart the forecast.");
 
-        var showDiagnostics = this.configuration.Settings.ShowRouteDiagnostics;
+        var showDiagnostics = previewingReset
+            ? this.draftSettings.ShowRouteDiagnostics
+            : this.configuration.Settings.ShowRouteDiagnostics;
         SettingLabel("Route diagnostics", "Show per-voyage duration, EXP, and EXP/hour columns in expanded forecasts.");
         if (ImGui.Checkbox("Show route diagnostics##show-diagnostics", ref showDiagnostics))
         {
-            this.configuration.Settings.ShowRouteDiagnostics = showDiagnostics;
             this.draftSettings.ShowRouteDiagnostics = showDiagnostics;
-            this.saveConfiguration();
+            if (previewingReset)
+            {
+                this.draftDirty = true;
+            }
+            else
+            {
+                this.configuration.Settings.ShowRouteDiagnostics = showDiagnostics;
+                this.saveConfiguration();
+            }
         }
 
-        var timeoutBehavior = this.configuration.Settings.TimeoutResultBehavior;
+        var timeoutBehavior = previewingReset
+            ? this.draftSettings.TimeoutResultBehavior
+            : this.configuration.Settings.TimeoutResultBehavior;
         SettingLabel("Timeout result", "Keep the last complete forecast or replace it with the newest partial result.");
         if (DrawEnumCombo("##timeout-behavior", TimeoutBehaviorLabels, ref timeoutBehavior))
         {
-            this.configuration.Settings.TimeoutResultBehavior = timeoutBehavior;
             this.draftSettings.TimeoutResultBehavior = timeoutBehavior;
-            this.saveConfiguration();
+            if (previewingReset)
+            {
+                this.draftDirty = true;
+            }
+            else
+            {
+                this.configuration.Settings.TimeoutResultBehavior = timeoutBehavior;
+                this.saveConfiguration();
+            }
         }
 
         EndSettingsCard();
@@ -282,21 +306,53 @@ public sealed partial class PlannerWindow
             {
                 this.draftSettings = CloneSettings(this.configuration.Settings);
                 this.draftDirty = false;
+                this.resetDefaultsPreviewActive = false;
             }
             if (actionsDisabled)
                 ImGui.EndDisabled();
 
             ImGui.SameLine();
             if (PlannerUi.IconButtonWithText("reset-settings", FontAwesomeIcon.SyncAlt, "Reset defaults"))
-            {
-                this.draftSettings = EtaSettings.CreateDefault();
-                this.draftSettings.ShowRouteDiagnostics = this.configuration.Settings.ShowRouteDiagnostics;
-                this.draftSettings.TimeoutResultBehavior = this.configuration.Settings.TimeoutResultBehavior;
-                this.draftDirty = true;
-            }
+                ImGui.OpenPopup("Reset all settings?###reset-all-settings");
+
+            DrawResetDefaultsModal();
         }
         ImGui.EndChild();
         ImGui.PopStyleColor();
+    }
+
+    private void DrawResetDefaultsModal()
+    {
+        ImGui.SetNextWindowSize(new Vector2(520f * ImGuiHelpers.GlobalScale, 0), ImGuiCond.Appearing);
+        if (!ImGui.BeginPopupModal(
+                "Reset all settings?###reset-all-settings",
+                ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings))
+        {
+            return;
+        }
+
+        ImGui.TextWrapped(
+            "This loads defaults for Simulation, Routes, Limits, Data Source, Build Profile, and Display—not only the page currently shown.");
+        ImGui.Spacing();
+        ImGui.TextColored(PlannerUi.Amber, "Unapplied edits and custom data-source or route overrides will be replaced in the draft.");
+        ImGui.TextWrapped("Nothing is saved or recalculated until you select Apply & refresh. You can inspect every tab or use Revert first.");
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        if (PlannerUi.IconButtonWithText("cancel-reset-settings", FontAwesomeIcon.Times, "Cancel"))
+            ImGui.CloseCurrentPopup();
+        ImGui.SetItemDefaultFocus();
+        ImGui.SameLine();
+        if (PlannerUi.IconButtonWithText("confirm-reset-settings", FontAwesomeIcon.SyncAlt, "Load defaults for review"))
+        {
+            this.draftSettings = EtaSettings.CreateDefault();
+            this.draftDirty = true;
+            this.resetDefaultsPreviewActive = true;
+            ImGui.CloseCurrentPopup();
+        }
+
+        ImGui.EndPopup();
     }
 
     private static bool DrawPracticalDuration(EtaSettings settings)

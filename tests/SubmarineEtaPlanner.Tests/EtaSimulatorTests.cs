@@ -78,7 +78,12 @@ public sealed class EtaSimulatorTests
         var catalog = new CompatSubmarineCatalog();
         var unlockGraph = new RouteUnlockGraph(catalog);
         var selector = new RouteSelector(catalog, unlockGraph);
-        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet, UnlockSuccessProbability = 1.0 };
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.Fleet,
+            UnlockSuccessProbability = 1.0,
+            CollectionDelayMinutes = 0,
+        };
         var unlocked = Enumerable.Range(1, 15).Select(i => (uint)i).ToHashSet();
         var state = new UnlockState(new HashSet<uint>(unlocked), new HashSet<uint>(unlocked), [16], []);
         var sub = CreateSub(rank: 20);
@@ -216,7 +221,12 @@ public sealed class EtaSimulatorTests
     {
         var catalog = new ScriptedCatalog([new UnlockRule(7, 8, 2)]);
         var simulator = CreateSimulator(catalog);
-        var settings = EtaSettings.CreateDefault() with { SimulationMode = SimulationMode.Fleet, UnlockSuccessProbability = 1.0 };
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.Fleet,
+            UnlockSuccessProbability = 1.0,
+            CollectionDelayMinutes = 0,
+        };
         settings.TargetRank = 2;
         var returnAt = DateTimeOffset.UnixEpoch.AddHours(6);
         var sub = CreateSub(rank: 1) with
@@ -382,6 +392,7 @@ public sealed class EtaSimulatorTests
         {
             SimulationMode = SimulationMode.OptimisticPerSub,
             EtaModel = EtaModel.PracticalLeveling,
+            CollectionDelayMinutes = 0,
         };
         settings.TargetRank = 2;
         var fc = CreateFc(new HashSet<uint>([99]), CreateSub(rank: 1) with { NextLevelExp = 100 });
@@ -405,6 +416,7 @@ public sealed class EtaSimulatorTests
         {
             SimulationMode = SimulationMode.Fleet,
             MaxPreviewVoyagesPerSubmarine = 2,
+            CollectionDelayMinutes = 0,
         };
         settings.TargetRank = 5;
         var fc = CreateFc(new HashSet<uint>([99]), CreateSub(rank: 1) with { NextLevelExp = 100 });
@@ -428,6 +440,7 @@ public sealed class EtaSimulatorTests
             SimulationMode = SimulationMode.OptimisticPerSub,
             EtaModel = EtaModel.ExactRouteSearch,
             MaxPreviewVoyagesPerSubmarine = 2,
+            CollectionDelayMinutes = 0,
         };
         settings.TargetRank = 5;
         var fc = CreateFc(new HashSet<uint>([99]), CreateSub(rank: 1) with { NextLevelExp = 100 });
@@ -979,13 +992,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.4.8.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.4.9.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.8.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.9.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("exact ranked route search", repoJson);
+        Assert.Contains("reviewable all-tabs reset", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -1001,7 +1014,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.8.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.9.0.png", workflow);
         Assert.Contains("Copy-Item \"$out/CalculatedData.msgpack\" $packageDir", workflow);
     }
 

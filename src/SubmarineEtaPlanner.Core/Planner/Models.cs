@@ -237,11 +237,11 @@ public sealed record EtaResult(
 
 public sealed record EtaSettings
 {
-    public int TargetRank { get; set; } = 114;
+    public int TargetRank { get; set; } = 90;
 
     public ExpMode ExpMode { get; set; } = ExpMode.Average;
 
-    public int CollectionDelayMinutes { get; set; } = 0;
+    public int CollectionDelayMinutes { get; set; } = 120;
 
     public SimulationMode SimulationMode { get; set; } = SimulationMode.Fleet;
 

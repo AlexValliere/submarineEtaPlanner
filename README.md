@@ -47,6 +47,10 @@ Submarine ETA Planner requires [XIVLauncher](https://goatcorp.github.io/) and Da
 4. Select **Apply & refresh**.
 5. Return to the dashboard and expand an FC or submarine to inspect its forecast.
 
+Fresh installations start with target rank 90, Recommended leveling, FC-wide fleet simulation, a 120-minute collection delay, no voyage-duration cap, a 33% unlock chance, and a 20-second per-FC calculation limit. Existing saved settings are never replaced during an update.
+
+**Reset defaults** asks for confirmation before loading defaults across every settings category. The reset remains staged so you can inspect each tab, adjust values, select **Apply & refresh**, or use **Revert** without changing the saved configuration.
+
 ## Progressive calculations
 
 Forecasts run one FC at a time so a difficult fleet cannot consume the entire refresh deadline. The dashboard lists all tracked FCs immediately, marks each one as queued or calculating, and publishes completed results without waiting for the remaining FCs. FCs already at the target rank are handled first, followed by leveling FCs closest to the target.

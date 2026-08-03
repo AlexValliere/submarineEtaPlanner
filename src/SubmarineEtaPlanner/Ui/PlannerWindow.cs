@@ -51,6 +51,7 @@ public sealed partial class PlannerWindow : Window
     private PlannerPage currentPage = PlannerPage.Dashboard;
     private EtaSettings draftSettings;
     private bool draftDirty;
+    private bool resetDefaultsPreviewActive;
 
     internal PlannerWindow(
         Configuration configuration,
@@ -107,7 +108,10 @@ public sealed partial class PlannerWindow : Window
     public void OpenSettings()
     {
         if (!this.draftDirty)
+        {
             this.draftSettings = CloneSettings(this.configuration.Settings);
+            this.resetDefaultsPreviewActive = false;
+        }
         this.currentPage = PlannerPage.Simulation;
         SetOpen(true);
     }
@@ -187,12 +191,13 @@ public sealed partial class PlannerWindow : Window
         else
         {
             var displayPage = this.currentPage == PlannerPage.Display;
-            var actionBarHeight = displayPage ? 0f : 64f * ImGuiHelpers.GlobalScale;
+            var showActionBar = !displayPage || this.resetDefaultsPreviewActive;
+            var actionBarHeight = showActionBar ? 64f * ImGuiHelpers.GlobalScale : 0f;
             if (ImGui.BeginChild("settings-scroll", new Vector2(-1, -actionBarHeight), false))
                 DrawSettingsPage();
             ImGui.EndChild();
 
-            if (!displayPage)
+            if (showActionBar)
                 DrawSettingsActionBar();
         }
 
@@ -275,6 +280,7 @@ public sealed partial class PlannerWindow : Window
         this.configuration.Settings = CloneSettings(this.draftSettings);
         this.draftSettings = CloneSettings(this.configuration.Settings);
         this.draftDirty = false;
+        this.resetDefaultsPreviewActive = false;
         this.saveConfiguration();
         QueueRefresh();
     }
