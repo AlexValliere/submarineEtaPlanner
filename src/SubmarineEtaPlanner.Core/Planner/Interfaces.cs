@@ -130,4 +130,14 @@ public sealed record RouteSearchRequest(
 
 public sealed record RouteSearchResult(RouteCandidate? Route, int RoutesEvaluated, bool CacheHit);
 
-public sealed record RouteSearchMetrics(long Queries, long CacheHits, long RoutesEvaluated);
+public sealed record RouteSearchMetrics(
+    long Queries,
+    long CacheHits,
+    long RoutesEvaluated,
+    long RankingBuilds = 0,
+    long RankingCacheHits = 0,
+    long RankedRoutesEvaluated = 0,
+    long ExhaustiveRoutesEvaluated = 0,
+    long RankingBuildMilliseconds = 0,
+    long ExactCacheEvictions = 0,
+    long RankingCacheEvictions = 0);

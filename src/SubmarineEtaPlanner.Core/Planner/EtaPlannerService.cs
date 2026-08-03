@@ -143,7 +143,14 @@ public sealed class EtaPlannerService(
                     routeMetrics.RoutesEvaluated,
                     calculatedCount,
                     reusedCount,
-                    awaitingTrackerCount))
+                    awaitingTrackerCount,
+                    routeMetrics.RankingBuilds,
+                    routeMetrics.RankingCacheHits,
+                    routeMetrics.RankedRoutesEvaluated,
+                    routeMetrics.ExhaustiveRoutesEvaluated,
+                    routeMetrics.RankingBuildMilliseconds,
+                    routeMetrics.ExactCacheEvictions,
+                    routeMetrics.RankingCacheEvictions))
             {
                 FcProgress = progressArray,
                 IsRunning = isRunning,

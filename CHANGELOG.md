@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.8.0
+
+- Added exact ranked route search to reuse build-specific route scoring across forecast trials.
+- Replaced clear-all route caching with bounded LRU eviction and added detailed search diagnostics.
+- Reduced multi-sector unlock searches to the smallest applicable route bucket.
+
 ## 0.4.7.0
 
 - Changed voyage forecast route cells to compact sector codes.

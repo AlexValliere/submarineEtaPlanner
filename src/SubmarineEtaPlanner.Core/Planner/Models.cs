@@ -306,7 +306,14 @@ public sealed record CalculationMetrics(
     long RoutesEvaluated,
     int CalculatedFreeCompanies = 0,
     int ReusedFreeCompanies = 0,
-    int AwaitingTrackerFreeCompanies = 0);
+    int AwaitingTrackerFreeCompanies = 0,
+    long RouteRankingBuilds = 0,
+    long RouteRankingCacheHits = 0,
+    long RankedRoutesEvaluated = 0,
+    long ExhaustiveRoutesEvaluated = 0,
+    long RouteRankingBuildMilliseconds = 0,
+    long ExactRouteCacheEvictions = 0,
+    long RouteRankingCacheEvictions = 0);
 
 public sealed class ResultsViewState
 {

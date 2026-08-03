@@ -11,6 +11,7 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
 {
     private const int FixedVoyageTimeSeconds = 43200;
     private const int RouteSearchCacheLimit = 32768;
+    private const long RouteRankingCacheMaximumBytes = 64L * 1024 * 1024;
     private readonly ExcelSheet<SubmarineExploration> explorationSheet;
     private readonly ExcelSheet<SubmarinePart> partSheet;
     private readonly ExcelSheet<SubmarineRank> rankSheet;
@@ -20,13 +21,23 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
     private readonly RouteCandidateIndex routeIndex;
     private readonly IPluginLog log;
     private readonly uint lastRank;
-    private readonly Dictionary<RouteSearchCacheKey, RouteCandidate?> routeSearchCache = [];
+    private readonly BoundedLruCache<RouteSearchCacheKey, CachedRoute> routeSearchCache =
+        new(RouteSearchCacheLimit);
+    private readonly BoundedLruCache<RouteRankingKey, int[]> routeRankingCache =
+        new(int.MaxValue, RouteRankingCacheMaximumBytes, routeIds => (long)routeIds.Length * sizeof(int));
     private readonly Dictionary<int, long[]> durationTicksBySpeed = [];
     private readonly Dictionary<ExpProfile, uint[]> sectorExpByProfile = [];
     private readonly IReadOnlyList<string> plannerDataWarnings;
     private long routeQueries;
     private long routeCacheHits;
     private long routesEvaluated;
+    private long rankingBuilds;
+    private long rankingCacheHits;
+    private long rankedRoutesEvaluated;
+    private long exhaustiveRoutesEvaluated;
+    private long rankingBuildMilliseconds;
+    private long exactCacheEvictions;
+    private long rankingCacheEvictions;
 
     public DalamudSubmarineCatalog(IDataManager dataManager, string pluginDirectory, IPluginLog log)
     {
@@ -108,13 +119,61 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
         if (this.routeSearchCache.TryGetValue(cacheKey, out var cached))
         {
             this.routeCacheHits++;
-            return new RouteSearchResult(cached, 0, CacheHit: true);
+            return new RouteSearchResult(cached.Route, 0, CacheHit: true);
         }
 
         var settings = request.Settings;
         var build = request.Build;
         var durationLimitHours = settings.GetEffectiveDurationLimitHours();
         var optimizeExpPerHour = settings.GetEffectiveOptimizeExpPerHour();
+        SearchOutcome outcome;
+
+        if (request.MustIncludeMask.IsEmpty)
+        {
+            var rankingKey = RouteRankingKey.Create(request);
+            if (this.routeRankingCache.TryGetValue(rankingKey, out var rankedRouteIds))
+            {
+                this.rankingCacheHits++;
+                outcome = FindBestRanked(
+                    request,
+                    rankedRouteIds,
+                    durationLimitHours,
+                    optimizeExpPerHour);
+            }
+            else
+            {
+                outcome = FindBestExhaustive(
+                    request,
+                    durationLimitHours,
+                    optimizeExpPerHour,
+                    rankingKey);
+            }
+        }
+        else
+        {
+            outcome = FindBestExhaustive(
+                request,
+                durationLimitHours,
+                optimizeExpPerHour,
+                rankingKey: null);
+        }
+
+        if (outcome.Completed)
+            this.exactCacheEvictions += this.routeSearchCache.Set(cacheKey, new CachedRoute(outcome.Route));
+
+        return new RouteSearchResult(outcome.Route, outcome.Evaluated, CacheHit: false);
+    }
+
+    private SearchOutcome FindBestExhaustive(
+        RouteSearchRequest request,
+        int durationLimitHours,
+        bool optimizeExpPerHour,
+        RouteRankingKey? rankingKey)
+    {
+        var build = request.Build;
+        var settings = request.Settings;
+        var rankingValues = rankingKey is null ? null : new List<RouteRankValue>();
+        var rankingStopwatch = rankingKey is null ? null : System.Diagnostics.Stopwatch.StartNew();
         var completed = true;
         var evaluated = 0;
         RouteRecord? bestRecord = null;
@@ -135,16 +194,11 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
             }
 
             evaluated++;
-            if (route.MaxRequiredRank > build.Rank ||
-                !request.UnlockedMask.ContainsAll(route.Mask) ||
-                route.Mask.Intersects(request.ExcludedSectorMask))
+            if (route.MaxRequiredRank > build.Rank)
                 continue;
 
             var exp = GetCachedExp(route, build, settings.GetEffectiveExpMode());
             if (exp == 0)
-                continue;
-
-            if (!optimizeExpPerHour && durationLimitHours == 0 && exp < bestExp)
                 continue;
 
             var duration = GetCachedDuration(route, build);
@@ -157,8 +211,18 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
             var score = optimizeExpPerHour
                 ? exp / Math.Max(duration.TotalHours, 0.01)
                 : exp;
-            if (score < bestScore ||
-                (Math.Abs(score - bestScore) < 0.001 && bestRecord is not null && duration >= bestDuration))
+
+            rankingValues?.Add(new RouteRankValue(route.Id, score, duration.Ticks));
+
+            if (!request.UnlockedMask.ContainsAll(route.Mask) ||
+                route.Mask.Intersects(request.ExcludedSectorMask))
+            {
+                continue;
+            }
+
+            var candidateValue = new RouteRankValue(route.Id, score, duration.Ticks);
+            var bestValue = new RouteRankValue(bestRecord?.Id ?? -1, bestScore, bestDuration.Ticks);
+            if (bestRecord is not null && !ExactRouteRanking.IsBetter(candidateValue, bestValue))
             {
                 continue;
             }
@@ -170,26 +234,93 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
         }
 
         this.routesEvaluated += evaluated;
-        RouteCandidate? result = bestRecord is null
-            ? null
-            : new RouteCandidate(
-                bestRecord.Sectors,
-                bestExp,
-                bestDuration,
-                bestExp / Math.Max(bestDuration.TotalHours, 0.01),
-                GetUnlockTargets(bestRecord.Sectors, request.UnlockedPoints),
-                settings.EtaModel,
-                durationLimitHours > 0);
+        this.exhaustiveRoutesEvaluated += evaluated;
 
-        if (completed)
+        if (completed && rankingKey is not null)
         {
-            if (this.routeSearchCache.Count >= RouteSearchCacheLimit)
-                this.routeSearchCache.Clear();
-            this.routeSearchCache[cacheKey] = result;
+            request.CancellationToken.ThrowIfCancellationRequested();
+            var rankedRouteIds = ExactRouteRanking.Create(rankingValues!);
+            rankingStopwatch!.Stop();
+            request.CancellationToken.ThrowIfCancellationRequested();
+            if (IsTimedOut(request.DeadlineUtc))
+            {
+                completed = false;
+            }
+            else
+            {
+                this.rankingBuilds++;
+                this.rankingBuildMilliseconds += rankingStopwatch.ElapsedMilliseconds;
+                this.rankingCacheEvictions += this.routeRankingCache.Set(rankingKey.Value, rankedRouteIds);
+            }
         }
 
-        return new RouteSearchResult(result, evaluated, CacheHit: false);
+        return new SearchOutcome(
+            CreateRouteCandidate(bestRecord, bestExp, bestDuration, request, durationLimitHours),
+            evaluated,
+            completed);
     }
+
+    private SearchOutcome FindBestRanked(
+        RouteSearchRequest request,
+        IReadOnlyList<int> rankedRouteIds,
+        int durationLimitHours,
+        bool optimizeExpPerHour)
+    {
+        RouteRankValue GetValue(int routeId)
+        {
+            var route = this.routeIndex.GetById(routeId);
+            var exp = GetCachedExp(route, request.Build, request.Settings.GetEffectiveExpMode());
+            var duration = GetCachedDuration(route, request.Build);
+            var score = optimizeExpPerHour
+                ? exp / Math.Max(duration.TotalHours, 0.01)
+                : exp;
+            return new RouteRankValue(routeId, score, duration.Ticks);
+        }
+
+        var selectedId = ExactRouteRanking.FindBest(
+            rankedRouteIds,
+            routeId =>
+            {
+                var route = this.routeIndex.GetById(routeId);
+                return request.UnlockedMask.ContainsAll(route.Mask) &&
+                       !route.Mask.Intersects(request.ExcludedSectorMask);
+            },
+            GetValue,
+            () => IsTimedOut(request.DeadlineUtc),
+            request.CancellationToken.ThrowIfCancellationRequested,
+            out var evaluated,
+            out var completed);
+
+        this.routesEvaluated += evaluated;
+        this.rankedRoutesEvaluated += evaluated;
+        if (selectedId is null)
+            return new SearchOutcome(null, evaluated, completed);
+
+        var selected = this.routeIndex.GetById(selectedId.Value);
+        var exp = GetCachedExp(selected, request.Build, request.Settings.GetEffectiveExpMode());
+        var duration = GetCachedDuration(selected, request.Build);
+        return new SearchOutcome(
+            CreateRouteCandidate(selected, exp, duration, request, durationLimitHours),
+            evaluated,
+            completed);
+    }
+
+    private RouteCandidate? CreateRouteCandidate(
+        RouteRecord? route,
+        uint exp,
+        TimeSpan duration,
+        RouteSearchRequest request,
+        int durationLimitHours)
+        => route is null
+            ? null
+            : new RouteCandidate(
+                route.Sectors,
+                exp,
+                duration,
+                exp / Math.Max(duration.TotalHours, 0.01),
+                GetUnlockTargets(route.Sectors, request.UnlockedPoints),
+                request.Settings.EtaModel,
+                durationLimitHours > 0);
 
     private TimeSpan GetCachedDuration(RouteRecord route, SubmarineBuild build)
     {
@@ -240,10 +371,27 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
         this.routeQueries = 0;
         this.routeCacheHits = 0;
         this.routesEvaluated = 0;
+        this.rankingBuilds = 0;
+        this.rankingCacheHits = 0;
+        this.rankedRoutesEvaluated = 0;
+        this.exhaustiveRoutesEvaluated = 0;
+        this.rankingBuildMilliseconds = 0;
+        this.exactCacheEvictions = 0;
+        this.rankingCacheEvictions = 0;
     }
 
     public RouteSearchMetrics GetRouteSearchMetrics()
-        => new(this.routeQueries, this.routeCacheHits, this.routesEvaluated);
+        => new(
+            this.routeQueries,
+            this.routeCacheHits,
+            this.routesEvaluated,
+            this.rankingBuilds,
+            this.rankingCacheHits,
+            this.rankedRoutesEvaluated,
+            this.exhaustiveRoutesEvaluated,
+            this.rankingBuildMilliseconds,
+            this.exactCacheEvictions,
+            this.rankingCacheEvictions);
 
     public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode)
     {
@@ -735,16 +883,23 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
 
     private sealed class RouteCandidateIndex
     {
+        private readonly RouteRecord[] routesById;
         private readonly Dictionary<int, RouteRecord[]> routesByMap;
         private readonly Dictionary<uint, RouteRecord[]> routesBySector;
 
         private RouteCandidateIndex(RouteRecord[] routes)
         {
-            RouteCount = routes.Length;
-            this.routesByMap = routes
+            var stableRoutes = routes
                 .GroupBy(route => route.Map)
-                .ToDictionary(group => group.Key, group => group.OrderBy(route => route.Distance).ToArray());
-            this.routesBySector = routes
+                .SelectMany(group => group.OrderBy(route => route.Distance))
+                .Select((route, stableId) => route with { Id = stableId })
+                .ToArray();
+            this.routesById = stableRoutes;
+            RouteCount = stableRoutes.Length;
+            this.routesByMap = stableRoutes
+                .GroupBy(route => route.Map)
+                .ToDictionary(group => group.Key, group => group.ToArray());
+            this.routesBySector = stableRoutes
                 .SelectMany(route => route.Sectors.Select(sector => (sector, route)))
                 .GroupBy(pair => pair.sector)
                 .ToDictionary(
@@ -754,26 +909,32 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
 
         public int RouteCount { get; }
 
+        public RouteRecord GetById(int routeId) => this.routesById[routeId];
+
         public IEnumerable<RouteRecord> Enumerate(SectorMask mustInclude, int range)
         {
             if (!mustInclude.IsEmpty)
             {
-                var matchingBuckets = new List<RouteRecord[]>();
+                RouteRecord[]? smallestBucket = null;
                 for (uint point = 0; point < 192; point++)
                 {
-                    if (mustInclude.Contains(point) && this.routesBySector.TryGetValue(point, out var routes))
-                        matchingBuckets.Add(routes);
+                    if (!mustInclude.Contains(point))
+                        continue;
+                    if (!this.routesBySector.TryGetValue(point, out var routes))
+                        yield break;
+                    if (smallestBucket is null || routes.Length < smallestBucket.Length)
+                        smallestBucket = routes;
                 }
 
-                HashSet<int>? seen = matchingBuckets.Count > 1 ? [] : null;
-                foreach (var routes in matchingBuckets)
+                if (smallestBucket is null)
+                    yield break;
+
+                var limit = UpperBound(smallestBucket, range);
+                for (var i = 0; i < limit; i++)
                 {
-                    var limit = UpperBound(routes, range);
-                    for (var i = 0; i < limit; i++)
-                    {
-                        if (seen is null || seen.Add(routes[i].Id))
-                            yield return routes[i];
-                    }
+                    var route = smallestBucket[i];
+                    if (route.Mask.ContainsAll(mustInclude))
+                        yield return route;
                 }
 
                 yield break;
@@ -851,6 +1012,34 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
         int Retrieval,
         int Favor,
         ExpMode ExpMode);
+
+    private readonly record struct SearchOutcome(RouteCandidate? Route, int Evaluated, bool Completed);
+
+    private readonly record struct CachedRoute(RouteCandidate? Route);
+
+    private readonly record struct RouteRankingKey(
+        int Rank,
+        int Surveillance,
+        int Retrieval,
+        int Favor,
+        int Range,
+        int Speed,
+        ExpMode ExpMode,
+        int DurationLimitHours,
+        bool OptimizeExpPerHour)
+    {
+        public static RouteRankingKey Create(RouteSearchRequest request)
+            => new(
+                request.Build.Rank,
+                request.Build.Surveillance,
+                request.Build.Retrieval,
+                request.Build.Favor,
+                request.Build.Range,
+                request.Build.Speed,
+                request.Settings.GetEffectiveExpMode(),
+                request.Settings.GetEffectiveDurationLimitHours(),
+                request.Settings.GetEffectiveOptimizeExpPerHour());
+    }
 
     private readonly record struct RouteSearchCacheKey(
         int Rank,

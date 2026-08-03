@@ -103,6 +103,21 @@ public sealed partial class PlannerWindow
                 $"{metrics.RouteCacheHits:N0} cache hits  •  {metrics.RoutesEvaluated:N0} routes checked  •  " +
                 $"{metrics.CalculatedFreeCompanies} calculated  •  {metrics.ReusedFreeCompanies} reused  •  " +
                 $"{metrics.AwaitingTrackerFreeCompanies} waiting for tracker");
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.BeginTooltip();
+                ImGui.TextColored(PlannerUi.Teal, "Route-search details");
+                ImGui.Separator();
+                ImGui.TextUnformatted($"Exact-result cache hits: {metrics.RouteCacheHits:N0}");
+                ImGui.TextUnformatted($"Ranked candidates checked: {metrics.RankedRoutesEvaluated:N0}");
+                ImGui.TextUnformatted($"Exhaustive candidates checked: {metrics.ExhaustiveRoutesEvaluated:N0}");
+                ImGui.TextUnformatted($"Rankings built: {metrics.RouteRankingBuilds:N0}");
+                ImGui.TextUnformatted($"Ranking cache hits: {metrics.RouteRankingCacheHits:N0}");
+                ImGui.TextUnformatted($"Ranking build time: {metrics.RouteRankingBuildMilliseconds:N0} ms");
+                ImGui.TextUnformatted($"Exact-cache evictions: {metrics.ExactRouteCacheEvictions:N0}");
+                ImGui.TextUnformatted($"Ranking-cache evictions: {metrics.RouteRankingCacheEvictions:N0}");
+                ImGui.EndTooltip();
+            }
         }
 
         if (!currentSnapshot.IsRunning && (currentSnapshot.Warnings.Count > 0 || !currentSnapshot.IsComplete))
