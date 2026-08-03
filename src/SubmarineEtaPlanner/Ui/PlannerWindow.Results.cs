@@ -520,7 +520,7 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.BuildCode);
             ImGui.TableNextColumn();
-            DrawRoute(plan.Route);
+            DrawCompactRoute(plan.Route);
             if (plan.DependsOnProjectedUnlocks)
             {
                 ImGui.SameLine();

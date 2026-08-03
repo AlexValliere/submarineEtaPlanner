@@ -6,8 +6,8 @@
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
-  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.6.0.png",
-  "Changelog": "Added compact current and next-route columns with full localized route tooltips in the dashboard fleet table.",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.7.0.png",
+  "Changelog": "Added compact sector-code routes with full localized hover details to voyage forecast tables.",
   "Tags": [
     "Submarine",
     "ETA",

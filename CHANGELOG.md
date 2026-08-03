@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.7.0
+
+- Changed voyage forecast route cells to compact sector codes.
+- Kept full localized destination names available in numbered hover tooltips.
+
 ## 0.4.6.0
 
 - Added compact current and next-route columns to the expanded FC submarine table.
