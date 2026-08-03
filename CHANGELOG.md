@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.6.0
+
+- Added compact current and next-route columns to the expanded FC submarine table.
+- Kept full localized destination names and conditional unlock outcomes available in route tooltips.
+
 ## 0.4.5.0
 
 - Restored median ETA and ready-now headlines for unchanged forecasts reused during incremental refreshes.

@@ -273,6 +273,7 @@ public sealed class EtaSimulatorTests
 
         Assert.Contains(result.PerSubResults.Single().Warnings, w => w.Contains("unknown", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(0, result.PerSubResults.Single().VoyageCount);
+        Assert.Empty(result.PerSubResults.Single().CurrentRoute);
     }
 
     [Fact]
@@ -807,6 +808,9 @@ public sealed class EtaSimulatorTests
             secondSub.NextRouteOutcomes.Select(outcome => (string.Join(",", outcome.Route), outcome.Probability)));
         Assert.True(firstSub.NextRouteOutcomes.Count >= 2);
         Assert.Equal(1.0, firstSub.NextRouteOutcomes.Sum(outcome => outcome.Probability), 6);
+        Assert.Equal(
+            firstSub.NextRouteOutcomes.Max(outcome => outcome.Probability),
+            firstSub.NextRouteOutcomes[0].Probability);
     }
 
     [Fact]
@@ -906,6 +910,54 @@ public sealed class EtaSimulatorTests
         Assert.Equal("Ready now", selected);
     }
 
+    [Theory]
+    [InlineData(4u, "Île d'Anthémuse (D)", "D")]
+    [InlineData(8u, "The Wreckage (North) (h)", "H")]
+    [InlineData(11u, "The Wreckage (North)", "11")]
+    [InlineData(12u, "M11", "M11")]
+    [InlineData(13u, "A very long destination", "13")]
+    [InlineData(14u, "", "14")]
+    public void CompactPointCodesUseTerminalIdentifiersAndSafeFallbacks(uint point, string name, string expected)
+    {
+        Assert.Equal(expected, RouteDisplayFormatter.ExtractPointCode(point, name));
+    }
+
+    [Fact]
+    public void CompactRoutesUseLettersAndAnEmDashForNoActiveRoute()
+    {
+        var names = new Dictionary<uint, string>
+        {
+            [4] = "Île d'Anthémuse (D)",
+            [8] = "Mer du Chant des sirènes 3 (H)",
+            [9] = "Courant sous-marin d'Anthémuse (I)",
+        };
+
+        Assert.Equal("D → H → I", RouteDisplayFormatter.FormatCompactRoute([4, 8, 9], point => names[point]));
+        Assert.Equal("—", RouteDisplayFormatter.FormatCompactRoute([], point => names[point]));
+    }
+
+    [Fact]
+    public void ManualOverrideIsExposedAsTheEffectiveCurrentRoute()
+    {
+        var catalog = new ScriptedCatalog();
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with { TargetRank = 2 };
+        var sub = CreateSub(rank: 1) with
+        {
+            ReturnAtUtc = DateTimeOffset.UnixEpoch.AddHours(6),
+            CurrentRoute = [1],
+            CurrentVoyageKnown = true,
+            ManualCurrentRouteOverride = [7],
+        };
+
+        var result = simulator.Simulate(
+            CreateFc(new HashSet<uint>([1, 7]), sub),
+            settings,
+            DateTimeOffset.UnixEpoch);
+
+        Assert.Equal([7u], Assert.Single(result.PerSubResults).CurrentRoute);
+    }
+
     [Fact]
     public void SubmarineVoyageDurationIncludesTwelveHourBaseline()
     {
@@ -927,13 +979,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.4.5.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.4.6.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.5.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.6.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("forecasts reused during incremental database refreshes", repoJson);
+        Assert.Contains("compact current and next-route columns", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -949,7 +1001,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.5.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.6.0.png", workflow);
         Assert.Contains("Copy-Item \"$out/CalculatedData.msgpack\" $packageDir", workflow);
     }
 

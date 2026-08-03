@@ -550,12 +550,29 @@ public sealed partial class PlannerWindow : Window
     private string FormatRoute(IReadOnlyList<uint> route)
         => route.Count == 0 ? "-" : string.Join(" → ", route.Select(this.catalog.PointName));
 
+    private string FormatCompactRoute(IReadOnlyList<uint> route)
+        => RouteDisplayFormatter.FormatCompactRoute(route, this.catalog.PointName);
+
     private string FormatPoint(uint point) => this.catalog.PointName(point);
 
     private void DrawRoute(IReadOnlyList<uint> route)
     {
         var routeText = FormatRoute(route);
         ImGui.TextColored(PlannerUi.Cyan, routeText);
+        if (route.Count == 0 || !ImGui.IsItemHovered())
+            return;
+
+        ImGui.BeginTooltip();
+        ImGui.TextColored(PlannerUi.Teal, "Full route");
+        ImGui.Separator();
+        for (var index = 0; index < route.Count; index++)
+            ImGui.TextUnformatted($"{index + 1}. {FormatPoint(route[index])}");
+        ImGui.EndTooltip();
+    }
+
+    private void DrawCompactRoute(IReadOnlyList<uint> route)
+    {
+        ImGui.TextColored(route.Count == 0 ? PlannerUi.Muted : PlannerUi.Cyan, FormatCompactRoute(route));
         if (route.Count == 0 || !ImGui.IsItemHovered())
             return;
 

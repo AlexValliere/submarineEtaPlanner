@@ -332,7 +332,7 @@ public sealed partial class PlannerWindow
                 PlannerUi.Amber);
         }
 
-        var minimumTableWidth = 860f * ImGuiHelpers.GlobalScale;
+        var minimumTableWidth = 980f * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
         var tableFlags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.BordersOuter | ImGuiTableFlags.RowBg |
                          ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
@@ -344,17 +344,18 @@ public sealed partial class PlannerWindow
             : new Vector2(-1, CalculateTableHeight(result.PerSubResults.Count, false));
         if (!ImGui.BeginTable(
                 $"table-{fcKey}",
-                7,
+                8,
                 tableFlags,
                 tableSize,
                 needsHorizontalScroll ? minimumTableWidth : 0f))
             return;
 
-        ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthStretch, 1.35f);
+        ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 190f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 95f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("ETA", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Voyages", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Current route", ImGuiTableColumnFlags.WidthStretch, 0.75f);
         ImGui.TableSetupColumn("Next after return", ImGuiTableColumnFlags.WidthStretch, 1f);
         ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 116f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupScrollFreeze(1, 1);
@@ -402,6 +403,8 @@ public sealed partial class PlannerWindow
             ImGui.TextUnformatted(sub.VoyageCount.ToString());
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(sub.PlannedBuild);
+            ImGui.TableNextColumn();
+            DrawCompactRoute(sub.CurrentRoute);
             ImGui.TableNextColumn();
             DrawNextRoute(sub);
             ImGui.TableNextColumn();
@@ -616,30 +619,45 @@ public sealed partial class PlannerWindow
 
     private void DrawNextRoute(PerSubEtaResult sub)
     {
-        var outcomes = sub.NextRouteOutcomes.Where(outcome => outcome.Route.Count > 0).ToArray();
+        var outcomes = sub.NextRouteOutcomes
+            .Where(outcome => outcome.Route.Count > 0)
+            .OrderByDescending(outcome => outcome.Probability)
+            .ThenBy(outcome => string.Join(",", outcome.Route), StringComparer.Ordinal)
+            .ToArray();
         var conditional = outcomes.Length > 1 || outcomes.Any(outcome => outcome.RequiredProjectedUnlocks.Count > 0);
         if (!conditional)
         {
-            DrawRoute(outcomes.FirstOrDefault()?.Route ?? sub.NextRoute);
+            DrawCompactRoute(outcomes.FirstOrDefault()?.Route ?? sub.NextRoute);
             return;
         }
 
-        ImGui.TextColored(PlannerUi.Amber, outcomes.Length > 1 ? "Depends on unlock" : "Projected after unlock");
-        if (!ImGui.IsItemHovered())
+        var likely = outcomes[0];
+        ImGui.TextColored(PlannerUi.Amber, FormatCompactRoute(likely.Route));
+        var hovered = ImGui.IsItemHovered();
+        ImGui.SameLine();
+        PlannerUi.Icon(FontAwesomeIcon.Dice, PlannerUi.Amber);
+        hovered |= ImGui.IsItemHovered();
+        if (!hovered)
             return;
 
         ImGui.BeginTooltip();
-        ImGui.TextColored(PlannerUi.Teal, "Next-route outcomes");
+        ImGui.TextColored(PlannerUi.Amber, outcomes.Length > 1 ? "Next route depends on unlock" : "Projected after unlock");
+        ImGui.TextColored(PlannerUi.Muted, "The table shows the most likely modeled outcome.");
         ImGui.Separator();
-        foreach (var outcome in outcomes)
+        for (var outcomeIndex = 0; outcomeIndex < outcomes.Length; outcomeIndex++)
         {
-            ImGui.TextUnformatted($"{outcome.Probability:P0}  {FormatRoute(outcome.Route)}");
+            var outcome = outcomes[outcomeIndex];
+            ImGui.TextColored(PlannerUi.Teal, $"{outcome.Probability:P0}  {FormatCompactRoute(outcome.Route)}");
+            for (var index = 0; index < outcome.Route.Count; index++)
+                ImGui.TextUnformatted($"  {index + 1}. {FormatPoint(outcome.Route[index])}");
             if (outcome.RequiredProjectedUnlocks.Count > 0)
             {
                 ImGui.TextColored(
                     PlannerUi.Amber,
                     $"Requires: {string.Join(", ", outcome.RequiredProjectedUnlocks.Select(FormatPoint))}");
             }
+            if (outcomeIndex < outcomes.Length - 1)
+                ImGui.Separator();
         }
         ImGui.EndTooltip();
     }
