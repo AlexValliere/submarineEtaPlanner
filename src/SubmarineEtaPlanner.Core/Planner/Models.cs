@@ -232,6 +232,8 @@ public sealed record PerSubEtaResult(
 
     public DateTimeOffset? CurrentReturnAtUtc { get; init; }
 
+    public bool CurrentVoyageUnknown { get; init; }
+
     public EtaPercentiles? EtaForecast { get; init; }
 
     public IReadOnlyList<RouteOutcome> NextRouteOutcomes { get; init; } = [];

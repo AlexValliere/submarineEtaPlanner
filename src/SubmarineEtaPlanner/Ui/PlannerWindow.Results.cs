@@ -356,7 +356,7 @@ public sealed partial class PlannerWindow
                 PlannerUi.Amber);
         }
 
-        var minimumTableWidth = 1100f * ImGuiHelpers.GlobalScale;
+        var minimumTableWidth = 1155f * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
         var tableFlags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.BordersOuter | ImGuiTableFlags.RowBg |
                          ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
@@ -377,7 +377,7 @@ public sealed partial class PlannerWindow
         ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 190f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 95f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("ETA", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Voyages", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Voyages left", ImGuiTableColumnFlags.WidthFixed, 127f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Salvage gil", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Current route", ImGuiTableColumnFlags.WidthStretch, 0.75f);
@@ -390,6 +390,7 @@ public sealed partial class PlannerWindow
         {
             var subKey = $"{fcKey}:{sub.SubmarineId}";
             var salvage = salvageBySubmarine.GetValueOrDefault(sub.SubmarineId) ?? SubmarineSalvageSummary.Empty;
+            var voyageProgress = VoyageProgressFormatter.Create(sub, result.TargetRank, DateTimeOffset.UtcNow);
             var subOpen = this.expandedSubmarines.Contains(subKey);
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
@@ -426,7 +427,15 @@ public sealed partial class PlannerWindow
                     $"Forecast calculated: {result.GeneratedAtUtc.LocalDateTime:g}");
             }
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(sub.VoyageCount.ToString());
+            var voyageColor = voyageProgress.State switch
+            {
+                VoyageProgressState.ReadyToCollect or VoyageProgressState.Syncing => PlannerUi.Amber,
+                VoyageProgressState.Underway => PlannerUi.Cyan,
+                _ => ImGui.GetStyle().Colors[(int)ImGuiCol.Text],
+            };
+            ImGui.TextColored(voyageColor, voyageProgress.Label);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(voyageProgress.Tooltip);
             ImGui.TableNextColumn();
             ImGui.TextColored(salvage.TotalGil > 0 ? PlannerUi.Green : PlannerUi.Muted, FormatCompactGil(salvage.TotalGil));
             if (ImGui.IsItemHovered())
@@ -434,11 +443,15 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(sub.PlannedBuild);
             ImGui.TableNextColumn();
-            DrawCompactRoute(sub.CurrentRoute);
+            DrawCompactRoute(
+                sub.CurrentRoute,
+                sub.CurrentReturnAtUtc is not null && sub.CurrentReturnAtUtc.Value <= DateTimeOffset.UtcNow
+                    ? PlannerUi.Amber
+                    : null);
             ImGui.TableNextColumn();
             DrawNextRoute(sub);
             ImGui.TableNextColumn();
-            DrawSubmarineStatus(sub, result.TargetRank);
+            DrawSubmarineStatus(sub, result.TargetRank, voyageProgress.State);
         }
 
         ImGui.EndTable();
@@ -460,8 +473,16 @@ public sealed partial class PlannerWindow
         }
     }
 
-    private void DrawSubmarineStatus(PerSubEtaResult sub, int targetRank)
+    private void DrawSubmarineStatus(PerSubEtaResult sub, int targetRank, VoyageProgressState voyageState)
     {
+        if (voyageState == VoyageProgressState.ReadyToCollect)
+        {
+            PlannerUi.DrawStatusPill("Ready to collect", PlannerUi.Amber);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Retrieve this submarine in-game so its actual EXP and rank can be recorded.");
+            return;
+        }
+
         if (!sub.IsComplete || sub.Warnings.Count > 0)
         {
             var count = sub.Warnings.Count + (sub.IsComplete ? 0 : 1);
@@ -507,12 +528,17 @@ public sealed partial class PlannerWindow
     {
         if (sub.CurrentRoute.Count > 0 && sub.CurrentReturnAtUtc is not null)
         {
+            var readyToCollect = sub.CurrentReturnAtUtc.Value <= DateTimeOffset.UtcNow;
             PlannerUi.Callout(
                 "current-voyage",
                 FontAwesomeIcon.Ship,
-                $"Current voyage · returns {sub.CurrentReturnAtUtc.Value.LocalDateTime:g}",
-                FormatRoute(sub.CurrentRoute),
-                PlannerUi.Cyan);
+                readyToCollect
+                    ? "Voyage ready to collect"
+                    : $"Current voyage · returns {sub.CurrentReturnAtUtc.Value.LocalDateTime:g}",
+                readyToCollect
+                    ? $"{FormatRoute(sub.CurrentRoute)}\nRetrieve it in-game, then wait for SubmarineTracker to record the actual EXP and rank. It remains included in Voyages left until then."
+                    : $"{FormatRoute(sub.CurrentRoute)}\nThis underway voyage is included in Voyages left.",
+                readyToCollect ? PlannerUi.Amber : PlannerUi.Cyan);
         }
 
         if (!sub.IsComplete && sub.IncompleteReason is not null)

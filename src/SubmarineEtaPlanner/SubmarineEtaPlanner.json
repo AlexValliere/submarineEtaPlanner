@@ -6,8 +6,8 @@
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
-  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.10.0.png",
-  "Changelog": "Added first-time rank-90 defaults and a reviewable all-tabs reset confirmation.",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.11.0.png",
+  "Changelog": "Clarified voyages left with inclusive underway, ready-to-collect, and tracker-syncing states.",
   "Tags": [
     "Submarine",
     "ETA",

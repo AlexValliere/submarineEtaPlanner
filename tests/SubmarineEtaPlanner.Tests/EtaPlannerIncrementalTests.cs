@@ -107,7 +107,9 @@ public sealed class EtaPlannerIncrementalTests
             ForecastRefreshMode.Incremental);
 
         Assert.Empty(simulator.Calls);
-        Assert.Equal(FcCalculationStatus.AwaitingTrackerUpdate, Assert.Single(refreshed.FcProgress).Status);
+        var progress = Assert.Single(refreshed.FcProgress);
+        Assert.Equal(FcCalculationStatus.AwaitingTrackerUpdate, progress.Status);
+        Assert.Contains("Collect returned submarines", progress.Message);
         Assert.Equal(1, refreshed.Metrics!.AwaitingTrackerFreeCompanies);
         Assert.False(refreshed.IsComplete);
         Assert.Equal(first.Results[0], refreshed.Results[0]);

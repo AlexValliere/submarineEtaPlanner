@@ -585,9 +585,10 @@ public sealed partial class PlannerWindow : Window
         ImGui.EndTooltip();
     }
 
-    private void DrawCompactRoute(IReadOnlyList<uint> route)
+    private void DrawCompactRoute(IReadOnlyList<uint> route, Vector4? color = null)
     {
-        ImGui.TextColored(route.Count == 0 ? PlannerUi.Muted : PlannerUi.Cyan, FormatCompactRoute(route));
+        var routeColor = route.Count == 0 ? PlannerUi.Muted : color ?? PlannerUi.Cyan;
+        ImGui.TextColored(routeColor, FormatCompactRoute(route));
         if (route.Count == 0 || !ImGui.IsItemHovered())
             return;
 

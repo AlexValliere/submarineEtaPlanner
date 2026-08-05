@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.11.0
+
+- Replaced the ambiguous future-only voyage count with an inclusive `Voyages left` lifecycle display.
+- Kept underway and returned-but-uncollected voyages counted until SubmarineTracker records their actual result.
+- Added clear underway, ready-to-collect, and tracker-syncing states with contextual guidance.
+
 ## 0.4.10.0
 
 - Added per-submarine and per-FC gross NPC value totals for salvaged accessories recorded by SubmarineTracker.

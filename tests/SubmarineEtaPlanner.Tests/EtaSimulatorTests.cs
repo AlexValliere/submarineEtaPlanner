@@ -252,6 +252,36 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
+    public void ReturnedUncollectedVoyageIsProjectedOnceOnFreshSimulation()
+    {
+        var catalog = new ScriptedCatalog(routeExp: 100);
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with
+        {
+            SimulationMode = SimulationMode.Fleet,
+            CollectionDelayMinutes = 0,
+        };
+        settings.TargetRank = 2;
+        var now = DateTimeOffset.UnixEpoch.AddDays(1);
+        var sub = CreateSub(rank: 1, currentExp: 950) with
+        {
+            NextLevelExp = 1000,
+            ReturnAtUtc = now.AddHours(-1),
+            CurrentRoute = [7],
+            CurrentVoyageKnown = true,
+        };
+
+        var result = simulator.Simulate(CreateFc(new HashSet<uint>([7]), sub), settings, now);
+        var subResult = Assert.Single(result.PerSubResults);
+
+        Assert.Equal(2, subResult.FinalRank);
+        Assert.Equal(0, subResult.VoyageCount);
+        Assert.Empty(subResult.VoyagePreview);
+        Assert.Equal([7u], subResult.CurrentRoute);
+        Assert.Equal(sub.ReturnAtUtc, subResult.CurrentReturnAtUtc);
+    }
+
+    [Fact]
     public void OptimisticModeProducesPerSubPlans()
     {
         var simulator = CreateSimulator();
@@ -992,13 +1022,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.4.10.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.4.11.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.10.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.11.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("reviewable all-tabs reset", repoJson);
+        Assert.Contains("inclusive underway, ready-to-collect, and tracker-syncing states", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -1014,7 +1044,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.10.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.11.0.png", workflow);
         Assert.Contains("Copy-Item \"$out/CalculatedData.msgpack\" $packageDir", workflow);
     }
 

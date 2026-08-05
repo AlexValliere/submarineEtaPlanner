@@ -138,35 +138,30 @@ public sealed class EtaSimulator(
                 continue;
             }
 
-            if (state.Source.ReturnAtUtc > now && state.Source.CurrentVoyageKnown)
+            var currentRoute = GetKnownCurrentRoute(state.Source);
+            if (currentRoute.Count > 0 && state.Source.CurrentVoyageKnown)
             {
-                var currentRoute = state.Source.ManualCurrentRouteOverride.Count > 0
-                    ? state.Source.ManualCurrentRouteOverride
-                    : state.Source.CurrentRoute;
-                if (currentRoute.Count > 0)
-                {
-                    var currentBuild = catalog.ResolveBuild(state.Source.BuildParts, state.Rank) ??
-                                       buildResolver.ResolveBuildForRank(state.Rank, settings);
-                    var currentReturn = state.Source.ReturnAtUtc + TimeSpan.FromMinutes(settings.CollectionDelayMinutes);
-                    var reservedUnlocks = unlockGraph.ReserveRoute(currentRoute, unlockState);
-                    state.PendingVoyage = new PendingVoyage(
-                        currentRoute,
-                        currentBuild.Code,
-                        catalog.CalculateExp(currentRoute, currentBuild, settings.GetEffectiveExpMode()),
-                        now,
-                        currentReturn,
-                        state.Source.ReturnAtUtc - now,
-                        1,
-                        settings.EtaModel,
-                        DurationCapApplied: false,
-                        IsCurrentVoyage: true,
-                        ReservedUnlockTargets: reservedUnlocks);
-                    state.NextAvailableAt = currentReturn;
-                    state.CurrentVoyageApplied = true;
-                }
+                var currentBuild = catalog.ResolveBuild(state.Source.BuildParts, state.Rank) ??
+                                   buildResolver.ResolveBuildForRank(state.Rank, settings);
+                var currentReturn = GetProjectedCollectionAt(state.Source, settings, now);
+                var reservedUnlocks = unlockGraph.ReserveRoute(currentRoute, unlockState);
+                state.PendingVoyage = new PendingVoyage(
+                    currentRoute,
+                    currentBuild.Code,
+                    catalog.CalculateExp(currentRoute, currentBuild, settings.GetEffectiveExpMode()),
+                    now,
+                    currentReturn,
+                    currentReturn - now,
+                    1,
+                    settings.EtaModel,
+                    DurationCapApplied: false,
+                    IsCurrentVoyage: true,
+                    ReservedUnlockTargets: reservedUnlocks);
+                state.NextAvailableAt = currentReturn;
+                state.CurrentVoyageApplied = true;
             }
 
-            if (state.Source.ReturnAtUtc <= now)
+            if (state.Source.ReturnAtUtc <= now && currentRoute.Count == 0)
                 state.CurrentVoyageApplied = true;
 
             queue.Enqueue(state.Source.SubmarineId, state.NextAvailableAt);
@@ -324,8 +319,9 @@ public sealed class EtaSimulator(
                 status,
                 reason)
             {
-                CurrentRoute = GetCurrentRoute(state.Source, now),
-                CurrentReturnAtUtc = GetCurrentReturnAtUtc(state.Source, now),
+                CurrentRoute = GetCurrentRoute(state.Source),
+                CurrentReturnAtUtc = GetCurrentReturnAtUtc(state.Source),
+                CurrentVoyageUnknown = IsCurrentVoyageUnknown(state.Source, now),
             };
         }).ToArray();
 
@@ -686,26 +682,32 @@ public sealed class EtaSimulator(
             status,
             reason)
         {
-            CurrentRoute = GetCurrentRoute(sub, now),
-            CurrentReturnAtUtc = GetCurrentReturnAtUtc(sub, now),
+            CurrentRoute = GetCurrentRoute(sub),
+            CurrentReturnAtUtc = GetCurrentReturnAtUtc(sub),
+            CurrentVoyageUnknown = IsCurrentVoyageUnknown(sub, now),
         };
     }
 
-    private static IReadOnlyList<uint> GetCurrentRoute(SubmarineState sub, DateTimeOffset now)
-    {
-        if (sub.ReturnAtUtc <= now || !sub.CurrentVoyageKnown)
-            return [];
-
-        var route = sub.ManualCurrentRouteOverride.Count > 0
+    private static IReadOnlyList<uint> GetKnownCurrentRoute(SubmarineState sub)
+        => sub.ManualCurrentRouteOverride.Count > 0
             ? sub.ManualCurrentRouteOverride
             : sub.CurrentRoute;
-        return route.ToArray();
+
+    private static IReadOnlyList<uint> GetCurrentRoute(SubmarineState sub)
+    {
+        if (!sub.CurrentVoyageKnown)
+            return [];
+
+        return GetKnownCurrentRoute(sub).ToArray();
     }
 
-    private static DateTimeOffset? GetCurrentReturnAtUtc(SubmarineState sub, DateTimeOffset now)
-        => sub.ReturnAtUtc > now && sub.CurrentVoyageKnown && GetCurrentRoute(sub, now).Count > 0
+    private static DateTimeOffset? GetCurrentReturnAtUtc(SubmarineState sub)
+        => sub.CurrentVoyageKnown && GetKnownCurrentRoute(sub).Count > 0
             ? sub.ReturnAtUtc
             : null;
+
+    private static bool IsCurrentVoyageUnknown(SubmarineState sub, DateTimeOffset now)
+        => sub.ReturnAtUtc > now && !sub.CurrentVoyageKnown;
 
     private CurrentVoyageApplication ApplyCurrentVoyageIfKnown(
         SubmarineState sub,
@@ -718,17 +720,14 @@ public sealed class EtaSimulator(
         DateTimeOffset nextAvailable,
         Func<UnlockRule, bool> unlockSucceeded)
     {
-        if (sub.ReturnAtUtc <= now)
-            return new CurrentVoyageApplication(rank, currentExp, nextLevelExp, nextAvailable);
-
-        var route = sub.ManualCurrentRouteOverride.Count > 0 ? sub.ManualCurrentRouteOverride : sub.CurrentRoute;
-        if (route.Count == 0)
+        var route = GetKnownCurrentRoute(sub);
+        if (!sub.CurrentVoyageKnown || route.Count == 0)
             return new CurrentVoyageApplication(rank, currentExp, nextLevelExp, nextAvailable);
 
         var build = catalog.ResolveBuild(sub.BuildParts, rank) ?? buildResolver.ResolveBuildForRank(rank, settings);
         var exp = catalog.CalculateExp(route, build, settings.GetEffectiveExpMode());
         var rankResult = catalog.ApplyExp(rank, currentExp, exp, settings.TargetRank);
-        var returnAt = sub.ReturnAtUtc + TimeSpan.FromMinutes(settings.CollectionDelayMinutes);
+        var returnAt = GetProjectedCollectionAt(sub, settings, now);
         unlockGraph.MarkRouteReturn(route, unlockState, sub.SubmarineId, returnAt, unlockSucceeded);
 
         return new CurrentVoyageApplication(rankResult.Rank, rankResult.CurrentExp, rankResult.NextLevelExp, returnAt);
@@ -745,9 +744,15 @@ public sealed class EtaSimulator(
 
     private static DateTimeOffset GetStartingAvailableTime(SubmarineState sub, EtaSettings settings, DateTimeOffset now)
     {
-        return sub.ReturnAtUtc > now
-            ? sub.ReturnAtUtc + TimeSpan.FromMinutes(settings.CollectionDelayMinutes)
+        return sub.ReturnAtUtc > now || sub.CurrentVoyageKnown && GetKnownCurrentRoute(sub).Count > 0
+            ? GetProjectedCollectionAt(sub, settings, now)
             : now;
+    }
+
+    private static DateTimeOffset GetProjectedCollectionAt(SubmarineState sub, EtaSettings settings, DateTimeOffset now)
+    {
+        var expectedCollectionAt = sub.ReturnAtUtc + TimeSpan.FromMinutes(settings.CollectionDelayMinutes);
+        return expectedCollectionAt > now ? expectedCollectionAt : now;
     }
 
     private static bool IsTimedOut(DateTimeOffset? deadlineUtc)

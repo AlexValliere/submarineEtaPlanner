@@ -82,7 +82,7 @@ public sealed class EtaPlannerService(
                         fc.DisplayName,
                         FcCalculationStatus.AwaitingTrackerUpdate,
                         CompletedAtUtc: now,
-                        Message: "A recorded voyage has returned, but SubmarineTracker has not written its outcome yet.");
+                        Message: "Collect returned submarines in-game. If already collected, wait for SubmarineTracker to record the result.");
                 }
                 else
                 {
