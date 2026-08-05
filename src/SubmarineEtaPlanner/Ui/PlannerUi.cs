@@ -184,20 +184,37 @@ internal static class PlannerUi
             return;
 
         var drawList = ImGui.GetWindowDrawList();
+        if (drawList.ClipRectStack.Size == 0)
+            return;
+
         var end = position + size;
+        var currentClip = drawList.ClipRectStack[drawList.ClipRectStack.Size - 1];
+        var clippedTop = Math.Max(position.Y, currentClip.Y);
+        var clippedBottom = Math.Min(end.Y, currentClip.W);
+        if (clippedTop >= clippedBottom)
+            return;
+
+        drawList.PushClipRect(
+            new Vector2(position.X, clippedTop),
+            new Vector2(end.X, clippedBottom),
+            false);
         if (baseColor is { } background)
             drawList.AddRectFilled(position, end, ColorU32(background), rounding);
 
         if (fraction is null || fraction.Value <= 0f)
+        {
+            drawList.PopClipRect();
             return;
+        }
 
         var clamped = Math.Clamp(fraction.Value, 0f, 1f);
         var fillColor = baseColor is { } baseValue
             ? Vector4.Lerp(baseValue, accent, accent == Amber ? 0.24f : 0.18f)
             : new Vector4(accent.X, accent.Y, accent.Z, accent == Amber ? 0.16f : 0.12f);
         var fillEnd = new Vector2(position.X + (size.X * clamped), end.Y);
-        drawList.PushClipRect(position, fillEnd, false);
+        drawList.PushClipRect(position, fillEnd, true);
         drawList.AddRectFilled(position, end, ColorU32(fillColor), rounding);
+        drawList.PopClipRect();
         drawList.PopClipRect();
     }
 

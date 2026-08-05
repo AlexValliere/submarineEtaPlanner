@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.14.0
+
+- Fixed expanded submarine progress backgrounds drawing beyond the table and planner window when rows are clipped.
+
 ## 0.4.13.0
 
 - Added live current-voyage progress backgrounds and next-return countdowns to FC dashboard headers.
