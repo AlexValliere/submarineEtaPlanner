@@ -376,4 +376,16 @@ public sealed class ResultsViewState
             FcCalculationStatus.Failed
                 ? calculationStatusText
                 : resultStatus;
+
+    public static string FormatCollapsedHeaderStatus(string status, long recordedSalvageGil)
+        => $"{status} • Salvage {FormatCompactGil(recordedSalvageGil)} gil";
+
+    public static string FormatCompactGil(long gil)
+        => gil switch
+        {
+            >= 1_000_000_000 => $"{gil / 1_000_000_000d:0.##}b",
+            >= 1_000_000 => $"{gil / 1_000_000d:0.##}m",
+            >= 1_000 => $"{gil / 1_000d:0.##}k",
+            _ => gil.ToString("N0"),
+        };
 }

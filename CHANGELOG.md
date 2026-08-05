@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.12.0
+
+- Added each FC's compact recorded salvage-gil total to its always-visible dashboard header.
+- Added exact gross-value guidance when hovering completed and pending FC headers.
+- Removed the duplicate salvage pill from expanded FC content while preserving detailed submarine breakdowns.
+
 ## 0.4.11.0
 
 - Replaced the ambiguous future-only voyage count with an inclusive `Voyages left` lifecycle display.

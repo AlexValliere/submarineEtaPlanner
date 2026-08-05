@@ -206,7 +206,7 @@ public sealed partial class PlannerWindow
         ImGui.TableNextColumn();
         PlannerUi.MetricCard("metric-ready", FontAwesomeIcon.CheckCircle, ready.ToString(), "Ready", PlannerUi.Green);
         ImGui.TableNextColumn();
-        PlannerUi.MetricCard("metric-salvage", FontAwesomeIcon.Coins, FormatCompactGil(recordedGil), "Salvage gil", PlannerUi.Green);
+        PlannerUi.MetricCard("metric-salvage", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(recordedGil), "Salvage gil", PlannerUi.Green);
         PlannerUi.Tooltip($"{recordedGil:N0} gil gross NPC value across recorded SubmarineTracker salvage history.");
         ImGui.TableNextColumn();
         PlannerUi.MetricCard("metric-warnings", FontAwesomeIcon.ExclamationTriangle, warnings.ToString(), "Needs attention", warnings > 0 ? PlannerUi.Amber : PlannerUi.Muted);
@@ -277,20 +277,18 @@ public sealed partial class PlannerWindow
             : !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan;
         var fcKey = Convert.ToHexString(result.FcId);
         var salvageBySubmarine = fc.Submarines.ToDictionary(submarine => submarine.SubmarineId, submarine => submarine.Salvage);
+        var collapsedHeaderStatus = ResultsViewState.FormatCollapsedHeaderStatus(collapsedStatusText, fc.RecordedSalvageGil);
 
         ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackground);
         ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerUi.PanelBackgroundAlt);
         ImGui.PushStyleColor(ImGuiCol.HeaderActive, PlannerUi.PanelBackgroundAlt);
-        var open = ImGui.CollapsingHeader($"{result.FcDisplayName}   •   {collapsedStatusText}###fc-{fcKey}");
+        var open = ImGui.CollapsingHeader($"{result.FcDisplayName}   •   {collapsedHeaderStatus}###fc-{fcKey}");
         ImGui.PopStyleColor(3);
+        DrawFcSalvageHeaderTooltip(fc.RecordedSalvageGil);
         if (!open)
             return;
 
         PlannerUi.DrawStatusPill(resultStatusText, !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan);
-        ImGui.SameLine();
-        PlannerUi.DrawStatusPill($"Recorded salvage {FormatCompactGil(fc.RecordedSalvageGil)} gil", PlannerUi.Green);
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("NPC sale value of salvage accessories recorded in SubmarineTracker history. This is gross value, not net profit or proof that the items were sold.");
         if (calculationProgress?.Status is FcCalculationStatus.Queued or FcCalculationStatus.Calculating or FcCalculationStatus.Reused or FcCalculationStatus.AwaitingTrackerUpdate or FcCalculationStatus.TimedOut or FcCalculationStatus.Failed)
         {
             ImGui.SameLine();
@@ -437,7 +435,7 @@ public sealed partial class PlannerWindow
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip(voyageProgress.Tooltip);
             ImGui.TableNextColumn();
-            ImGui.TextColored(salvage.TotalGil > 0 ? PlannerUi.Green : PlannerUi.Muted, FormatCompactGil(salvage.TotalGil));
+            ImGui.TextColored(salvage.TotalGil > 0 ? PlannerUi.Green : PlannerUi.Muted, ResultsViewState.FormatCompactGil(salvage.TotalGil));
             if (ImGui.IsItemHovered())
                 DrawSalvageTooltip(salvage);
             ImGui.TableNextColumn();
@@ -522,6 +520,16 @@ public sealed partial class PlannerWindow
         ImGui.Spacing();
         ImGui.TextColored(PlannerUi.Muted, "Recorded history only · gross value · NPC prices from game data");
         ImGui.EndTooltip();
+    }
+
+    private static void DrawFcSalvageHeaderTooltip(long recordedSalvageGil)
+    {
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                $"{recordedSalvageGil:N0} gil gross NPC value from recorded SubmarineTracker salvage history. " +
+                "This is not net profit or proof that the items were sold.");
+        }
     }
 
     private void DrawSubDetails(PerSubEtaResult sub, bool showDiagnostics)
@@ -663,12 +671,14 @@ public sealed partial class PlannerWindow
         var color = status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed or FcCalculationStatus.AwaitingTrackerUpdate
             ? PlannerUi.Amber
             : PlannerUi.Cyan;
+        var collapsedHeaderStatus = ResultsViewState.FormatCollapsedHeaderStatus(statusText, fc.RecordedSalvageGil);
 
         ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackground);
         ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerUi.PanelBackgroundAlt);
         ImGui.PushStyleColor(ImGuiCol.HeaderActive, PlannerUi.PanelBackgroundAlt);
-        var open = ImGui.CollapsingHeader($"{fc.DisplayName}   •   {statusText}###fc-pending-{fcKey}");
+        var open = ImGui.CollapsingHeader($"{fc.DisplayName}   •   {collapsedHeaderStatus}###fc-pending-{fcKey}");
         ImGui.PopStyleColor(3);
+        DrawFcSalvageHeaderTooltip(fc.RecordedSalvageGil);
         if (!open)
             return;
 

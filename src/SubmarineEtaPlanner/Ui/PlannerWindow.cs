@@ -553,15 +553,6 @@ public sealed partial class PlannerWindow : Window
             ? $"{(int)duration.TotalDays}d {duration.Hours}h {duration.Minutes}m"
             : $"{(int)duration.TotalHours}h {duration.Minutes}m";
 
-    private static string FormatCompactGil(long gil)
-        => gil switch
-        {
-            >= 1_000_000_000 => $"{gil / 1_000_000_000d:0.##}b",
-            >= 1_000_000 => $"{gil / 1_000_000d:0.##}m",
-            >= 1_000 => $"{gil / 1_000d:0.##}k",
-            _ => gil.ToString("N0"),
-        };
-
     private string FormatRoute(IReadOnlyList<uint> route)
         => route.Count == 0 ? "-" : string.Join(" → ", route.Select(this.catalog.PointName));
 

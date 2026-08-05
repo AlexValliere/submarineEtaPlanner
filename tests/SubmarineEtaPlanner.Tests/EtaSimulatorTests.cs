@@ -954,6 +954,31 @@ public sealed class EtaSimulatorTests
     }
 
     [Theory]
+    [InlineData("Ready now")]
+    [InlineData("Median 12d")]
+    [InlineData("Up to date")]
+    [InlineData("Calculating 00:05")]
+    [InlineData("Incomplete")]
+    [InlineData("Queued")]
+    public void CollapsedFcStatusesAppendRecordedSalvage(string status)
+    {
+        Assert.Equal(
+            $"{status} • Salvage 12m gil",
+            ResultsViewState.FormatCollapsedHeaderStatus(status, 12_000_000));
+    }
+
+    [Theory]
+    [InlineData(0, "0")]
+    [InlineData(999, "999")]
+    [InlineData(1_000, "1k")]
+    [InlineData(12_000_000, "12m")]
+    [InlineData(1_000_000_000, "1b")]
+    public void CompactGilCoversHeaderDisplayRanges(long gil, string expected)
+    {
+        Assert.Equal(expected, ResultsViewState.FormatCompactGil(gil));
+    }
+
+    [Theory]
     [InlineData(4u, "Île d'Anthémuse (D)", "D")]
     [InlineData(8u, "The Wreckage (North) (h)", "H")]
     [InlineData(11u, "The Wreckage (North)", "11")]
@@ -1022,10 +1047,10 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.4.11.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.4.12.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.11.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.12.0.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
         Assert.Contains("inclusive underway, ready-to-collect, and tracker-syncing states", repoJson);
@@ -1044,7 +1069,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.11.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.4.12.0.png", workflow);
         Assert.Contains("Copy-Item \"$out/CalculatedData.msgpack\" $packageDir", workflow);
     }
 

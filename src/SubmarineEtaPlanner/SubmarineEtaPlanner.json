@@ -6,7 +6,7 @@
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
-  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.11.0.png",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.12.0.png",
   "Changelog": "Clarified voyages left with inclusive underway, ready-to-collect, and tracker-syncing states.",
   "Tags": [
     "Submarine",
