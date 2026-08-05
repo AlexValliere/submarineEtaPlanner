@@ -356,6 +356,9 @@ public sealed class ResultsViewState
     public static bool IsReady(EtaResult result, int targetRank)
         => result.PerSubResults.Count > 0 && result.PerSubResults.All(sub => sub.StartingRank >= targetRank);
 
+    public static bool IsReady(FcState fc, int targetRank)
+        => fc.Submarines.Count > 0 && fc.Submarines.All(submarine => submarine.Rank >= targetRank);
+
     public static bool ShouldInclude(EtaResult result, int targetRank, FcResultFilter filter)
         => filter switch
         {

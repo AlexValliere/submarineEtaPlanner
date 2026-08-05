@@ -8,6 +8,58 @@ namespace SubmarineEtaPlanner.Ui;
 
 public sealed partial class PlannerWindow
 {
+    private sealed record FcHeaderRenderContext(
+        DashboardFcHeaderPresentation Presentation,
+        FcCurrentVoyageProgressPresentation CurrentVoyages);
+
+    private readonly record struct FcHeaderColumn(float Offset, float Width);
+
+    private sealed record FcHeaderLayout(
+        bool TwoLine,
+        float HeaderHeight,
+        float LegendHeight,
+        FcHeaderColumn FreeCompany,
+        FcHeaderColumn World,
+        FcHeaderColumn TargetEta,
+        FcHeaderColumn Salvage,
+        FcHeaderColumn CurrentVoyage);
+
+    private sealed record FcSubmarineTableColumn(
+        string Label,
+        ImGuiTableColumnFlags Flags,
+        float WidthOrWeight);
+
+    private sealed record FcSubmarineTableSchema(
+        float MinimumWidth,
+        IReadOnlyList<FcSubmarineTableColumn> Columns);
+
+    private static readonly FcSubmarineTableSchema LevelingFcTableSchema = new(
+        1285f,
+        [
+            new("Submarine", ImGuiTableColumnFlags.WidthFixed, 190f),
+            new("Rank", ImGuiTableColumnFlags.WidthFixed, 95f),
+            new("ETA", ImGuiTableColumnFlags.WidthFixed, 92f),
+            new("Returns", ImGuiTableColumnFlags.WidthFixed, 130f),
+            new("Voyages left", ImGuiTableColumnFlags.WidthFixed, 127f),
+            new("Salvage gil", ImGuiTableColumnFlags.WidthFixed, 100f),
+            new("Build", ImGuiTableColumnFlags.WidthFixed, 72f),
+            new("Current route", ImGuiTableColumnFlags.WidthStretch, 0.75f),
+            new("Next after return", ImGuiTableColumnFlags.WidthStretch, 1f),
+            new("Status", ImGuiTableColumnFlags.WidthFixed, 116f),
+        ]);
+
+    private static readonly FcSubmarineTableSchema ReadyFcTableSchema = new(
+        880f,
+        [
+            new("Submarine", ImGuiTableColumnFlags.WidthFixed, 190f),
+            new("Rank", ImGuiTableColumnFlags.WidthFixed, 95f),
+            new("Returns", ImGuiTableColumnFlags.WidthFixed, 130f),
+            new("Salvage gil", ImGuiTableColumnFlags.WidthFixed, 100f),
+            new("Build", ImGuiTableColumnFlags.WidthFixed, 72f),
+            new("Current route", ImGuiTableColumnFlags.WidthStretch, 1f),
+            new("Status", ImGuiTableColumnFlags.WidthFixed, 116f),
+        ]);
+
     private void DrawDashboardPage()
     {
         var renderNow = DateTimeOffset.UtcNow;
@@ -175,12 +227,22 @@ public sealed partial class PlannerWindow
             return;
         }
 
+        var headerContexts = visibleEntries.ToDictionary(
+            entry => entry.Fc.FcIdKey,
+            entry => CreateFcHeaderRenderContext(entry.Fc, entry.Result, entry.Progress, renderNow));
+        var headerLayout = CalculateFcHeaderLayout(
+            headerContexts.Values.Select(context => context.Presentation),
+            ImGui.GetContentRegionAvail().X);
+        DrawFcHeaderLegend(headerLayout);
+        ImGui.Spacing();
+
         foreach (var entry in visibleEntries)
         {
+            var headerContext = headerContexts[entry.Fc.FcIdKey];
             if (entry.Result is not null)
-                DrawFcResult(entry.Fc, entry.Result, renderNow, entry.Progress);
+                DrawFcResult(entry.Fc, entry.Result, renderNow, headerContext, headerLayout, entry.Progress);
             else
-                DrawPendingFc(entry.Fc, entry.Progress, renderNow);
+                DrawPendingFc(entry.Fc, entry.Progress, headerContext, headerLayout);
             ImGui.Spacing();
         }
 
@@ -191,7 +253,7 @@ public sealed partial class PlannerWindow
     {
         var total = currentSnapshot.FreeCompanies.Count;
         var leveling = currentSnapshot.FreeCompanies.Count(fc =>
-            !IsReadyNow(fc, this.configuration.Settings.TargetRank));
+            !ResultsViewState.IsReady(fc, this.configuration.Settings.TargetRank));
         var ready = total - leveling;
         var recordedGil = currentSnapshot.FreeCompanies.Sum(fc => fc.RecordedSalvageGil);
         var warnings = currentSnapshot.FcProgress.Count(progress =>
@@ -245,16 +307,256 @@ public sealed partial class PlannerWindow
         }
     }
 
+    private FcHeaderRenderContext CreateFcHeaderRenderContext(
+        FcState fc,
+        EtaResult? result,
+        FcCalculationProgress? progress,
+        DateTimeOffset renderNow)
+    {
+        var currentVoyages = CurrentVoyageProgressFormatter.CreateForFc(fc.Submarines, this.catalog, renderNow);
+        var targetEta = result is null
+            ? GetPendingStatusText(progress)
+            : GetResultHeaderStatus(fc, result, progress, renderNow);
+        return new FcHeaderRenderContext(
+            DashboardFcHeaderPresentation.Create(fc, targetEta, currentVoyages),
+            currentVoyages);
+    }
+
+    private static string GetPendingStatusText(FcCalculationProgress? progress)
+        => (progress?.Status ?? FcCalculationStatus.Queued) switch
+        {
+            FcCalculationStatus.Calculating => $"Calculating {FormatProgressElapsed(progress)}",
+            FcCalculationStatus.Reused => "Up to date",
+            FcCalculationStatus.AwaitingTrackerUpdate => "Waiting for SubmarineTracker",
+            FcCalculationStatus.TimedOut => "Timed out",
+            FcCalculationStatus.Failed => "Failed",
+            FcCalculationStatus.Cancelled => "Cancelled",
+            _ => "Queued",
+        };
+
+    private static string GetResultHeaderStatus(
+        FcState fc,
+        EtaResult result,
+        FcCalculationProgress? calculationProgress,
+        DateTimeOffset renderNow)
+    {
+        var ready = ResultsViewState.IsReady(fc, result.TargetRank);
+        var resultStatus = result.IsComplete
+            ? ready
+                ? "Ready"
+                : $"Median {FormatRelative(result.FcCompletionAtUtc, renderNow)}"
+            : result.IncompleteReason?.Contains("time limit", StringComparison.OrdinalIgnoreCase) == true
+                ? "Timed out"
+                : "Incomplete";
+        var calculationStatus = calculationProgress?.Status switch
+        {
+            FcCalculationStatus.Queued => "Queued for refresh",
+            FcCalculationStatus.Calculating => $"Refreshing {FormatProgressElapsed(calculationProgress)}",
+            FcCalculationStatus.Reused => "Up to date",
+            FcCalculationStatus.AwaitingTrackerUpdate => "Waiting for SubmarineTracker",
+            FcCalculationStatus.TimedOut => "Timed out",
+            FcCalculationStatus.Failed => "Refresh failed",
+            _ => resultStatus,
+        };
+        return ResultsViewState.SelectCollapsedStatus(
+            resultStatus,
+            calculationProgress?.Status,
+            calculationStatus);
+    }
+
+    private static FcHeaderLayout CalculateFcHeaderLayout(
+        IEnumerable<DashboardFcHeaderPresentation> presentations,
+        float availableWidth)
+    {
+        var values = presentations.ToArray();
+        var scale = ImGuiHelpers.GlobalScale;
+        var gap = 10f * scale;
+        var gutter = 40f * scale;
+        var tagWidth = MeasureHeaderColumn(values.Select(value => value.FreeCompanyTag), "FC", 78f, 155f);
+        var worldWidth = MeasureHeaderColumn(values.Select(value => value.World), "World", 86f, 150f);
+        var targetWidth = MeasureHeaderColumn(values.Select(value => value.TargetEta), "Target ETA", 110f, 225f);
+        var salvageWidth = MeasureHeaderColumn(values.Select(value => value.Salvage), "Salvage", 100f, 130f);
+        var voyageWidth = MeasureHeaderColumn(values.Select(value => value.CurrentVoyage), "Current voyage", 145f, 245f);
+        var requiredSingleLine = gutter + tagWidth + worldWidth + targetWidth + salvageWidth + voyageWidth + (gap * 4f);
+        var twoLine = availableWidth < requiredSingleLine;
+        var lineHeight = ImGui.GetTextLineHeight();
+
+        if (!twoLine)
+        {
+            var tag = new FcHeaderColumn(gutter, tagWidth);
+            var world = new FcHeaderColumn(tag.Offset + tag.Width + gap, worldWidth);
+            var target = new FcHeaderColumn(world.Offset + world.Width + gap, targetWidth);
+            var salvage = new FcHeaderColumn(target.Offset + target.Width + gap, salvageWidth);
+            var voyageOffset = salvage.Offset + salvage.Width + gap;
+            var voyage = new FcHeaderColumn(voyageOffset, Math.Max(1f, availableWidth - voyageOffset));
+            return new FcHeaderLayout(
+                false,
+                ImGui.GetFrameHeight(),
+                ImGui.GetFrameHeight(),
+                tag,
+                world,
+                target,
+                salvage,
+                voyage);
+        }
+
+        var contentWidth = Math.Max(1f, availableWidth - gutter);
+        var tagTwoLineWidth = Math.Min(tagWidth, Math.Max(72f * scale, contentWidth * 0.28f));
+        var worldTwoLineWidth = Math.Min(worldWidth, Math.Max(78f * scale, contentWidth * 0.29f));
+        var targetTwoLineOffset = gutter + tagTwoLineWidth + worldTwoLineWidth + (gap * 2f);
+        var targetTwoLineWidth = Math.Max(1f, availableWidth - targetTwoLineOffset);
+        var salvageTwoLineWidth = Math.Min(salvageWidth, Math.Max(100f * scale, contentWidth * 0.30f));
+        var voyageTwoLineOffset = gutter + salvageTwoLineWidth + gap;
+        var voyageTwoLineWidth = Math.Max(1f, availableWidth - voyageTwoLineOffset);
+        return new FcHeaderLayout(
+            true,
+            (lineHeight * 2f) + (14f * scale),
+            (lineHeight * 2f) + (14f * scale),
+            new FcHeaderColumn(gutter, tagTwoLineWidth),
+            new FcHeaderColumn(gutter + tagTwoLineWidth + gap, worldTwoLineWidth),
+            new FcHeaderColumn(targetTwoLineOffset, targetTwoLineWidth),
+            new FcHeaderColumn(gutter, salvageTwoLineWidth),
+            new FcHeaderColumn(voyageTwoLineOffset, voyageTwoLineWidth));
+    }
+
+    private static float MeasureHeaderColumn(
+        IEnumerable<string> values,
+        string label,
+        float minimum,
+        float maximum)
+    {
+        var widest = values.Append(label).Max(value => ImGui.CalcTextSize(value).X);
+        return Math.Clamp(
+            widest + (10f * ImGuiHelpers.GlobalScale),
+            minimum * ImGuiHelpers.GlobalScale,
+            maximum * ImGuiHelpers.GlobalScale);
+    }
+
+    private static void DrawFcHeaderLegend(FcHeaderLayout layout)
+    {
+        var origin = ImGui.GetCursorScreenPos();
+        var legend = new DashboardFcHeaderPresentation("FC", "World", "Target ETA", "Salvage", "Current voyage");
+        DrawFcHeaderFields(origin, layout, legend, PlannerUi.Muted);
+        ImGui.Dummy(new Vector2(ImGui.GetContentRegionAvail().X, layout.LegendHeight));
+    }
+
+    private static bool DrawAlignedFcHeader(
+        string id,
+        DashboardFcHeaderPresentation presentation,
+        FcHeaderLayout layout,
+        FcCurrentVoyageProgressPresentation currentVoyages)
+    {
+        var origin = ImGui.GetCursorScreenPos();
+        DrawFcProgressBackground(currentVoyages, layout.HeaderHeight);
+        var style = ImGui.GetStyle();
+        var framePaddingY = Math.Max(0f, (layout.HeaderHeight - ImGui.GetTextLineHeight()) / 2f);
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(style.FramePadding.X, framePaddingY));
+        ImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.62f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.76f));
+        var open = ImGui.CollapsingHeader($"###{id}");
+        ImGui.PopStyleColor(3);
+        ImGui.PopStyleVar();
+        DrawFcHeaderFields(origin, layout, presentation, ImGui.GetStyle().Colors[(int)ImGuiCol.Text]);
+        return open;
+    }
+
+    private static void DrawFcHeaderFields(
+        Vector2 origin,
+        FcHeaderLayout layout,
+        DashboardFcHeaderPresentation presentation,
+        Vector4 color)
+    {
+        var lineHeight = ImGui.GetTextLineHeight();
+        var scale = ImGuiHelpers.GlobalScale;
+        var firstLineY = layout.TwoLine
+            ? origin.Y + ((layout.HeaderHeight - ((lineHeight * 2f) + (2f * scale))) / 2f)
+            : origin.Y + ((layout.HeaderHeight - lineHeight) / 2f);
+        var secondLineY = firstLineY + lineHeight + (2f * scale);
+        DrawFcHeaderCell(origin.X, firstLineY, lineHeight, layout.FreeCompany, presentation.FreeCompanyTag, color, false);
+        DrawFcHeaderCell(origin.X, firstLineY, lineHeight, layout.World, presentation.World, color, false);
+        DrawFcHeaderCell(origin.X, firstLineY, lineHeight, layout.TargetEta, presentation.TargetEta, color, false);
+        DrawFcHeaderCell(
+            origin.X,
+            layout.TwoLine ? secondLineY : firstLineY,
+            lineHeight,
+            layout.Salvage,
+            presentation.Salvage,
+            color,
+            true);
+        DrawFcHeaderCell(
+            origin.X,
+            layout.TwoLine ? secondLineY : firstLineY,
+            lineHeight,
+            layout.CurrentVoyage,
+            presentation.CurrentVoyage,
+            color,
+            false);
+    }
+
+    private static void DrawFcHeaderCell(
+        float originX,
+        float y,
+        float lineHeight,
+        FcHeaderColumn column,
+        string text,
+        Vector4 color,
+        bool rightAligned)
+    {
+        if (column.Width <= 1f)
+            return;
+
+        var padding = 3f * ImGuiHelpers.GlobalScale;
+        var available = Math.Max(1f, column.Width - (padding * 2f));
+        var fitted = FitHeaderText(text, available);
+        var textWidth = ImGui.CalcTextSize(fitted).X;
+        var x = originX + column.Offset + padding;
+        if (rightAligned)
+            x = originX + column.Offset + column.Width - padding - textWidth;
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.PushClipRect(
+            new Vector2(originX + column.Offset, y),
+            new Vector2(originX + column.Offset + column.Width, y + lineHeight),
+            true);
+        drawList.AddText(new Vector2(x, y), ImGui.ColorConvertFloat4ToU32(color), fitted);
+        drawList.PopClipRect();
+    }
+
+    private static string FitHeaderText(string text, float availableWidth)
+    {
+        if (ImGui.CalcTextSize(text).X <= availableWidth)
+            return text;
+
+        const string ellipsis = "…";
+        if (ImGui.CalcTextSize(ellipsis).X > availableWidth)
+            return string.Empty;
+
+        var low = 0;
+        var high = text.Length;
+        while (low < high)
+        {
+            var length = (low + high + 1) / 2;
+            if (ImGui.CalcTextSize(text[..length] + ellipsis).X <= availableWidth)
+                low = length;
+            else
+                high = length - 1;
+        }
+
+        return text[..low].TrimEnd() + ellipsis;
+    }
+
     private void DrawFcResult(
         FcState fc,
         EtaResult result,
         DateTimeOffset renderNow,
+        FcHeaderRenderContext headerContext,
+        FcHeaderLayout headerLayout,
         FcCalculationProgress? calculationProgress = null)
     {
         if (this.viewState.ExpansionOverride is not null)
             ImGui.SetNextItemOpen(this.viewState.ExpansionOverride.Value, ImGuiCond.Always);
 
-        var ready = ResultsViewState.IsReady(result, result.TargetRank);
+        var ready = ResultsViewState.IsReady(fc, result.TargetRank);
         var resultStatusText = result.IsComplete
             ? ready
                 ? "Ready now"
@@ -273,28 +575,19 @@ public sealed partial class PlannerWindow
             FcCalculationStatus.Failed => "Refresh failed",
             _ => resultStatusText,
         };
-        var collapsedStatusText = ResultsViewState.SelectCollapsedStatus(
-            resultStatusText,
-            calculationProgress?.Status,
-            calculationStatusText);
         var statusColor = calculationProgress?.Status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed or FcCalculationStatus.AwaitingTrackerUpdate
             ? PlannerUi.Amber
             : !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan;
         var fcKey = Convert.ToHexString(result.FcId);
         var salvageBySubmarine = fc.Submarines.ToDictionary(submarine => submarine.SubmarineId, submarine => submarine.Salvage);
         var submarineStatesById = fc.Submarines.ToDictionary(submarine => submarine.SubmarineId);
-        var currentVoyages = CurrentVoyageProgressFormatter.CreateForFc(fc.Submarines, this.catalog, renderNow);
-        var collapsedHeaderStatus = ResultsViewState.FormatCollapsedHeaderStatus(collapsedStatusText, fc.RecordedSalvageGil);
-        if (currentVoyages.HasActiveVoyages)
-            collapsedHeaderStatus += $" • {currentVoyages.HeaderLabel}";
-
-        DrawFcProgressBackground(currentVoyages);
-        ImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.62f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.76f));
-        var open = ImGui.CollapsingHeader($"{result.FcDisplayName}   •   {collapsedHeaderStatus}###fc-{fcKey}");
-        ImGui.PopStyleColor(3);
-        DrawFcHeaderTooltip(fc, currentVoyages);
+        var currentVoyages = headerContext.CurrentVoyages;
+        var open = DrawAlignedFcHeader(
+            $"fc-{fcKey}",
+            headerContext.Presentation,
+            headerLayout,
+            currentVoyages);
+        DrawFcHeaderTooltip(fc, headerContext.Presentation, currentVoyages);
         if (!open)
             return;
 
@@ -364,7 +657,8 @@ public sealed partial class PlannerWindow
                 PlannerUi.Amber);
         }
 
-        var minimumTableWidth = 1285f * ImGuiHelpers.GlobalScale;
+        var tableSchema = ready ? ReadyFcTableSchema : LevelingFcTableSchema;
+        var minimumTableWidth = tableSchema.MinimumWidth * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
         var tableFlags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.BordersOuter | ImGuiTableFlags.RowBg |
                          ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
@@ -378,22 +672,19 @@ public sealed partial class PlannerWindow
         var tableViewportWidth = ImGui.GetContentRegionAvail().X;
         if (!ImGui.BeginTable(
                 $"table-{fcKey}",
-                10,
+                tableSchema.Columns.Count,
                 tableFlags,
                 tableSize,
                 needsHorizontalScroll ? minimumTableWidth : 0f))
             return;
 
-        ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 190f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 95f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("ETA", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Returns", ImGuiTableColumnFlags.WidthFixed, 130f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Voyages left", ImGuiTableColumnFlags.WidthFixed, 127f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Salvage gil", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Current route", ImGuiTableColumnFlags.WidthStretch, 0.75f);
-        ImGui.TableSetupColumn("Next after return", ImGuiTableColumnFlags.WidthStretch, 1f);
-        ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 116f * ImGuiHelpers.GlobalScale);
+        foreach (var column in tableSchema.Columns)
+        {
+            var widthOrWeight = column.Flags.HasFlag(ImGuiTableColumnFlags.WidthFixed)
+                ? column.WidthOrWeight * ImGuiHelpers.GlobalScale
+                : column.WidthOrWeight;
+            ImGui.TableSetupColumn(column.Label, column.Flags, widthOrWeight);
+        }
         ImGui.TableSetupScrollFreeze(1, 1);
         ImGui.TableHeadersRow();
 
@@ -443,27 +734,33 @@ public sealed partial class PlannerWindow
                 ImGui.SetTooltip(subOpen ? "Hide voyage forecast" : "Show voyage forecast");
             ImGui.TableNextColumn();
             ImGui.TextUnformatted($"{sub.StartingRank} → {sub.FinalRank}");
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(sub.StartingRank >= result.TargetRank ? "now" : $"P50 {FormatRelative(sub.EtaAtUtc, renderNow)}");
-            if (sub.EtaForecast is not null && ImGui.IsItemHovered())
+            if (!ready)
             {
-                ImGui.SetTooltip(
-                    $"Likely range: {FormatRelative(sub.EtaForecast.P10AtUtc, renderNow)}–" +
-                    $"{FormatRelative(sub.EtaForecast.P90AtUtc, renderNow)} ({sub.EtaForecast.SampleCount} samples)\n" +
-                    $"Forecast calculated: {result.GeneratedAtUtc.LocalDateTime:g}");
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(sub.StartingRank >= result.TargetRank ? "now" : $"P50 {FormatRelative(sub.EtaAtUtc, renderNow)}");
+                if (sub.EtaForecast is not null && ImGui.IsItemHovered())
+                {
+                    ImGui.SetTooltip(
+                        $"Likely range: {FormatRelative(sub.EtaForecast.P10AtUtc, renderNow)}–" +
+                        $"{FormatRelative(sub.EtaForecast.P90AtUtc, renderNow)} ({sub.EtaForecast.SampleCount} samples)\n" +
+                        $"Forecast calculated: {result.GeneratedAtUtc.LocalDateTime:g}");
+                }
             }
             ImGui.TableNextColumn();
             DrawCurrentVoyageReturn(currentVoyage, submarineState);
-            ImGui.TableNextColumn();
-            var voyageColor = voyageProgress.State switch
+            if (!ready)
             {
-                VoyageProgressState.ReadyToCollect or VoyageProgressState.Syncing => PlannerUi.Amber,
-                VoyageProgressState.Underway => PlannerUi.Cyan,
-                _ => ImGui.GetStyle().Colors[(int)ImGuiCol.Text],
-            };
-            ImGui.TextColored(voyageColor, voyageProgress.Label);
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(voyageProgress.Tooltip);
+                ImGui.TableNextColumn();
+                var voyageColor = voyageProgress.State switch
+                {
+                    VoyageProgressState.ReadyToCollect or VoyageProgressState.Syncing => PlannerUi.Amber,
+                    VoyageProgressState.Underway => PlannerUi.Cyan,
+                    _ => ImGui.GetStyle().Colors[(int)ImGuiCol.Text],
+                };
+                ImGui.TextColored(voyageColor, voyageProgress.Label);
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip(voyageProgress.Tooltip);
+            }
             ImGui.TableNextColumn();
             ImGui.TextColored(salvage.TotalGil > 0 ? PlannerUi.Green : PlannerUi.Muted, ResultsViewState.FormatCompactGil(salvage.TotalGil));
             if (ImGui.IsItemHovered())
@@ -476,8 +773,11 @@ public sealed partial class PlannerWindow
                 sub.CurrentReturnAtUtc is not null && sub.CurrentReturnAtUtc.Value <= renderNow
                     ? PlannerUi.Amber
                     : null);
-            ImGui.TableNextColumn();
-            DrawNextRoute(sub);
+            if (!ready)
+            {
+                ImGui.TableNextColumn();
+                DrawNextRoute(sub);
+            }
             ImGui.TableNextColumn();
             DrawSubmarineStatus(sub, result.TargetRank, voyageProgress.State);
         }
@@ -552,25 +852,34 @@ public sealed partial class PlannerWindow
         ImGui.EndTooltip();
     }
 
-    private static void DrawFcProgressBackground(FcCurrentVoyageProgressPresentation currentVoyages)
+    private static void DrawFcProgressBackground(
+        FcCurrentVoyageProgressPresentation currentVoyages,
+        float height)
     {
         var primary = currentVoyages.Primary;
         var accent = GetCurrentVoyageColor(primary?.State);
         PlannerUi.DrawProgressBackground(
             ImGui.GetCursorScreenPos(),
-            new Vector2(ImGui.GetContentRegionAvail().X, ImGui.GetFrameHeight()),
+            new Vector2(ImGui.GetContentRegionAvail().X, height),
             primary?.Fraction,
             accent,
             PlannerUi.PanelBackground,
             5f * ImGuiHelpers.GlobalScale);
     }
 
-    private void DrawFcHeaderTooltip(FcState fc, FcCurrentVoyageProgressPresentation currentVoyages)
+    private void DrawFcHeaderTooltip(
+        FcState fc,
+        DashboardFcHeaderPresentation presentation,
+        FcCurrentVoyageProgressPresentation currentVoyages)
     {
         if (!ImGui.IsItemHovered())
             return;
 
         ImGui.BeginTooltip();
+        ImGui.TextColored(PlannerUi.Teal, $"{presentation.FreeCompanyTag} — {presentation.World}");
+        ImGui.TextUnformatted($"Target ETA: {presentation.TargetEta}");
+        ImGui.TextUnformatted($"Current voyage: {presentation.CurrentVoyage}");
+        ImGui.Separator();
         ImGui.TextColored(PlannerUi.Green, $"Recorded NPC value: {fc.RecordedSalvageGil:N0} gil");
         ImGui.TextColored(PlannerUi.Muted, "Gross value from SubmarineTracker salvage history; costs are not deducted.");
 
@@ -762,35 +1071,25 @@ public sealed partial class PlannerWindow
         ImGui.EndTable();
     }
 
-    private void DrawPendingFc(FcState fc, FcCalculationProgress? progress, DateTimeOffset renderNow)
+    private void DrawPendingFc(
+        FcState fc,
+        FcCalculationProgress? progress,
+        FcHeaderRenderContext headerContext,
+        FcHeaderLayout headerLayout)
     {
         var fcKey = fc.FcIdKey;
         var status = progress?.Status ?? FcCalculationStatus.Queued;
-        var statusText = status switch
-        {
-            FcCalculationStatus.Calculating => $"Calculating {FormatProgressElapsed(progress)}",
-            FcCalculationStatus.Reused => "Up to date",
-            FcCalculationStatus.AwaitingTrackerUpdate => "Waiting for SubmarineTracker",
-            FcCalculationStatus.TimedOut => "Timed out",
-            FcCalculationStatus.Failed => "Failed",
-            FcCalculationStatus.Cancelled => "Cancelled",
-            _ => "Queued",
-        };
+        var statusText = GetPendingStatusText(progress);
         var color = status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed or FcCalculationStatus.AwaitingTrackerUpdate
             ? PlannerUi.Amber
             : PlannerUi.Cyan;
-        var currentVoyages = CurrentVoyageProgressFormatter.CreateForFc(fc.Submarines, this.catalog, renderNow);
-        var collapsedHeaderStatus = ResultsViewState.FormatCollapsedHeaderStatus(statusText, fc.RecordedSalvageGil);
-        if (currentVoyages.HasActiveVoyages)
-            collapsedHeaderStatus += $" • {currentVoyages.HeaderLabel}";
-
-        DrawFcProgressBackground(currentVoyages);
-        ImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.62f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.76f));
-        var open = ImGui.CollapsingHeader($"{fc.DisplayName}   •   {collapsedHeaderStatus}###fc-pending-{fcKey}");
-        ImGui.PopStyleColor(3);
-        DrawFcHeaderTooltip(fc, currentVoyages);
+        var currentVoyages = headerContext.CurrentVoyages;
+        var open = DrawAlignedFcHeader(
+            $"fc-pending-{fcKey}",
+            headerContext.Presentation,
+            headerLayout,
+            currentVoyages);
+        DrawFcHeaderTooltip(fc, headerContext.Presentation, currentVoyages);
         if (!open)
             return;
 
@@ -810,13 +1109,10 @@ public sealed partial class PlannerWindow
     private static bool ShouldIncludeFc(FcState fc, int targetRank, FcResultFilter filter)
         => filter switch
         {
-            FcResultFilter.Leveling => !IsReadyNow(fc, targetRank),
-            FcResultFilter.Ready => IsReadyNow(fc, targetRank),
+            FcResultFilter.Leveling => !ResultsViewState.IsReady(fc, targetRank),
+            FcResultFilter.Ready => ResultsViewState.IsReady(fc, targetRank),
             _ => true,
         };
-
-    private static bool IsReadyNow(FcState fc, int targetRank)
-        => fc.Submarines.Count > 0 && fc.Submarines.All(submarine => submarine.Rank >= targetRank);
 
     private static string FormatProgressElapsed(FcCalculationProgress? progress)
     {

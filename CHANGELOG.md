@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.15.0
+
+- Aligned FC tags, worlds, target ETAs, salvage values, and current voyages into responsive dashboard columns.
+- Added a two-line FC header layout for narrow windows while preserving voyage progress and tooltips.
+- Simplified ready-FC submarine tables by removing leveling-only ETA, voyage-count, and next-route columns.
+
 ## 0.4.14.0
 
 - Fixed expanded submarine progress backgrounds drawing beyond the table and planner window when rows are clipped.
