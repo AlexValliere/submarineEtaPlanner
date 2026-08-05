@@ -6,8 +6,8 @@
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
-  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.15.0.png",
-  "Changelog": "Aligned responsive FC headers and simplified ready-FC submarine tables.",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.16.0.png",
+  "Changelog": "Centered compact sidebar icons and aligned expanded navigation content.",
   "Tags": [
     "Submarine",
     "ETA",

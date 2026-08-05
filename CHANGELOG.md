@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.16.0
+
+- Centered compact sidebar icons and aligned expanded navigation icons and labels consistently.
+
 ## 0.4.15.0
 
 - Aligned FC tags, worlds, target ETAs, salvage values, and current voyages into responsive dashboard columns.

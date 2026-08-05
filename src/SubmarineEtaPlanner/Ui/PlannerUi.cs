@@ -104,17 +104,35 @@ internal static class PlannerUi
 
     internal static void DrawBrandMark(bool compact)
     {
-        Icon(FontAwesomeIcon.Ship, Teal);
+        const string label = "SUB ETA";
+        var scale = ImGuiHelpers.GlobalScale;
+        var origin = ImGui.GetCursorScreenPos();
+        var width = Math.Max(1f, ImGui.GetContentRegionAvail().X);
+        var iconText = FontAwesomeIcon.Ship.ToIconString();
+        Vector2 iconSize;
+        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+            iconSize = ImGui.CalcTextSize(iconText);
+
+        var labelSize = ImGui.CalcTextSize(label);
+        var rowSize = new Vector2(width, Math.Max(iconSize.Y, labelSize.Y));
+        var iconPosition = SidebarIconPosition(origin, rowSize, iconSize, compact, scale);
+        var drawList = ImGui.GetWindowDrawList();
+        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+            drawList.AddText(iconPosition, ColorU32(Teal), iconText);
+
         if (!compact)
         {
-            ImGui.SameLine();
-            ImGui.TextUnformatted("SUB ETA");
-            ImGui.TextColored(Muted, "Command deck");
+            var labelPosition = new Vector2(
+                origin.X + SidebarTextOffset(scale),
+                origin.Y + ((rowSize.Y - labelSize.Y) / 2f));
+            drawList.AddText(labelPosition, ColorU32(ImGui.GetStyle().Colors[(int)ImGuiCol.Text]), label);
         }
-        else
-        {
+
+        ImGui.Dummy(rowSize);
+        if (compact)
             Tooltip("Submarine ETA Planner");
-        }
+        else
+            ImGui.TextColored(Muted, "Command deck");
     }
 
     internal static bool NavigationButton(string id, FontAwesomeIcon icon, string label, bool compact, bool selected)
@@ -125,16 +143,66 @@ internal static class PlannerUi
             ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.10f, 0.45f, 0.45f, 1f));
         }
 
-        var size = new Vector2(-1, 36f * ImGuiHelpers.GlobalScale);
-        var clicked = compact
-            ? ImGuiComponents.IconButton(id, icon, size)
-            : ImGuiComponents.IconButtonWithText(icon, $"{label}##{id}", size);
+        var scale = ImGuiHelpers.GlobalScale;
+        var size = new Vector2(Math.Max(1f, ImGui.GetContentRegionAvail().X), 36f * scale);
+        var clicked = ImGui.Button($"##{id}", size);
+        var rowMin = ImGui.GetItemRectMin();
+        var rowMax = ImGui.GetItemRectMax();
+        var rowSize = rowMax - rowMin;
+        var iconText = icon.ToIconString();
+        Vector2 iconSize;
+        var drawList = ImGui.GetWindowDrawList();
+        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+        {
+            iconSize = ImGui.CalcTextSize(iconText);
+            drawList.AddText(
+                SidebarIconPosition(rowMin, rowSize, iconSize, compact, scale),
+                ColorU32(ImGui.GetStyle().Colors[(int)ImGuiCol.Text]),
+                iconText);
+        }
+
+        if (!compact)
+        {
+            var labelSize = ImGui.CalcTextSize(label);
+            var labelPosition = new Vector2(
+                rowMin.X + SidebarTextOffset(scale),
+                rowMin.Y + ((rowSize.Y - labelSize.Y) / 2f));
+            drawList.AddText(
+                labelPosition,
+                ColorU32(ImGui.GetStyle().Colors[(int)ImGuiCol.Text]),
+                label);
+        }
+
         if (compact)
             Tooltip(label);
 
         if (selected)
             ImGui.PopStyleColor(2);
         return clicked;
+    }
+
+    private static Vector2 SidebarIconPosition(
+        Vector2 rowMin,
+        Vector2 rowSize,
+        Vector2 iconSize,
+        bool compact,
+        float scale)
+    {
+        const float horizontalPadding = 8f;
+        const float iconColumnWidth = 20f;
+        var x = compact
+            ? rowMin.X + ((rowSize.X - iconSize.X) / 2f)
+            : rowMin.X + ((horizontalPadding + (iconColumnWidth / 2f)) * scale) - (iconSize.X / 2f);
+        var y = rowMin.Y + ((rowSize.Y - iconSize.Y) / 2f);
+        return new Vector2(x, y);
+    }
+
+    private static float SidebarTextOffset(float scale)
+    {
+        const float horizontalPadding = 8f;
+        const float iconColumnWidth = 20f;
+        const float iconLabelGap = 8f;
+        return (horizontalPadding + iconColumnWidth + iconLabelGap) * scale;
     }
 
     internal static void SectionLabel(string label)
