@@ -10,6 +10,7 @@ public sealed partial class PlannerWindow
 {
     private void DrawDashboardPage()
     {
+        var renderNow = DateTimeOffset.UtcNow;
         var dependency = this.getSubmarineTrackerState();
         if (!dependency.IsAvailable)
         {
@@ -61,7 +62,7 @@ public sealed partial class PlannerWindow
         {
             var elapsed = this.refreshStartedAtUtc is null
                 ? TimeSpan.Zero
-                : DateTimeOffset.UtcNow - this.refreshStartedAtUtc.Value;
+                : renderNow - this.refreshStartedAtUtc.Value;
             var title = this.refreshBaseSnapshot is null ? "Charting the first forecast" : "Refreshing forecast";
             var active = this.snapshot?.FcProgress.FirstOrDefault(progress => progress.Status == FcCalculationStatus.Calculating);
             var completed = this.snapshot?.FcProgress.Count(progress =>
@@ -76,7 +77,7 @@ public sealed partial class PlannerWindow
             var body = active is null
                 ? $"Reading SubmarineTracker data {FormatElapsed(elapsed)}"
                 : incrementalPrefix + $"FC {Math.Min(completed + 1, total)} of {total}: {active.FcDisplayName} · " +
-                  $"{FormatElapsed(DateTimeOffset.UtcNow - (active.StartedAtUtc ?? DateTimeOffset.UtcNow))}";
+                  $"{FormatElapsed(renderNow - (active.StartedAtUtc ?? renderNow))}";
             if (reused > 0 && this.snapshot?.RefreshMode != ForecastRefreshMode.Incremental)
                 body += $" · {reused} unchanged FC{(reused == 1 ? string.Empty : "s")} reused";
             PlannerUi.Callout("dashboard-loading", FontAwesomeIcon.SyncAlt, title, body, PlannerUi.Cyan);
@@ -177,9 +178,9 @@ public sealed partial class PlannerWindow
         foreach (var entry in visibleEntries)
         {
             if (entry.Result is not null)
-                DrawFcResult(entry.Fc, entry.Result, entry.Progress);
+                DrawFcResult(entry.Fc, entry.Result, renderNow, entry.Progress);
             else
-                DrawPendingFc(entry.Fc, entry.Progress);
+                DrawPendingFc(entry.Fc, entry.Progress, renderNow);
             ImGui.Spacing();
         }
 
@@ -244,7 +245,11 @@ public sealed partial class PlannerWindow
         }
     }
 
-    private void DrawFcResult(FcState fc, EtaResult result, FcCalculationProgress? calculationProgress = null)
+    private void DrawFcResult(
+        FcState fc,
+        EtaResult result,
+        DateTimeOffset renderNow,
+        FcCalculationProgress? calculationProgress = null)
     {
         if (this.viewState.ExpansionOverride is not null)
             ImGui.SetNextItemOpen(this.viewState.ExpansionOverride.Value, ImGuiCond.Always);
@@ -253,7 +258,7 @@ public sealed partial class PlannerWindow
         var resultStatusText = result.IsComplete
             ? ready
                 ? "Ready now"
-                : $"Median {FormatRelative(result.FcCompletionAtUtc, DateTimeOffset.UtcNow)}"
+                : $"Median {FormatRelative(result.FcCompletionAtUtc, renderNow)}"
             : result.IncompleteReason?.Contains("time limit", StringComparison.OrdinalIgnoreCase) == true
                 ? "Timed out"
                 : "Incomplete";
@@ -277,14 +282,19 @@ public sealed partial class PlannerWindow
             : !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan;
         var fcKey = Convert.ToHexString(result.FcId);
         var salvageBySubmarine = fc.Submarines.ToDictionary(submarine => submarine.SubmarineId, submarine => submarine.Salvage);
+        var submarineStatesById = fc.Submarines.ToDictionary(submarine => submarine.SubmarineId);
+        var currentVoyages = CurrentVoyageProgressFormatter.CreateForFc(fc.Submarines, this.catalog, renderNow);
         var collapsedHeaderStatus = ResultsViewState.FormatCollapsedHeaderStatus(collapsedStatusText, fc.RecordedSalvageGil);
+        if (currentVoyages.HasActiveVoyages)
+            collapsedHeaderStatus += $" • {currentVoyages.HeaderLabel}";
 
-        ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackground);
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerUi.PanelBackgroundAlt);
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, PlannerUi.PanelBackgroundAlt);
+        DrawFcProgressBackground(currentVoyages);
+        ImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.62f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.76f));
         var open = ImGui.CollapsingHeader($"{result.FcDisplayName}   •   {collapsedHeaderStatus}###fc-{fcKey}");
         ImGui.PopStyleColor(3);
-        DrawFcSalvageHeaderTooltip(fc.RecordedSalvageGil);
+        DrawFcHeaderTooltip(fc, currentVoyages);
         if (!open)
             return;
 
@@ -301,8 +311,8 @@ public sealed partial class PlannerWindow
             ImGui.SameLine();
             ImGui.TextColored(
                 PlannerUi.Muted,
-                $"Likely {FormatRelative(result.CompletionForecast.P10AtUtc, DateTimeOffset.UtcNow)}–" +
-                $"{FormatRelative(result.CompletionForecast.P90AtUtc, DateTimeOffset.UtcNow)} · {result.ProbabilitySampleCount} samples");
+                $"Likely {FormatRelative(result.CompletionForecast.P10AtUtc, renderNow)}–" +
+                $"{FormatRelative(result.CompletionForecast.P90AtUtc, renderNow)} · {result.ProbabilitySampleCount} samples");
         }
         if (!result.IsComplete && result.IncompleteReason is not null)
         {
@@ -354,7 +364,7 @@ public sealed partial class PlannerWindow
                 PlannerUi.Amber);
         }
 
-        var minimumTableWidth = 1155f * ImGuiHelpers.GlobalScale;
+        var minimumTableWidth = 1285f * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
         var tableFlags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.BordersOuter | ImGuiTableFlags.RowBg |
                          ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
@@ -364,9 +374,11 @@ public sealed partial class PlannerWindow
         var tableSize = needsHorizontalScroll
             ? new Vector2(-1, CalculateTableHeight(result.PerSubResults.Count, true))
             : new Vector2(-1, CalculateTableHeight(result.PerSubResults.Count, false));
+        var tableOrigin = ImGui.GetCursorScreenPos();
+        var tableViewportWidth = ImGui.GetContentRegionAvail().X;
         if (!ImGui.BeginTable(
                 $"table-{fcKey}",
-                9,
+                10,
                 tableFlags,
                 tableSize,
                 needsHorizontalScroll ? minimumTableWidth : 0f))
@@ -375,6 +387,7 @@ public sealed partial class PlannerWindow
         ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 190f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 95f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("ETA", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Returns", ImGuiTableColumnFlags.WidthFixed, 130f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Voyages left", ImGuiTableColumnFlags.WidthFixed, 127f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Salvage gil", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
@@ -388,10 +401,25 @@ public sealed partial class PlannerWindow
         {
             var subKey = $"{fcKey}:{sub.SubmarineId}";
             var salvage = salvageBySubmarine.GetValueOrDefault(sub.SubmarineId) ?? SubmarineSalvageSummary.Empty;
-            var voyageProgress = VoyageProgressFormatter.Create(sub, result.TargetRank, DateTimeOffset.UtcNow);
+            var voyageProgress = VoyageProgressFormatter.Create(sub, result.TargetRank, renderNow);
+            submarineStatesById.TryGetValue(sub.SubmarineId, out var submarineState);
+            var currentVoyage = submarineState is null
+                ? null
+                : CurrentVoyageProgressFormatter.Create(submarineState, this.catalog, renderNow);
             var subOpen = this.expandedSubmarines.Contains(subKey);
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
+            if (currentVoyage?.Fraction is not null)
+            {
+                var style = ImGui.GetStyle();
+                var rowOrigin = new Vector2(tableOrigin.X, ImGui.GetCursorScreenPos().Y - style.CellPadding.Y);
+                var rowSize = new Vector2(tableViewportWidth, ImGui.GetFrameHeight() + (style.CellPadding.Y * 2f));
+                PlannerUi.DrawProgressBackground(
+                    rowOrigin,
+                    rowSize,
+                    currentVoyage.Fraction,
+                    currentVoyage.State == CurrentVoyageProgressState.ReadyToCollect ? PlannerUi.Amber : PlannerUi.Cyan);
+            }
             var chevron = subOpen ? FontAwesomeIcon.ChevronDown : FontAwesomeIcon.ChevronRight;
             var rowStart = ImGui.GetCursorScreenPos();
             var rowClicked = ImGui.Selectable(
@@ -416,14 +444,16 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             ImGui.TextUnformatted($"{sub.StartingRank} → {sub.FinalRank}");
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(sub.StartingRank >= result.TargetRank ? "now" : $"P50 {FormatRelative(sub.EtaAtUtc, DateTimeOffset.UtcNow)}");
+            ImGui.TextUnformatted(sub.StartingRank >= result.TargetRank ? "now" : $"P50 {FormatRelative(sub.EtaAtUtc, renderNow)}");
             if (sub.EtaForecast is not null && ImGui.IsItemHovered())
             {
                 ImGui.SetTooltip(
-                    $"Likely range: {FormatRelative(sub.EtaForecast.P10AtUtc, DateTimeOffset.UtcNow)}–" +
-                    $"{FormatRelative(sub.EtaForecast.P90AtUtc, DateTimeOffset.UtcNow)} ({sub.EtaForecast.SampleCount} samples)\n" +
+                    $"Likely range: {FormatRelative(sub.EtaForecast.P10AtUtc, renderNow)}–" +
+                    $"{FormatRelative(sub.EtaForecast.P90AtUtc, renderNow)} ({sub.EtaForecast.SampleCount} samples)\n" +
                     $"Forecast calculated: {result.GeneratedAtUtc.LocalDateTime:g}");
             }
+            ImGui.TableNextColumn();
+            DrawCurrentVoyageReturn(currentVoyage, submarineState);
             ImGui.TableNextColumn();
             var voyageColor = voyageProgress.State switch
             {
@@ -443,7 +473,7 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             DrawCompactRoute(
                 sub.CurrentRoute,
-                sub.CurrentReturnAtUtc is not null && sub.CurrentReturnAtUtc.Value <= DateTimeOffset.UtcNow
+                sub.CurrentReturnAtUtc is not null && sub.CurrentReturnAtUtc.Value <= renderNow
                     ? PlannerUi.Amber
                     : null);
             ImGui.TableNextColumn();
@@ -465,7 +495,7 @@ public sealed partial class PlannerWindow
             ImGui.Spacing();
             PlannerUi.IconText(FontAwesomeIcon.Ship, $"{sub.SubmarineName} voyage forecast", PlannerUi.Teal);
             DrawSalvageDetails(salvageBySubmarine.GetValueOrDefault(sub.SubmarineId) ?? SubmarineSalvageSummary.Empty);
-            DrawSubDetails(sub, this.configuration.Settings.ShowRouteDiagnostics);
+            DrawSubDetails(sub, this.configuration.Settings.ShowRouteDiagnostics, renderNow);
             ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
             ImGui.PopID();
         }
@@ -522,21 +552,99 @@ public sealed partial class PlannerWindow
         ImGui.EndTooltip();
     }
 
-    private static void DrawFcSalvageHeaderTooltip(long recordedSalvageGil)
+    private static void DrawFcProgressBackground(FcCurrentVoyageProgressPresentation currentVoyages)
     {
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip(
-                $"{recordedSalvageGil:N0} gil gross NPC value from recorded SubmarineTracker salvage history. " +
-                "This is not net profit or proof that the items were sold.");
-        }
+        var primary = currentVoyages.Primary;
+        var accent = GetCurrentVoyageColor(primary?.State);
+        PlannerUi.DrawProgressBackground(
+            ImGui.GetCursorScreenPos(),
+            new Vector2(ImGui.GetContentRegionAvail().X, ImGui.GetFrameHeight()),
+            primary?.Fraction,
+            accent,
+            PlannerUi.PanelBackground,
+            5f * ImGuiHelpers.GlobalScale);
     }
 
-    private void DrawSubDetails(PerSubEtaResult sub, bool showDiagnostics)
+    private void DrawFcHeaderTooltip(FcState fc, FcCurrentVoyageProgressPresentation currentVoyages)
+    {
+        if (!ImGui.IsItemHovered())
+            return;
+
+        ImGui.BeginTooltip();
+        ImGui.TextColored(PlannerUi.Green, $"Recorded NPC value: {fc.RecordedSalvageGil:N0} gil");
+        ImGui.TextColored(PlannerUi.Muted, "Gross value from SubmarineTracker salvage history; costs are not deducted.");
+
+        if (currentVoyages.Primary is { } primary)
+        {
+            ImGui.Separator();
+            ImGui.TextColored(
+                GetCurrentVoyageColor(primary.State),
+                currentVoyages.HeaderLabel);
+            var state = fc.Submarines.FirstOrDefault(submarine => submarine.SubmarineId == primary.SubmarineId);
+            DrawCurrentVoyageTooltipContents(primary, state);
+
+            var others = currentVoyages.Voyages.Where(voyage => voyage.SubmarineId != primary.SubmarineId).ToArray();
+            if (others.Length > 0)
+            {
+                ImGui.Separator();
+                ImGui.TextColored(PlannerUi.Teal, "Other active voyages");
+                foreach (var voyage in others)
+                    ImGui.TextUnformatted($"{voyage.SubmarineName}: {voyage.Countdown}");
+            }
+        }
+
+        ImGui.EndTooltip();
+    }
+
+    private void DrawCurrentVoyageReturn(
+        CurrentVoyageProgressPresentation? progress,
+        SubmarineState? submarine)
+    {
+        if (progress is null || progress.State == CurrentVoyageProgressState.Idle)
+        {
+            ImGui.TextColored(PlannerUi.Muted, "—");
+            return;
+        }
+
+        ImGui.TextColored(GetCurrentVoyageColor(progress.State), progress.Countdown);
+        if (!ImGui.IsItemHovered())
+            return;
+
+        ImGui.BeginTooltip();
+        DrawCurrentVoyageTooltipContents(progress, submarine);
+        ImGui.EndTooltip();
+    }
+
+    private static Vector4 GetCurrentVoyageColor(CurrentVoyageProgressState? state)
+        => state switch
+        {
+            CurrentVoyageProgressState.ReadyToCollect => PlannerUi.Amber,
+            CurrentVoyageProgressState.Syncing => PlannerUi.Muted,
+            _ => PlannerUi.Cyan,
+        };
+
+    private void DrawCurrentVoyageTooltipContents(
+        CurrentVoyageProgressPresentation progress,
+        SubmarineState? submarine)
+    {
+        ImGui.TextColored(PlannerUi.Teal, progress.SubmarineName);
+        if (progress.ReturnAtUtc is { } returnAtUtc)
+            ImGui.TextUnformatted($"Returns: {returnAtUtc.LocalDateTime:f}");
+        if (progress.DepartedAtUtc is { } departedAtUtc)
+            ImGui.TextUnformatted($"Departure (inferred): {departedAtUtc.LocalDateTime:g}");
+        if (progress.Duration is { } duration)
+            ImGui.TextUnformatted($"Total duration: {FormatDuration(duration)}");
+        if (submarine?.CurrentRoute.Count > 0)
+            ImGui.TextUnformatted($"Current route: {FormatRoute(submarine.CurrentRoute)}");
+        if (!string.IsNullOrWhiteSpace(progress.ProgressUnavailableReason))
+            ImGui.TextColored(PlannerUi.Amber, progress.ProgressUnavailableReason);
+    }
+
+    private void DrawSubDetails(PerSubEtaResult sub, bool showDiagnostics, DateTimeOffset renderNow)
     {
         if (sub.CurrentRoute.Count > 0 && sub.CurrentReturnAtUtc is not null)
         {
-            var readyToCollect = sub.CurrentReturnAtUtc.Value <= DateTimeOffset.UtcNow;
+            var readyToCollect = sub.CurrentReturnAtUtc.Value <= renderNow;
             PlannerUi.Callout(
                 "current-voyage",
                 FontAwesomeIcon.Ship,
@@ -654,7 +762,7 @@ public sealed partial class PlannerWindow
         ImGui.EndTable();
     }
 
-    private void DrawPendingFc(FcState fc, FcCalculationProgress? progress)
+    private void DrawPendingFc(FcState fc, FcCalculationProgress? progress, DateTimeOffset renderNow)
     {
         var fcKey = fc.FcIdKey;
         var status = progress?.Status ?? FcCalculationStatus.Queued;
@@ -671,14 +779,18 @@ public sealed partial class PlannerWindow
         var color = status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed or FcCalculationStatus.AwaitingTrackerUpdate
             ? PlannerUi.Amber
             : PlannerUi.Cyan;
+        var currentVoyages = CurrentVoyageProgressFormatter.CreateForFc(fc.Submarines, this.catalog, renderNow);
         var collapsedHeaderStatus = ResultsViewState.FormatCollapsedHeaderStatus(statusText, fc.RecordedSalvageGil);
+        if (currentVoyages.HasActiveVoyages)
+            collapsedHeaderStatus += $" • {currentVoyages.HeaderLabel}";
 
-        ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackground);
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerUi.PanelBackgroundAlt);
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, PlannerUi.PanelBackgroundAlt);
+        DrawFcProgressBackground(currentVoyages);
+        ImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.62f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.76f));
         var open = ImGui.CollapsingHeader($"{fc.DisplayName}   •   {collapsedHeaderStatus}###fc-pending-{fcKey}");
         ImGui.PopStyleColor(3);
-        DrawFcSalvageHeaderTooltip(fc.RecordedSalvageGil);
+        DrawFcHeaderTooltip(fc, currentVoyages);
         if (!open)
             return;
 

@@ -172,6 +172,35 @@ internal static class PlannerUi
         ImGui.Dummy(size);
     }
 
+    internal static void DrawProgressBackground(
+        Vector2 position,
+        Vector2 size,
+        float? fraction,
+        Vector4 accent,
+        Vector4? baseColor = null,
+        float rounding = 0f)
+    {
+        if (size.X <= 0f || size.Y <= 0f)
+            return;
+
+        var drawList = ImGui.GetWindowDrawList();
+        var end = position + size;
+        if (baseColor is { } background)
+            drawList.AddRectFilled(position, end, ColorU32(background), rounding);
+
+        if (fraction is null || fraction.Value <= 0f)
+            return;
+
+        var clamped = Math.Clamp(fraction.Value, 0f, 1f);
+        var fillColor = baseColor is { } baseValue
+            ? Vector4.Lerp(baseValue, accent, accent == Amber ? 0.24f : 0.18f)
+            : new Vector4(accent.X, accent.Y, accent.Z, accent == Amber ? 0.16f : 0.12f);
+        var fillEnd = new Vector2(position.X + (size.X * clamped), end.Y);
+        drawList.PushClipRect(position, fillEnd, false);
+        drawList.AddRectFilled(position, end, ColorU32(fillColor), rounding);
+        drawList.PopClipRect();
+    }
+
     internal static void Callout(string id, FontAwesomeIcon icon, string title, string body, Vector4 accent)
     {
         var scale = ImGuiHelpers.GlobalScale;

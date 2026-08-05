@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.13.0
+
+- Added live current-voyage progress backgrounds and next-return countdowns to FC dashboard headers.
+- Added per-submarine voyage progress, countdowns, and exact timing tooltips to expanded FC tables.
+- Preserved honest countdown-only states when route or build data cannot provide a reliable percentage.
+
 ## 0.4.12.0
 
 - Added each FC's compact recorded salvage-gil total to its always-visible dashboard header.
