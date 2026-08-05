@@ -177,7 +177,7 @@ public sealed partial class PlannerWindow
         foreach (var entry in visibleEntries)
         {
             if (entry.Result is not null)
-                DrawFcResult(entry.Result, entry.Progress);
+                DrawFcResult(entry.Fc, entry.Result, entry.Progress);
             else
                 DrawPendingFc(entry.Fc, entry.Progress);
             ImGui.Spacing();
@@ -192,10 +192,11 @@ public sealed partial class PlannerWindow
         var leveling = currentSnapshot.FreeCompanies.Count(fc =>
             !IsReadyNow(fc, this.configuration.Settings.TargetRank));
         var ready = total - leveling;
+        var recordedGil = currentSnapshot.FreeCompanies.Sum(fc => fc.RecordedSalvageGil);
         var warnings = currentSnapshot.FcProgress.Count(progress =>
             progress.Status is FcCalculationStatus.Partial or FcCalculationStatus.TimedOut or FcCalculationStatus.Failed or FcCalculationStatus.AwaitingTrackerUpdate);
 
-        if (!ImGui.BeginTable("summary-cards", 4, ImGuiTableFlags.SizingStretchSame))
+        if (!ImGui.BeginTable("summary-cards", 5, ImGuiTableFlags.SizingStretchSame))
             return;
 
         ImGui.TableNextColumn();
@@ -204,6 +205,9 @@ public sealed partial class PlannerWindow
         PlannerUi.MetricCard("metric-leveling", FontAwesomeIcon.ChartLine, leveling.ToString(), "Leveling", PlannerUi.Teal);
         ImGui.TableNextColumn();
         PlannerUi.MetricCard("metric-ready", FontAwesomeIcon.CheckCircle, ready.ToString(), "Ready", PlannerUi.Green);
+        ImGui.TableNextColumn();
+        PlannerUi.MetricCard("metric-salvage", FontAwesomeIcon.Coins, FormatCompactGil(recordedGil), "Salvage gil", PlannerUi.Green);
+        PlannerUi.Tooltip($"{recordedGil:N0} gil gross NPC value across recorded SubmarineTracker salvage history.");
         ImGui.TableNextColumn();
         PlannerUi.MetricCard("metric-warnings", FontAwesomeIcon.ExclamationTriangle, warnings.ToString(), "Needs attention", warnings > 0 ? PlannerUi.Amber : PlannerUi.Muted);
         ImGui.EndTable();
@@ -240,7 +244,7 @@ public sealed partial class PlannerWindow
         }
     }
 
-    private void DrawFcResult(EtaResult result, FcCalculationProgress? calculationProgress = null)
+    private void DrawFcResult(FcState fc, EtaResult result, FcCalculationProgress? calculationProgress = null)
     {
         if (this.viewState.ExpansionOverride is not null)
             ImGui.SetNextItemOpen(this.viewState.ExpansionOverride.Value, ImGuiCond.Always);
@@ -272,6 +276,7 @@ public sealed partial class PlannerWindow
             ? PlannerUi.Amber
             : !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan;
         var fcKey = Convert.ToHexString(result.FcId);
+        var salvageBySubmarine = fc.Submarines.ToDictionary(submarine => submarine.SubmarineId, submarine => submarine.Salvage);
 
         ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackground);
         ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerUi.PanelBackgroundAlt);
@@ -282,6 +287,10 @@ public sealed partial class PlannerWindow
             return;
 
         PlannerUi.DrawStatusPill(resultStatusText, !result.IsComplete ? PlannerUi.Amber : ready ? PlannerUi.Green : PlannerUi.Cyan);
+        ImGui.SameLine();
+        PlannerUi.DrawStatusPill($"Recorded salvage {FormatCompactGil(fc.RecordedSalvageGil)} gil", PlannerUi.Green);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("NPC sale value of salvage accessories recorded in SubmarineTracker history. This is gross value, not net profit or proof that the items were sold.");
         if (calculationProgress?.Status is FcCalculationStatus.Queued or FcCalculationStatus.Calculating or FcCalculationStatus.Reused or FcCalculationStatus.AwaitingTrackerUpdate or FcCalculationStatus.TimedOut or FcCalculationStatus.Failed)
         {
             ImGui.SameLine();
@@ -347,7 +356,7 @@ public sealed partial class PlannerWindow
                 PlannerUi.Amber);
         }
 
-        var minimumTableWidth = 980f * ImGuiHelpers.GlobalScale;
+        var minimumTableWidth = 1100f * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
         var tableFlags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.BordersOuter | ImGuiTableFlags.RowBg |
                          ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
@@ -359,7 +368,7 @@ public sealed partial class PlannerWindow
             : new Vector2(-1, CalculateTableHeight(result.PerSubResults.Count, false));
         if (!ImGui.BeginTable(
                 $"table-{fcKey}",
-                8,
+                9,
                 tableFlags,
                 tableSize,
                 needsHorizontalScroll ? minimumTableWidth : 0f))
@@ -369,6 +378,7 @@ public sealed partial class PlannerWindow
         ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 95f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("ETA", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Voyages", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Salvage gil", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Current route", ImGuiTableColumnFlags.WidthStretch, 0.75f);
         ImGui.TableSetupColumn("Next after return", ImGuiTableColumnFlags.WidthStretch, 1f);
@@ -379,6 +389,7 @@ public sealed partial class PlannerWindow
         foreach (var sub in result.PerSubResults.OrderBy(sub => sub.SubmarineName))
         {
             var subKey = $"{fcKey}:{sub.SubmarineId}";
+            var salvage = salvageBySubmarine.GetValueOrDefault(sub.SubmarineId) ?? SubmarineSalvageSummary.Empty;
             var subOpen = this.expandedSubmarines.Contains(subKey);
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
@@ -417,6 +428,10 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(sub.VoyageCount.ToString());
             ImGui.TableNextColumn();
+            ImGui.TextColored(salvage.TotalGil > 0 ? PlannerUi.Green : PlannerUi.Muted, FormatCompactGil(salvage.TotalGil));
+            if (ImGui.IsItemHovered())
+                DrawSalvageTooltip(salvage);
+            ImGui.TableNextColumn();
             ImGui.TextUnformatted(sub.PlannedBuild);
             ImGui.TableNextColumn();
             DrawCompactRoute(sub.CurrentRoute);
@@ -438,6 +453,7 @@ public sealed partial class PlannerWindow
             ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
             ImGui.Spacing();
             PlannerUi.IconText(FontAwesomeIcon.Ship, $"{sub.SubmarineName} voyage forecast", PlannerUi.Teal);
+            DrawSalvageDetails(salvageBySubmarine.GetValueOrDefault(sub.SubmarineId) ?? SubmarineSalvageSummary.Empty);
             DrawSubDetails(sub, this.configuration.Settings.ShowRouteDiagnostics);
             ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
             ImGui.PopID();
@@ -454,6 +470,37 @@ public sealed partial class PlannerWindow
         }
 
         PlannerUi.DrawStatusPill(sub.StartingRank >= targetRank ? "Ready" : "Leveling", sub.StartingRank >= targetRank ? PlannerUi.Green : PlannerUi.Cyan);
+    }
+
+    private static void DrawSalvageDetails(SubmarineSalvageSummary salvage)
+    {
+        var period = salvage.FirstReturnAtUtc is null || salvage.LastReturnAtUtc is null
+            ? "No salvage accessories are present in this submarine's recorded history."
+            : $"{salvage.VoyageCount:N0} voyage{(salvage.VoyageCount == 1 ? string.Empty : "s")} with salvage · " +
+              $"{salvage.FirstReturnAtUtc.Value.LocalDateTime:d}–{salvage.LastReturnAtUtc.Value.LocalDateTime:d}";
+        var breakdown = salvage.Items.Count == 0
+            ? period
+            : period + "\n" + string.Join("\n", salvage.Items.Select(item =>
+                $"{item.Name}: {item.Quantity:N0} × {item.NpcSalePrice:N0} = {item.TotalGil:N0} gil"));
+        PlannerUi.Callout(
+            "recorded-salvage",
+            FontAwesomeIcon.Coins,
+            $"Recorded salvage · {salvage.TotalGil:N0} gil",
+            breakdown + "\nGross NPC sale value from SubmarineTracker history; repair costs and other expenses are not deducted.",
+            salvage.TotalGil > 0 ? PlannerUi.Green : PlannerUi.Muted);
+    }
+
+    private static void DrawSalvageTooltip(SubmarineSalvageSummary salvage)
+    {
+        ImGui.BeginTooltip();
+        ImGui.TextColored(PlannerUi.Green, $"Recorded NPC value: {salvage.TotalGil:N0} gil");
+        ImGui.Separator();
+        ImGui.TextUnformatted($"{salvage.VoyageCount:N0} voyage{(salvage.VoyageCount == 1 ? string.Empty : "s")} returned with salvage");
+        foreach (var item in salvage.Items)
+            ImGui.TextUnformatted($"{item.Name}: {item.Quantity:N0} × {item.NpcSalePrice:N0} = {item.TotalGil:N0} gil");
+        ImGui.Spacing();
+        ImGui.TextColored(PlannerUi.Muted, "Recorded history only · gross value · NPC prices from game data");
+        ImGui.EndTooltip();
     }
 
     private void DrawSubDetails(PerSubEtaResult sub, bool showDiagnostics)

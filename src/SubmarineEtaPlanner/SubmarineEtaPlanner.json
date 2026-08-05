@@ -6,7 +6,7 @@
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
-  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.9.0.png",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.10.0.png",
   "Changelog": "Added first-time rank-90 defaults and a reviewable all-tabs reset confirmation.",
   "Tags": [
     "Submarine",

@@ -76,6 +76,8 @@ public sealed record FcState(
     public bool UnlockDataKnown { get; init; } = true;
 
     public FcDataFingerprint DataFingerprint { get; init; }
+
+    public long RecordedSalvageGil => Submarines.Sum(submarine => submarine.Salvage.TotalGil);
 }
 
 public sealed record SubmarineState(
@@ -92,6 +94,30 @@ public sealed record SubmarineState(
     IReadOnlyList<uint> ManualCurrentRouteOverride)
 {
     public bool IsAvailable(DateTimeOffset now) => ReturnAtUtc <= now;
+
+    public SubmarineSalvageSummary Salvage { get; init; } = SubmarineSalvageSummary.Empty;
+}
+
+public sealed record SalvageItemTotal(
+    uint ItemId,
+    string Name,
+    uint NpcSalePrice,
+    long Quantity)
+{
+    public long TotalGil => checked(Quantity * NpcSalePrice);
+}
+
+public sealed record SubmarineSalvageSummary(
+    int VoyageCount,
+    DateTimeOffset? FirstReturnAtUtc,
+    DateTimeOffset? LastReturnAtUtc,
+    IReadOnlyList<SalvageItemTotal> Items)
+{
+    public static SubmarineSalvageSummary Empty { get; } = new(0, null, null, []);
+
+    public long ItemCount => Items.Sum(item => item.Quantity);
+
+    public long TotalGil => Items.Sum(item => item.TotalGil);
 }
 
 public sealed record SubmarineBuildParts(ushort Hull, ushort Stern, ushort Bow, ushort Bridge)

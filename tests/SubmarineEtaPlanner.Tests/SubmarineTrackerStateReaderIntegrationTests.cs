@@ -38,10 +38,28 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             Assert.Equal(new SubmarineBuildParts(1, 2, 3, 4), submarine.BuildParts);
             Assert.Equal(new uint[] { 1, 3 }, submarine.CurrentRoute);
             Assert.True(submarine.CurrentVoyageKnown);
+            Assert.Equal(2, submarine.Salvage.VoyageCount);
+            Assert.Equal(7, submarine.Salvage.ItemCount);
+            Assert.Equal(64_000, submarine.Salvage.TotalGil);
+            Assert.Equal(3, submarine.Salvage.Items.Single(item => item.ItemId == 22500).Quantity);
+            Assert.Equal(8_000u, submarine.Salvage.Items.Single(item => item.ItemId == 22500).NpcSalePrice);
+            Assert.Equal(64_000, fc.RecordedSalvageGil);
             Assert.False(fc.DataFingerprint.IsEmpty);
             Assert.Equal(
                 fc.DataFingerprint,
                 new SubmarineTrackerStateReader().Read(settings, new List<string>())[0].DataFingerprint);
+
+            using (var connection = new SQLiteConnection($"Data Source={databasePath}"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "UPDATE loot SET PrimaryCount = 3 WHERE SubmarineId = 42 AND Return = 1700000000";
+                command.ExecuteNonQuery();
+            }
+
+            var lootChanged = new SubmarineTrackerStateReader().Read(settings, new List<string>())[0];
+            Assert.Equal(72_000, Assert.Single(lootChanged.Submarines).Salvage.TotalGil);
+            Assert.Equal(fc.DataFingerprint, lootChanged.DataFingerprint);
 
             using (var connection = new SQLiteConnection($"Data Source={databasePath}"))
             {
@@ -90,6 +108,16 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
                     CExp INTEGER NOT NULL,
                     NExp INTEGER NOT NULL
                 );
+                CREATE TABLE loot (
+                    FreeCompanyId BLOB NOT NULL,
+                    SubmarineId INTEGER NOT NULL,
+                    Return INTEGER NOT NULL,
+                    PrimaryItem INTEGER NOT NULL,
+                    PrimaryCount INTEGER NOT NULL,
+                    AdditionalItem INTEGER NOT NULL,
+                    AdditionalCount INTEGER NOT NULL,
+                    Valid BOOLEAN NOT NULL
+                );
                 """;
             command.ExecuteNonQuery();
         }
@@ -122,6 +150,21 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             command.Parameters.AddWithValue("@fc", fcId);
             command.Parameters.AddWithValue("@return", DateTimeOffset.UtcNow.AddHours(12).ToUnixTimeSeconds());
             command.Parameters.AddWithValue("@route", MessagePackSerializer.Serialize(new uint[] { 1, 3 }));
+            command.ExecuteNonQuery();
+        }
+
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                INSERT INTO loot
+                    (FreeCompanyId, SubmarineId, Return, PrimaryItem, PrimaryCount, AdditionalItem, AdditionalCount, Valid)
+                VALUES
+                    (@fc, 42, 1700000000, 22500, 2, 22501, 3, 1),
+                    (@fc, 42, 1700100000, 22503, 1, 22500, 1, 1),
+                    (@fc, 42, 1700200000, 22507, 10, 0, 0, 0),
+                    (@fc, 42, 1700300000, 5069, 999, 0, 0, 1)
+                """;
+            command.Parameters.AddWithValue("@fc", fcId);
             command.ExecuteNonQuery();
         }
     }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.10.0
+
+- Added per-submarine and per-FC gross NPC value totals for salvaged accessories recorded by SubmarineTracker.
+- Added itemized salvage quantities, per-item prices, voyage counts, and recorded-history date ranges to dashboard details.
+- Read current NPC prices from local game data while retaining verified offline fallback values.
+
 ## 0.4.9.0
 
 - Added practical first-install defaults centered on target rank 90 and realistic turnaround timing.

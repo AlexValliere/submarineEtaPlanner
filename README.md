@@ -3,7 +3,7 @@
 [![Build](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml/badge.svg)](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-teal.svg)](LICENSE)
 
-Submarine ETA Planner is a Dalamud plugin that only forecasts how long tracked Free Company submarines need to reach a target rank you choose.
+Submarine ETA Planner forecasts how long tracked Free Company submarines need to reach a target rank and totals the recorded NPC value of their gil-farming salvage.
 
 The plugin reads local SubmarineTracker data, simulates future voyages, and presents ETA plans grouped by FC. Choose the target rank on the Simulation page, apply the change, and the complete dashboard forecast updates to that rank. Recommended leveling applies a ready-to-use preset that follows main sector progression and selects the highest expected-EXP-per-hour route while coordinating unlock attempts across the FC. Active voyages are shown separately from conditional next-route forecasts. Custom strategy exposes advanced EXP, route-goal, duration, and build-profile controls.
 
@@ -20,6 +20,7 @@ The plugin reads local SubmarineTracker data, simulates future voyages, and pres
 - List every tracked FC immediately, then publish each forecast as soon as it is ready.
 - Calculate FCs sequentially with an independent per-FC timeout, while keeping previous results visible during refreshes.
 - Reuse unchanged FC forecasts when SubmarineTracker data changes, recalculating only fleets whose ranks, voyages, builds, or unlock state changed.
+- Total primary and additional salvaged-accessory drops per submarine from SubmarineTracker history, using current in-game NPC sale prices.
 
 ## Installation
 
@@ -59,6 +60,23 @@ The **Limits → Per-FC time limit** setting bounds each FC independently. If an
 
 When SubmarineTracker's database changes, the planner compares a semantic fingerprint for each FC and recalculates only changed fleets. Unchanged complete forecasts appear immediately as **Up to date**. An FC with a voyage that has just returned is held as **Waiting for SubmarineTracker** until the tracker records its new rank and unlock outcome. The cache is memory-only, so reloading the plugin starts a full forecast. The header **Refresh** action and `/seta refresh` also intentionally perform a full recalculation.
 
+## Recorded salvage value
+
+The dashboard reads valid primary and additional loot entries from SubmarineTracker's local history and attributes them by FC, submarine, and voyage return. It totals only the eight market-prohibited salvage accessories used for direct NPC gil farming:
+
+| Item | NPC sale price |
+| --- | ---: |
+| Salvaged Ring | 8,000 gil |
+| Salvaged Bracelet | 9,000 gil |
+| Salvaged Earring | 10,000 gil |
+| Salvaged Necklace | 13,000 gil |
+| Extravagant Salvaged Ring | 27,000 gil |
+| Extravagant Salvaged Bracelet | 28,500 gil |
+| Extravagant Salvaged Earring | 30,000 gil |
+| Extravagant Salvaged Necklace | 34,500 gil |
+
+Prices are read from the installed game's item data, with the table above used as an offline fallback. The displayed amount is gross NPC sale value, not proof that the items were sold and not net profit after repairs or other expenses. It covers only voyages present in SubmarineTracker history; voyages from before the tracker recorded loot cannot be reconstructed.
+
 ## Probabilistic unlock forecasts
 
 Sector discovery is not guaranteed. The planner runs 64 to 256 deterministic, repeatable simulations using the FC-wide unlocked-sector state and every known active voyage. It stops when the percentile estimates stabilize or the per-FC calculation deadline is reached; insufficient samples produce an explicit partial forecast. It reports:
@@ -70,7 +88,7 @@ Sector discovery is not guaranteed. The planner runs 64 to 256 deterministic, re
 
 The default discovery chance is **33% per eligible source visit**. This is a community-informed forecasting assumption, not an official game value, and can be changed under **Routes → Unlock chance per visit**. Square Enix confirms that discovering sectors can require repeated voyages in the [official Patch 4.2 notes](https://fr.finalfantasyxiv.com/lodestone/topics/detail/75c691f90f4a7da3907f0671ac33e139e9792abf); the [FFXIV Submarine Builders guidance](https://ffxivarchive.neocities.org/submarine) describes sector unlocking as flat RNG unaffected by submarine stats.
 
-The plugin performs no runtime web requests. It does not learn from, upload, or otherwise transmit SubmarineTracker loot history.
+The plugin performs no runtime web requests. Loot history and all calculated gil totals remain local; the plugin does not learn from, upload, or otherwise transmit them.
 
 ## Transparency
 

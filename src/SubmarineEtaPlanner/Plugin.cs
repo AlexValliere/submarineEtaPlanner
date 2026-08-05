@@ -42,7 +42,7 @@ public sealed class Plugin : IDalamudPlugin
             SaveConfiguration();
 
         ISubmarineCatalog catalog = new DalamudSubmarineCatalog(Data, PluginInterface.AssemblyLocation.DirectoryName!, Log);
-        var stateReader = new SubmarineTrackerStateReader();
+        var stateReader = new SubmarineTrackerStateReader(new DalamudSalvageValueCatalog(Data));
         var buildResolver = new BuildResolver(catalog);
         var unlockGraph = new RouteUnlockGraph(catalog);
         var routeSelector = new RouteSelector(catalog, unlockGraph);
