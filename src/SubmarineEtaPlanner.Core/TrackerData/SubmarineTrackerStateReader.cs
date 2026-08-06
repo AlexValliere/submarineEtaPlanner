@@ -117,15 +117,20 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
         while (reader.Read())
         {
             var route = DecodeRoute((byte[])reader["Route"], warnings);
-            var returnAt = UnixSecondsToUtc(Convert.ToInt64(reader["Return"]));
+            var returnSeconds = Convert.ToInt64(reader["Return"]);
+            var hasValidReturn = returnSeconds > 0;
+            var returnAt = UnixSecondsToUtc(returnSeconds);
             var fcId = (byte[])reader["FreeCompanyId"];
             var name = reader.GetString(3);
             var submarineId = Convert.ToInt64(reader["SubmarineId"]);
             var manualOverride = GetManualOverride(settings, fcId, submarineId);
-            if (manualOverride.Count > 0)
+            if (!hasValidReturn)
+                route = [];
+            else if (manualOverride.Count > 0)
                 route = manualOverride;
 
-            var currentVoyageKnown = returnAt <= DateTimeOffset.UtcNow || route.Count > 0;
+            var currentVoyageKnown = hasValidReturn &&
+                                     (returnAt <= DateTimeOffset.UtcNow || route.Count > 0);
 
             var state = new SubmarineState(
                 fcId,

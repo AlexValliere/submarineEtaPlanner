@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.17.0
+
+- Fixed the dashboard crash caused by transient SubmarineTracker rows with a missing return time and stale route while collecting or redispatching submarines.
+- Prevented those transition rows from being treated as active voyages in ETA calculations.
+
 ## 0.4.16.0
 
 - Centered compact sidebar icons and aligned expanded navigation icons and labels consistently.

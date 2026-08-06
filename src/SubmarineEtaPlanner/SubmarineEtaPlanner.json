@@ -6,8 +6,8 @@
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
-  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.16.0.png",
-  "Changelog": "Centered compact sidebar icons and aligned expanded navigation content.",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.17.0.png",
+  "Changelog": "Fixed a dashboard crash caused by transient SubmarineTracker data while collecting or redispatching submarines.",
   "Tags": [
     "Submarine",
     "ETA",

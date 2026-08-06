@@ -71,6 +71,30 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
 
             var changed = new SubmarineTrackerStateReader().Read(settings, new List<string>())[0];
             Assert.NotEqual(fc.DataFingerprint, changed.DataFingerprint);
+
+            using (var connection = new SQLiteConnection($"Data Source={databasePath}"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "UPDATE submarine SET Return = 0 WHERE SubmarineId = 42";
+                command.ExecuteNonQuery();
+            }
+
+            var transitionSettings = settings with
+            {
+                ManualCurrentRouteOverrides = new Dictionary<string, List<uint>>
+                {
+                    ["42"] = [7, 9],
+                },
+            };
+            var transition = Assert.Single(
+                new SubmarineTrackerStateReader()
+                    .Read(transitionSettings, new List<string>())[0]
+                    .Submarines);
+            Assert.Equal(DateTimeOffset.MinValue, transition.ReturnAtUtc);
+            Assert.Empty(transition.CurrentRoute);
+            Assert.False(transition.CurrentVoyageKnown);
+            Assert.Equal([7u, 9u], transition.ManualCurrentRouteOverride);
             Assert.Empty(warnings);
         }
         finally

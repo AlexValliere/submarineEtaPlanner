@@ -45,6 +45,9 @@ internal static class CurrentVoyageProgressFormatter
         ISubmarineCatalog catalog,
         DateTimeOffset now)
     {
+        if (submarine.ReturnAtUtc == DateTimeOffset.MinValue)
+            return CreateIdle(submarine);
+
         if (!submarine.CurrentVoyageKnown)
         {
             var readyWithoutRoute = submarine.ReturnAtUtc <= now;
@@ -63,18 +66,7 @@ internal static class CurrentVoyageProgressFormatter
         }
 
         if (submarine.CurrentRoute.Count == 0)
-        {
-            return new CurrentVoyageProgressPresentation(
-                submarine.SubmarineId,
-                submarine.Name,
-                CurrentVoyageProgressState.Idle,
-                null,
-                null,
-                null,
-                null,
-                "—",
-                null);
-        }
+            return CreateIdle(submarine);
 
         var readyToCollect = submarine.ReturnAtUtc <= now;
         var build = catalog.ResolveBuild(submarine.BuildParts, submarine.Rank);
@@ -83,20 +75,26 @@ internal static class CurrentVoyageProgressFormatter
             var readyDuration = build is null
                 ? TimeSpan.Zero
                 : catalog.CalculateDuration(submarine.CurrentRoute, build);
+            var hasReadyProgress = TryInferDeparture(
+                submarine.ReturnAtUtc,
+                readyDuration,
+                out var readyDepartedAtUtc);
             return new CurrentVoyageProgressPresentation(
                 submarine.SubmarineId,
                 submarine.Name,
                 CurrentVoyageProgressState.ReadyToCollect,
                 submarine.ReturnAtUtc,
-                readyDuration > TimeSpan.Zero ? submarine.ReturnAtUtc - readyDuration : null,
-                readyDuration > TimeSpan.Zero ? readyDuration : null,
+                hasReadyProgress ? readyDepartedAtUtc : null,
+                hasReadyProgress ? readyDuration : null,
                 1f,
                 "Ready to collect",
                 build is null
                     ? "The recorded build is incomplete; departure and total duration are unavailable."
                     : readyDuration <= TimeSpan.Zero
                         ? "The current route duration could not be calculated; departure and total duration are unavailable."
-                        : null);
+                        : !hasReadyProgress
+                            ? "The inferred departure falls outside the supported date range; departure and total duration are unavailable."
+                            : null);
         }
 
         if (build is null)
@@ -116,7 +114,14 @@ internal static class CurrentVoyageProgressFormatter
                 "The current route duration could not be calculated, so voyage percentage is unavailable.");
         }
 
-        var departedAtUtc = submarine.ReturnAtUtc - duration;
+        if (!TryInferDeparture(submarine.ReturnAtUtc, duration, out var departedAtUtc))
+        {
+            return CreateUnderwayWithoutProgress(
+                submarine,
+                now,
+                "The inferred departure falls outside the supported date range, so voyage percentage is unavailable.");
+        }
+
         var elapsedTicks = (now - departedAtUtc).Ticks;
         var fraction = Math.Clamp(elapsedTicks / (double)duration.Ticks, 0d, 1d);
         return new CurrentVoyageProgressPresentation(
@@ -182,4 +187,33 @@ internal static class CurrentVoyageProgressFormatter
             null,
             FormatCountdown(submarine.ReturnAtUtc - now),
             reason);
+
+    private static CurrentVoyageProgressPresentation CreateIdle(SubmarineState submarine)
+        => new(
+            submarine.SubmarineId,
+            submarine.Name,
+            CurrentVoyageProgressState.Idle,
+            null,
+            null,
+            null,
+            null,
+            "—",
+            null);
+
+    private static bool TryInferDeparture(
+        DateTimeOffset returnAtUtc,
+        TimeSpan duration,
+        out DateTimeOffset departedAtUtc)
+    {
+        departedAtUtc = default;
+        if (duration <= TimeSpan.Zero)
+            return false;
+
+        var maximumSubtractableTicks = Math.Min(returnAtUtc.Ticks, returnAtUtc.UtcDateTime.Ticks);
+        if (duration.Ticks > maximumSubtractableTicks)
+            return false;
+
+        departedAtUtc = returnAtUtc - duration;
+        return true;
+    }
 }

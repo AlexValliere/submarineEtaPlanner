@@ -52,6 +52,25 @@ public sealed class CurrentVoyageProgressFormatterTests
     }
 
     [Fact]
+    public void ReturnedVoyageOmitsProgressWhenDepartureIsOutsideSupportedDateRange()
+    {
+        var catalog = new TestCatalog(TimeSpan.MaxValue);
+        var submarine = CreateSubmarine(
+            "Nautilus",
+            DateTimeOffset.UnixEpoch,
+            [1],
+            currentVoyageKnown: true);
+
+        var progress = CurrentVoyageProgressFormatter.Create(submarine, catalog, Now);
+
+        Assert.Equal(CurrentVoyageProgressState.ReadyToCollect, progress.State);
+        Assert.Equal(1f, progress.Fraction);
+        Assert.Null(progress.DepartedAtUtc);
+        Assert.Null(progress.Duration);
+        Assert.Contains("supported date range", progress.ProgressUnavailableReason);
+    }
+
+    [Fact]
     public void UnknownFutureVoyageKeepsCountdownWithoutPercentage()
     {
         var submarine = CreateSubmarine(
@@ -114,6 +133,25 @@ public sealed class CurrentVoyageProgressFormatterTests
         Assert.Equal(CurrentVoyageProgressState.Idle, progress.State);
         Assert.False(progress.IsActive);
         Assert.Equal("—", progress.Countdown);
+    }
+
+    [Fact]
+    public void MissingReturnSentinelWithStaleRouteIsIdleAndExcludedFromFcSummary()
+    {
+        var submarine = CreateSubmarine(
+            "Nautilus",
+            DateTimeOffset.MinValue,
+            [1],
+            currentVoyageKnown: true);
+
+        var progress = CurrentVoyageProgressFormatter.Create(submarine, new TestCatalog(), Now);
+        var summary = CurrentVoyageProgressFormatter.CreateForFc([submarine], new TestCatalog(), Now);
+
+        Assert.Equal(CurrentVoyageProgressState.Idle, progress.State);
+        Assert.False(progress.IsActive);
+        Assert.Null(progress.ReturnAtUtc);
+        Assert.Empty(summary.Voyages);
+        Assert.Null(summary.Primary);
     }
 
     [Fact]
