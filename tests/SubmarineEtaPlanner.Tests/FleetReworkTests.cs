@@ -405,6 +405,130 @@ public sealed class FleetReworkTests
         Assert.NotEqual(before.GilPerDay, after.GilPerDay);
     }
 
+    [Theory]
+    [InlineData(IncomeView.AllFleets, null)]
+    [InlineData(IncomeView.Leveling, FleetMode.Leveling)]
+    [InlineData(IncomeView.Farming, FleetMode.Farming)]
+    public void IncomeViewMapsToCurrentFleetMode(IncomeView view, FleetMode? expectedMode)
+    {
+        Assert.Equal(expectedMode, IncomeViewPreferences.RequiredMode(view));
+        Assert.Equal(IncomeView.Farming, IncomeViewPreferences.Default);
+    }
+
+    [Fact]
+    public void InvalidIncomeViewNormalizesToFarming()
+    {
+        Assert.Equal(IncomeView.Farming, IncomeViewPreferences.Normalize((IncomeView)999));
+    }
+
+    [Fact]
+    public void IncomeViewUsesEffectivePerFcTarget()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var fc = CreateFc(100, now.AddHours(2), [1], currentKnown: true);
+        var catalog = new StubCatalog { SupportedMaximumRank = 150 };
+        var globalReady = FleetPresentationBuilder.Create(
+            fc,
+            CreateResult(fc, 90, now),
+            EtaSettings.CreateDefault() with { TargetRank = 90 },
+            catalog,
+            now);
+        var overriddenLeveling = FleetPresentationBuilder.Create(
+            fc,
+            CreateResult(fc, 110, now),
+            EtaSettings.CreateDefault() with { TargetRank = 110 },
+            catalog,
+            now);
+
+        Assert.Equal(FleetMode.Farming, globalReady.Mode);
+        Assert.True(FleetPresentationFiltering.Includes(globalReady, IncomeViewPreferences.RequiredMode(IncomeView.Farming)));
+        Assert.Equal(FleetMode.Leveling, overriddenLeveling.Mode);
+        Assert.True(FleetPresentationFiltering.Includes(overriddenLeveling, IncomeViewPreferences.RequiredMode(IncomeView.Leveling)));
+    }
+
+    [Fact]
+    public void IncomeSummaryUsesOnlyProvidedFilteredFcs()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(100);
+        IncomeFcMetrics Metrics(string id, long gil, int voyages, int firstReturnDaysAgo) => new(
+            id,
+            id,
+            gil,
+            voyages,
+            gil / (double)firstReturnDaysAgo,
+            gil / (double)voyages,
+            firstReturnDaysAgo,
+            now.AddDays(-firstReturnDaysAgo),
+            now,
+            []);
+        var farming = Metrics("farming", 10_000, 4, 10);
+        var leveling = Metrics("leveling", 90_000, 6, 20);
+
+        var farmingSummary = IncomeMetricsCalculator.Summarize([farming], now, TimeSpan.FromDays(30));
+        var allSummary = IncomeMetricsCalculator.Summarize([farming, leveling], now, TimeSpan.FromDays(30));
+
+        Assert.Equal(10_000, farmingSummary.GrossGil);
+        Assert.Equal(4, farmingSummary.VoyageCount);
+        Assert.Equal(1, farmingSummary.FcCount);
+        Assert.Equal(1_000, farmingSummary.GilPerDay);
+        Assert.Equal(2_500, farmingSummary.GilPerVoyage);
+        Assert.Equal(100_000, allSummary.GrossGil);
+        Assert.Equal(2, allSummary.FcCount);
+    }
+
+    [Fact]
+    public void IncomeSummaryHandlesEmptyFilter()
+    {
+        var summary = IncomeMetricsCalculator.Summarize([], DateTimeOffset.UnixEpoch, TimeSpan.FromDays(30));
+
+        Assert.Equal(0, summary.GrossGil);
+        Assert.Equal(0, summary.VoyageCount);
+        Assert.Equal(0, summary.FcCount);
+        Assert.Equal(0, summary.CoveredDays);
+    }
+
+    [Fact]
+    public void IncomeOrderingKeepsFavoritesFirstWithinFilteredMetrics()
+    {
+        IncomeFcMetrics Metrics(string id, long gil) => new(
+            id, id, gil, 1, gil, gil, 1, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, []);
+        var favoriteLow = Metrics("Favorite", 1);
+        var regularHigh = Metrics("Regular", 10_000);
+
+        var ordered = IncomeMetricsOrdering.Order(
+            [regularHigh, favoriteLow],
+            IncomeSort.GrossGil,
+            metric => metric.FcIdKey == "Favorite");
+
+        Assert.Equal(["Favorite", "Regular"], ordered.Select(metric => metric.FcIdKey).ToArray());
+    }
+
+    [Fact]
+    public void IncomeOneYearWindowIncludesExactBoundaryAndZeroGilVoyages()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(500);
+        var fc = CreateFc(100, DateTimeOffset.MinValue, [], currentKnown: true);
+        var submarine = fc.Submarines[0] with
+        {
+            Salvage = new SubmarineSalvageSummary(3, now.AddDays(-366), now.AddDays(-1), [])
+            {
+                Voyages =
+                [
+                    new(fc.FcIdKey, 1, now.AddDays(-366), [new SalvageItemTotal(1, "Outside", 100, 10)]),
+                    new(fc.FcIdKey, 1, now.AddDays(-365), [new SalvageItemTotal(1, "Boundary", 100, 10)]),
+                    new(fc.FcIdKey, 1, now.AddDays(-1), []),
+                ],
+            },
+        };
+        fc = fc with { Submarines = [submarine] };
+
+        var metrics = IncomeMetricsCalculator.Calculate(fc, now, TimeSpan.FromDays(365));
+
+        Assert.Equal(1_000, metrics.GrossGil);
+        Assert.Equal(2, metrics.ValidVoyages);
+        Assert.Equal(now.AddDays(-365), metrics.FirstReturnAtUtc);
+    }
+
     private static FcState CreateFc(int rank, DateTimeOffset returnAt, IReadOnlyList<uint> route, bool currentKnown)
     {
         byte[] id = [1];

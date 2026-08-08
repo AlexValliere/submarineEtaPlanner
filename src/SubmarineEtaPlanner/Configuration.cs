@@ -28,6 +28,8 @@ public sealed class Configuration : IPluginConfiguration
 
     public IncomeSort IncomeSort { get; set; } = IncomeSort.GrossGil;
 
+    public IncomeView IncomeView { get; set; } = IncomeViewPreferences.Default;
+
     public bool Migrate()
     {
         var changed = false;
@@ -85,7 +87,9 @@ public sealed class Configuration : IPluginConfiguration
         if (!Enum.IsDefined(LevelingSort)) { LevelingSort = global::SubmarineEtaPlanner.LevelingSort.FarmReadyEta; changed = true; }
         if (!Enum.IsDefined(LevelingFilter)) { LevelingFilter = global::SubmarineEtaPlanner.LevelingFilter.All; changed = true; }
         if (!Enum.IsDefined(IncomePeriod)) { IncomePeriod = global::SubmarineEtaPlanner.IncomePeriod.Days30; changed = true; }
-        if (!Enum.IsDefined(IncomeSort)) { IncomeSort = global::SubmarineEtaPlanner.IncomeSort.GrossGil; changed = true; }
+        if (!Enum.IsDefined(IncomeSort)) { IncomeSort = global::SubmarineEtaPlanner.Planner.IncomeSort.GrossGil; changed = true; }
+        var normalizedIncomeView = IncomeViewPreferences.Normalize(IncomeView);
+        if (IncomeView != normalizedIncomeView) { IncomeView = normalizedIncomeView; changed = true; }
         if (!Enum.IsDefined(ResultsFilter)) { ResultsFilter = FcResultFilter.Leveling; changed = true; }
         foreach (var key in FreeCompanyPreferences.Keys.ToArray())
         {
@@ -126,5 +130,4 @@ public enum OperationsView { ReturningSoon = 0, AllFleets = 1, Leveling = 2, Far
 public enum OperationsSort { NextReturnActionsFirst, FarmReadyEta, FcName }
 public enum LevelingSort { FarmReadyEta, LowestRank, NextAction, FcName }
 public enum LevelingFilter { All, Actionable, Favorites }
-public enum IncomePeriod { Days7, Days30, Days90, Lifetime }
-public enum IncomeSort { GrossGil, GilPerDay, GilPerVoyage, FcName }
+public enum IncomePeriod { Days7 = 0, Days30 = 1, Days90 = 2, Lifetime = 3, Days365 = 4 }

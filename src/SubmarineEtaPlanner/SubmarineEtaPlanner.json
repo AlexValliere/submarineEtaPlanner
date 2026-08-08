@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Corrected fleet sorting, restored complete Leveling route forecasts with clear purposes, and improved Leveling and Income readability.",
+  "Changelog": "Added current-mode Income filters, a one-year reporting period, and simpler Income metric labels.",
   "Tags": [
     "Submarine",
     "ETA",

@@ -6,6 +6,21 @@ public enum FleetMode
     Farming,
 }
 
+public enum IncomeView
+{
+    AllFleets,
+    Leveling,
+    Farming,
+}
+
+public enum IncomeSort
+{
+    GrossGil,
+    GilPerDay,
+    GilPerVoyage,
+    FcName,
+}
+
 public enum OperationalState
 {
     Idle,
@@ -168,6 +183,22 @@ public static class FleetPresentationFiltering
 {
     public static bool Includes(FcOperationalProjection projection, FleetMode? requiredMode)
         => requiredMode is null || projection.Mode == requiredMode.Value;
+}
+
+public static class IncomeViewPreferences
+{
+    public const IncomeView Default = IncomeView.Farming;
+
+    public static IncomeView Normalize(IncomeView value)
+        => Enum.IsDefined(value) ? value : Default;
+
+    public static FleetMode? RequiredMode(IncomeView value)
+        => Normalize(value) switch
+        {
+            IncomeView.Leveling => FleetMode.Leveling,
+            IncomeView.Farming => FleetMode.Farming,
+            _ => null,
+        };
 }
 
 public static class FleetPresentationBuilder
@@ -412,6 +443,33 @@ public sealed record IncomeFcMetrics(
     DateTimeOffset? LastReturnAtUtc,
     IReadOnlyList<IncomeSubmarineMetrics> Submarines);
 
+public sealed record IncomeSummaryMetrics(
+    long GrossGil,
+    int VoyageCount,
+    double CoveredDays,
+    double GilPerDay,
+    double GilPerVoyage,
+    int FcCount);
+
+public static class IncomeMetricsOrdering
+{
+    public static IReadOnlyList<IncomeFcMetrics> Order(
+        IEnumerable<IncomeFcMetrics> metrics,
+        IncomeSort sort,
+        Func<IncomeFcMetrics, bool> isFavorite)
+        => metrics
+            .OrderByDescending(isFavorite)
+            .ThenByDescending(metric => sort switch
+            {
+                IncomeSort.GilPerDay => metric.GilPerDay,
+                IncomeSort.GilPerVoyage => metric.GilPerVoyage,
+                IncomeSort.FcName => 0,
+                _ => metric.GrossGil,
+            })
+            .ThenBy(metric => metric.FcDisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+}
+
 internal sealed record IncomeFcHeaderPresentation(
     string WidgetId,
     string FreeCompany,
@@ -485,4 +543,30 @@ public static class IncomeMetricsCalculator
     }
 
     private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right) => left > right ? left : right;
+
+    public static IncomeSummaryMetrics Summarize(
+        IReadOnlyList<IncomeFcMetrics> metrics,
+        DateTimeOffset now,
+        TimeSpan? period)
+    {
+        var gross = metrics.Sum(item => item.GrossGil);
+        var voyages = metrics.Sum(item => item.ValidVoyages);
+        var first = metrics
+            .Where(item => item.FirstReturnAtUtc is not null)
+            .Select(item => item.FirstReturnAtUtc)
+            .Min();
+        var start = first is null
+            ? (DateTimeOffset?)null
+            : period is null
+                ? first
+                : first > now - period ? first : now - period;
+        var days = start is null ? 0 : Math.Max((now - start.Value).TotalDays, 1d / 24d);
+        return new IncomeSummaryMetrics(
+            gross,
+            voyages,
+            days,
+            days == 0 ? 0 : gross / days,
+            voyages == 0 ? 0 : gross / (double)voyages,
+            metrics.Count);
+    }
 }

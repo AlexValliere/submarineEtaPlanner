@@ -162,30 +162,58 @@ public sealed partial class PlannerWindow
             "income-definition",
             FontAwesomeIcon.InfoCircle,
             "Recorded gross NPC salvage value",
-            "Values use all valid tracked returns in the selected period and may include voyages from before an FC reached its target rank.",
+            "The fleet filter uses each FC's current mode. Values include all recorded tracker returns in the selected period, so a Farming FC may include voyages from before it reached its target rank.",
             PlannerUi.Teal);
         ImGui.Spacing();
-        DrawIncomePeriodButtons();
+        DrawIncomeViewButton("All fleets", IncomeView.AllFleets);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawIncomeViewButton("Leveling", IncomeView.Leveling);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawIncomeViewButton("Farming", IncomeView.Farming);
         ImGui.SameLine();
         DrawIncomeSortCombo();
+        ImGui.Spacing();
+        DrawIncomePeriodButtons();
 
         var now = DateTimeOffset.UtcNow;
         var period = GetIncomePeriod();
-        var projections = CreateProjections(currentSnapshot, now).ToDictionary(item => item.State.FcIdKey);
-        var metrics = currentSnapshot.FreeCompanies
-            .Select(fc => IncomeMetricsCalculator.Calculate(fc, now, period))
-            .OrderByDescending(metric => this.configuration.GetFcPreferences(metric.FcIdKey).Favorite)
-            .ThenByDescending(metric => this.configuration.IncomeSort switch
-            {
-                IncomeSort.GilPerDay => metric.GilPerDay,
-                IncomeSort.GilPerVoyage => metric.GilPerVoyage,
-                IncomeSort.FcName => 0,
-                _ => metric.GrossGil,
-            })
-            .ThenBy(metric => metric.FcDisplayName, StringComparer.OrdinalIgnoreCase)
+        var allProjections = CreateProjections(currentSnapshot, now);
+        var requiredMode = IncomeViewPreferences.RequiredMode(this.configuration.IncomeView);
+        var filteredProjections = allProjections
+            .Where(projection => FleetPresentationFiltering.Includes(projection, requiredMode))
             .ToArray();
+        var projections = filteredProjections.ToDictionary(item => item.State.FcIdKey);
+        var includedFcIds = projections.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var metrics = IncomeMetricsOrdering.Order(
+            currentSnapshot.FreeCompanies
+            .Where(fc => includedFcIds.Contains(fc.FcIdKey))
+            .Select(fc => IncomeMetricsCalculator.Calculate(fc, now, period)),
+            this.configuration.IncomeSort,
+            metric => this.configuration.GetFcPreferences(metric.FcIdKey).Favorite);
 
         DrawIncomeSummary(metrics, now, period);
+        ImGui.Spacing();
+        var modeLabel = this.configuration.IncomeView switch
+        {
+            IncomeView.Leveling => "currently leveling",
+            IncomeView.Farming => "currently farming",
+            _ => "all modes",
+        };
+        ImGui.TextColored(
+            PlannerUi.Muted,
+            $"{metrics.Count} FC{(metrics.Count == 1 ? string.Empty : "s")} shown of {allProjections.Count} tracked · {modeLabel}");
+        if (metrics.Count == 0)
+        {
+            ImGui.Spacing();
+            PlannerUi.Callout(
+                "income-empty-filter",
+                FontAwesomeIcon.InfoCircle,
+                "No free companies match this filter",
+                "Choose another fleet mode to include tracked income data.",
+                PlannerUi.Muted);
+            return;
+        }
+
         ImGui.Spacing();
         var incomeHeaders = metrics.ToDictionary(
             metric => metric.FcIdKey,
@@ -909,11 +937,11 @@ public sealed partial class PlannerWindow
 
         ImGui.BeginTooltip();
         ImGui.TextColored(PlannerUi.Teal, $"{projection.State.FreeCompanyTag} — {projection.State.World}");
-        ImGui.TextUnformatted($"{projection.Mode} · {metric.ValidVoyages:N0} valid tracked voyage{(metric.ValidVoyages == 1 ? string.Empty : "s")}");
+        ImGui.TextUnformatted($"{projection.Mode} · {metric.ValidVoyages:N0} tracked voyage{(metric.ValidVoyages == 1 ? string.Empty : "s")}");
         ImGui.Separator();
         ImGui.TextColored(PlannerUi.Green, $"Gross NPC salvage value: {metric.GrossGil:N0} gil");
-        ImGui.TextUnformatted($"Gil per covered day: {metric.GilPerDay:N0}");
-        ImGui.TextUnformatted($"Gil per valid voyage: {metric.GilPerVoyage:N0}");
+        ImGui.TextUnformatted($"Gil per day: {metric.GilPerDay:N0}");
+        ImGui.TextUnformatted($"Gil per voyage: {metric.GilPerVoyage:N0}");
         ImGui.TextColored(PlannerUi.Muted, $"Coverage: {FormatIncomeDate(metric.FirstReturnAtUtc)} – {FormatIncomeDate(metric.LastReturnAtUtc)}");
         ImGui.EndTooltip();
     }
@@ -960,17 +988,13 @@ public sealed partial class PlannerWindow
 
     private void DrawIncomeSummary(IReadOnlyList<IncomeFcMetrics> metrics, DateTimeOffset now, TimeSpan? period)
     {
-        var gross = metrics.Sum(item => item.GrossGil);
-        var voyages = metrics.Sum(item => item.ValidVoyages);
-        var first = metrics.Where(item => item.FirstReturnAtUtc is not null).Select(item => item.FirstReturnAtUtc).Min();
-        var start = first is null ? (DateTimeOffset?)null : period is null ? first : (first > now - period ? first : now - period);
-        var days = start is null ? 0 : Math.Max((now - start.Value).TotalDays, 1d / 24d);
+        var summary = IncomeMetricsCalculator.Summarize(metrics, now, period);
         if (!ImGui.BeginTable("income-summary", 4, ImGuiTableFlags.SizingStretchSame))
             return;
-        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-gross", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(gross), "Gross gil", PlannerUi.Green);
-        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-day", FontAwesomeIcon.CalendarDay, days == 0 ? "—" : ResultsViewState.FormatCompactGil((long)(gross / days)), "Gil / covered day", PlannerUi.Teal);
-        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-voyage", FontAwesomeIcon.Ship, voyages == 0 ? "—" : ResultsViewState.FormatCompactGil(gross / voyages), "Gil / valid voyage", PlannerUi.Cyan);
-        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-fcs", FontAwesomeIcon.Building, metrics.Count.ToString(), $"Tracked FCs · {days:0.#} days", PlannerUi.Muted);
+        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-gross", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(summary.GrossGil), "Gross gil", PlannerUi.Green);
+        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-day", FontAwesomeIcon.CalendarDay, summary.CoveredDays == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.GilPerDay), "Gil / day", PlannerUi.Teal);
+        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-voyage", FontAwesomeIcon.Ship, summary.VoyageCount == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.GilPerVoyage), "Gil / voyage", PlannerUi.Cyan);
+        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-fcs", FontAwesomeIcon.Building, summary.FcCount.ToString(), $"FCs shown · {summary.CoveredDays:0.#} days", PlannerUi.Muted);
         ImGui.EndTable();
     }
 
@@ -1037,7 +1061,18 @@ public sealed partial class PlannerWindow
         ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
         DrawIncomePeriodButton("90 days", IncomePeriod.Days90);
         ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawIncomePeriodButton("1 year", IncomePeriod.Days365);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
         DrawIncomePeriodButton("Lifetime", IncomePeriod.Lifetime);
+    }
+
+    private void DrawIncomeViewButton(string label, IncomeView view)
+    {
+        if (PlannerUi.SegmentedButton($"income-view-{view}", label, this.configuration.IncomeView == view))
+        {
+            this.configuration.IncomeView = view;
+            this.saveConfiguration();
+        }
     }
 
     private void DrawIncomePeriodButton(string label, IncomePeriod period)
@@ -1065,6 +1100,7 @@ public sealed partial class PlannerWindow
         IncomePeriod.Days7 => TimeSpan.FromDays(7),
         IncomePeriod.Days30 => TimeSpan.FromDays(30),
         IncomePeriod.Days90 => TimeSpan.FromDays(90),
+        IncomePeriod.Days365 => TimeSpan.FromDays(365),
         _ => null,
     };
 

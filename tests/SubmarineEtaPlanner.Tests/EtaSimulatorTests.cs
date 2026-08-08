@@ -1055,13 +1055,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.5.3.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.5.4.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("Corrected fleet sorting, restored complete Leveling route forecasts", repoJson);
+        Assert.Contains("Added current-mode Income filters, a one-year reporting period", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -1080,6 +1080,29 @@ public sealed class EtaSimulatorTests
         Assert.Contains("Copy-Item images/icon.png public/images/icon.png", workflow);
         Assert.DoesNotContain("public/images/icon-", workflow);
         Assert.Contains("Copy-Item \"$out/CalculatedData.msgpack\" $packageDir", workflow);
+    }
+
+    [Fact]
+    public void IncomeConfigurationDefaultsToFarmingAndPreservesLifetimeValue()
+    {
+        var repositoryRoot = Path.GetDirectoryName(FindRepoJson())!;
+        var configuration = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SubmarineEtaPlanner", "Configuration.cs"));
+
+        Assert.Contains("public IncomeView IncomeView { get; set; } = IncomeViewPreferences.Default;", configuration);
+        Assert.Contains("IncomePeriod { Days7 = 0, Days30 = 1, Days90 = 2, Lifetime = 3, Days365 = 4 }", configuration);
+    }
+
+    [Fact]
+    public void IncomeUiUsesPlainMetricNames()
+    {
+        var repositoryRoot = Path.GetDirectoryName(FindRepoJson())!;
+        var fleetScreens = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SubmarineEtaPlanner", "Ui", "PlannerWindow.FleetScreens.cs"));
+
+        Assert.DoesNotContain("covered day", fleetScreens, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("valid voyage", fleetScreens, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"Gil / day\"", fleetScreens);
+        Assert.Contains("\"Gil / voyage\"", fleetScreens);
+        Assert.Contains("DrawIncomePeriodButton(\"1 year\", IncomePeriod.Days365)", fleetScreens);
     }
 
     [Fact]

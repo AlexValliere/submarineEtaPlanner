@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.4.0
+
+- Added All fleets, Leveling, and Farming filters to Income, with Farming as the default aggregate view.
+- Added a rolling one-year income period while preserving existing saved Lifetime selections.
+- Simplified Income labels to Gil / day, Gil / voyage, and Voyages, with clearer current-mode and historical-data guidance.
+
 ## 0.5.3.0
 
 - Corrected Operations sorting so actions affect only the actions-first order, while farm-ready ETA and FC name follow their selected keys.
