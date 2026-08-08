@@ -156,7 +156,8 @@ public sealed class EtaSimulator(
                     settings.EtaModel,
                     DurationCapApplied: false,
                     IsCurrentVoyage: true,
-                    ReservedUnlockTargets: reservedUnlocks);
+                    ReservedUnlockTargets: reservedUnlocks,
+                    UnlockObjective: null);
                 state.NextAvailableAt = currentReturn;
                 state.CurrentVoyageApplied = true;
             }
@@ -479,7 +480,8 @@ public sealed class EtaSimulator(
             route.EtaModel,
             route.DurationCapApplied,
             IsCurrentVoyage: false,
-            ReservedUnlockTargets: route.UnlockTargets);
+            ReservedUnlockTargets: route.UnlockTargets,
+            UnlockObjective: route.UnlockObjective);
     }
 
     private VoyagePlan? CompletePendingVoyage(
@@ -531,7 +533,10 @@ public sealed class EtaSimulator(
             pending.DurationCapApplied,
             pending.RepeatCount,
             pending.ExpPerVoyage,
-            pending.PerVoyageDuration);
+            pending.PerVoyageDuration)
+        {
+            UnlockObjective = pending.UnlockObjective,
+        };
     }
 
     private VoyagePlan ApplyFutureVoyageBatch(
@@ -586,7 +591,10 @@ public sealed class EtaSimulator(
             route.DurationCapApplied,
             batchCount,
             route.Exp,
-            perVoyageDuration);
+            perVoyageDuration)
+        {
+            UnlockObjective = route.UnlockObjective,
+        };
     }
 
     private int CalculateBatchCount(
@@ -1049,7 +1057,8 @@ public sealed class EtaSimulator(
         EtaModel EtaModel,
         bool DurationCapApplied,
         bool IsCurrentVoyage,
-        IReadOnlyList<uint> ReservedUnlockTargets);
+        IReadOnlyList<uint> ReservedUnlockTargets,
+        UnlockObjective? UnlockObjective);
 
     private sealed record CurrentVoyageApplication(
         int Rank,

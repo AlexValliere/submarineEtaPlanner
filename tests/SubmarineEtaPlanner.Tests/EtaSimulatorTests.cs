@@ -124,6 +124,7 @@ public sealed class EtaSimulatorTests
 
         Assert.Equal([99u], route.Route);
         Assert.Empty(catalog.LastMustInclude);
+        Assert.Null(route.UnlockObjective);
     }
 
     [Fact]
@@ -138,6 +139,8 @@ public sealed class EtaSimulatorTests
 
         Assert.Equal([1u], route.Route);
         Assert.Equal([1u], catalog.LastMustInclude);
+        Assert.Equal(UnlockObjectiveKind.MainProgression, route.UnlockObjective?.Kind);
+        Assert.Equal(2u, route.UnlockObjective?.TargetPoint);
     }
 
     [Fact]
@@ -152,6 +155,7 @@ public sealed class EtaSimulatorTests
 
         Assert.Equal([1u], route.Route);
         Assert.Equal([1u], catalog.LastMustInclude);
+        Assert.Equal(UnlockObjectiveKind.MainProgression, route.UnlockObjective?.Kind);
     }
 
     [Fact]
@@ -170,6 +174,7 @@ public sealed class EtaSimulatorTests
 
         Assert.Equal([1u], route.Route);
         Assert.Equal([1u], catalog.LastMustInclude);
+        Assert.Equal(UnlockObjectiveKind.ExploreSubmarineSlot, route.UnlockObjective?.Kind);
     }
 
     [Fact]
@@ -191,6 +196,8 @@ public sealed class EtaSimulatorTests
 
         Assert.Equal([99u], result.PlannedRoutes[0].Route);
         Assert.Equal([2u], result.PlannedRoutes[1].Route);
+        Assert.Null(result.PlannedRoutes[0].UnlockObjective);
+        Assert.Equal(UnlockObjectiveKind.SectorUnlock, result.PlannedRoutes[1].UnlockObjective?.Kind);
     }
 
     [Fact]
@@ -434,6 +441,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal(4, sub.VoyageCount);
         var preview = Assert.Single(sub.VoyagePreview);
         Assert.Equal(4, preview.RepeatCount);
+        Assert.Null(preview.UnlockObjective);
         Assert.Equal(TimeSpan.FromHours(4), sub.Remaining);
         Assert.Contains(preview.Warnings, warning => warning.Contains("Batched", StringComparison.OrdinalIgnoreCase));
     }
@@ -1047,18 +1055,18 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.5.2.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.5.3.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.5.2.0.png", repoJson);
+        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("Simplified Operations with fleet-mode filters", repoJson);
+        Assert.Contains("Corrected fleet sorting, restored complete Leveling route forecasts", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
     [Fact]
-    public void VersionedPluginIconIsValidAndPublishedByPagesWorkflow()
+    public void PluginIconIsValidAndPublishedByPagesWorkflow()
     {
         var repositoryRoot = Path.GetDirectoryName(FindRepoJson())!;
         var iconPath = Path.Combine(repositoryRoot, "images", "icon.png");
@@ -1069,7 +1077,8 @@ public sealed class EtaSimulatorTests
         Assert.Equal(512, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(icon.AsSpan(20, 4)));
 
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "build.yml"));
-        Assert.Contains("Copy-Item images/icon.png public/images/icon-0.5.2.0.png", workflow);
+        Assert.Contains("Copy-Item images/icon.png public/images/icon.png", workflow);
+        Assert.DoesNotContain("public/images/icon-", workflow);
         Assert.Contains("Copy-Item \"$out/CalculatedData.msgpack\" $packageDir", workflow);
     }
 

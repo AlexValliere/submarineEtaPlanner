@@ -300,6 +300,111 @@ public sealed class FleetReworkTests
             ordered.Select(projection => projection.State.FreeCompanyTag).ToArray());
     }
 
+    [Fact]
+    public void FarmReadyOrderingIgnoresImmediateActions()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var settings = EtaSettings.CreateDefault() with { TargetRank = 90 };
+        var catalog = new StubCatalog();
+        FcOperationalProjection Projection(string tag, int rank, DateTimeOffset completion, bool immediate)
+        {
+            var fc = CreateFc(rank, immediate ? DateTimeOffset.MinValue : now.AddHours(2), immediate ? [] : [1], currentKnown: true) with
+            {
+                FreeCompanyTag = tag,
+            };
+            return FleetPresentationBuilder.Create(fc, CreateResult(fc, 90, now), settings, catalog, now) with
+            {
+                CompletionP50AtUtc = completion,
+            };
+        }
+
+        var actionLate = Projection("Action late", 50, now.AddDays(8), immediate: true);
+        var early = Projection("Early", 50, now.AddDays(2), immediate: false);
+        var unavailable = Projection("Unavailable", 50, DateTimeOffset.MaxValue, immediate: false) with { CompletionP50AtUtc = null };
+        var ready = Projection("Ready", 100, now, immediate: false);
+
+        var ordered = FleetPresentationOrdering.FarmReadyEta(
+            [actionLate, unavailable, early, ready],
+            _ => false);
+
+        Assert.Equal(["Ready", "Early", "Action late", "Unavailable"],
+            ordered.Select(projection => projection.State.FreeCompanyTag).ToArray());
+    }
+
+    [Fact]
+    public void NameOrderingIgnoresImmediateActionsAndKeepsFavoritesFirst()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var settings = EtaSettings.CreateDefault() with { TargetRank = 90 };
+        var catalog = new StubCatalog();
+        FcOperationalProjection Projection(string tag, bool immediate)
+        {
+            var fc = CreateFc(50, immediate ? DateTimeOffset.MinValue : now.AddHours(2), immediate ? [] : [1], currentKnown: true) with
+            {
+                FreeCompanyTag = tag,
+            };
+            return FleetPresentationBuilder.Create(fc, CreateResult(fc, 90, now), settings, catalog, now);
+        }
+
+        var ordered = FleetPresentationOrdering.ByName(
+            [Projection("Zulu action", true), Projection("Alpha", false), Projection("Middle favorite", false)],
+            projection => projection.State.FreeCompanyTag == "Middle favorite");
+
+        Assert.Equal(["Middle favorite", "Alpha", "Zulu action"],
+            ordered.Select(projection => projection.State.FreeCompanyTag).ToArray());
+    }
+
+    [Theory]
+    [InlineData(null, "Best available EXP/hour")]
+    [InlineData(UnlockObjectiveKind.SectorUnlock, "Unlock Point 3")]
+    [InlineData(UnlockObjectiveKind.ExploreSubmarineSlot, "Unlock submarine slot")]
+    [InlineData(UnlockObjectiveKind.MainProgression, "Continue map progression")]
+    public void VoyagePurposeExplainsWhyRouteWasSelected(UnlockObjectiveKind? kind, string expected)
+    {
+        var plan = new VoyagePlan(
+            1, "Sub", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddHours(1), "TEST", [2], 100,
+            10, 11, 0, 0, [], [], TimeSpan.FromHours(1), 100, EtaModel.PracticalLeveling, false)
+        {
+            UnlockObjective = kind is null ? null : new UnlockObjective(2, 3, kind.Value),
+        };
+
+        var purpose = VoyageRoutePurposePresentation.Create(plan, point => $"Point {point}");
+
+        Assert.Equal(expected, purpose.Label);
+        Assert.NotEmpty(purpose.Tooltip);
+    }
+
+    [Fact]
+    public void IncomeHeaderKeepsStableIdWhenLiveMetricsChange()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var fc = CreateFc(50, now.AddHours(2), [1], currentKnown: true) with
+        {
+            FreeCompanyTag = "INCOME",
+            World = "Cerberus",
+        };
+        var projection = FleetPresentationBuilder.Create(
+            fc,
+            CreateResult(fc, 90, now),
+            EtaSettings.CreateDefault() with { TargetRank = 90 },
+            new StubCatalog(),
+            now);
+        IncomeFcMetrics Metrics(double gilPerDay) => new(
+            fc.FcIdKey, fc.DisplayName, 10_000, 4, gilPerDay, 2_500, 10,
+            now.AddDays(-10), now, []);
+
+        var before = IncomeFcHeaderPresentation.Create(projection, Metrics(1_000), favorite: true);
+        var after = IncomeFcHeaderPresentation.Create(projection, Metrics(999), favorite: true);
+
+        Assert.Equal(before.WidgetId, after.WidgetId);
+        Assert.Equal("★ INCOME", before.FreeCompany);
+        Assert.Equal("Cerberus", before.World);
+        Assert.Equal("Leveling", before.Mode);
+        Assert.Equal(10_000.ToString("N0"), before.GrossGil);
+        Assert.Equal("4", before.Voyages);
+        Assert.NotEqual(before.GilPerDay, after.GilPerDay);
+    }
+
     private static FcState CreateFc(int rank, DateTimeOffset returnAt, IReadOnlyList<uint> route, bool currentKnown)
     {
         byte[] id = [1];

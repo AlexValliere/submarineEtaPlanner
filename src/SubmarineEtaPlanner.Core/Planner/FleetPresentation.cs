@@ -231,7 +231,9 @@ public static class FleetPresentationBuilder
                             result?.VoyagePreview.FirstOrDefault();
         var purpose = ready
             ? RoutePurpose.Farming
-            : plannedVoyage is { UnlocksApplied.Count: > 0 } || plannedVoyage?.DependsOnProjectedUnlocks == true
+            : plannedVoyage?.UnlockObjective is not null ||
+              plannedVoyage is { UnlocksApplied.Count: > 0 } ||
+              plannedVoyage?.DependsOnProjectedUnlocks == true
                 ? RoutePurpose.Unlock
                 : route.Count > 0 ? RoutePurpose.Leveling : RoutePurpose.Unknown;
 
@@ -338,6 +340,54 @@ public static class FleetPresentationOrdering
                 .Min() ?? DateTimeOffset.MaxValue)
             .ThenBy(projection => projection.State.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    public static IReadOnlyList<FcOperationalProjection> FarmReadyEta(
+        IEnumerable<FcOperationalProjection> projections,
+        Func<FcOperationalProjection, bool> isFavorite)
+        => projections
+            .OrderByDescending(isFavorite)
+            .ThenBy(projection => projection.Mode == FleetMode.Farming ? 0 : 1)
+            .ThenBy(projection => projection.Mode == FleetMode.Farming
+                ? DateTimeOffset.MinValue
+                : projection.CompletionP50AtUtc ?? DateTimeOffset.MaxValue)
+            .ThenBy(projection => projection.State.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    public static IReadOnlyList<FcOperationalProjection> ByName(
+        IEnumerable<FcOperationalProjection> projections,
+        Func<FcOperationalProjection, bool> isFavorite)
+        => projections
+            .OrderByDescending(isFavorite)
+            .ThenBy(projection => projection.State.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+}
+
+internal sealed record VoyageRoutePurposePresentation(string Label, string Tooltip)
+{
+    public static VoyageRoutePurposePresentation Create(VoyagePlan plan, Func<uint, string> pointName)
+    {
+        if (plan.UnlockObjective is not { } objective)
+        {
+            return new VoyageRoutePurposePresentation(
+                "Best available EXP/hour",
+                "No intentional unlock objective was selected; this was the best available leveling route.");
+        }
+
+        var required = pointName(objective.RequiredPoint);
+        var target = pointName(objective.TargetPoint);
+        return objective.Kind switch
+        {
+            UnlockObjectiveKind.ExploreSubmarineSlot => new VoyageRoutePurposePresentation(
+                "Unlock submarine slot",
+                $"Explore {target} to unlock the next submarine slot."),
+            UnlockObjectiveKind.MainProgression => new VoyageRoutePurposePresentation(
+                "Continue map progression",
+                $"Visit {required} to unlock the next progression destination, {target}."),
+            _ => new VoyageRoutePurposePresentation(
+                $"Unlock {target}",
+                $"Visit {required} to unlock the next destination, {target}."),
+        };
+    }
 }
 
 public sealed record IncomeSubmarineMetrics(
@@ -361,6 +411,33 @@ public sealed record IncomeFcMetrics(
     DateTimeOffset? FirstReturnAtUtc,
     DateTimeOffset? LastReturnAtUtc,
     IReadOnlyList<IncomeSubmarineMetrics> Submarines);
+
+internal sealed record IncomeFcHeaderPresentation(
+    string WidgetId,
+    string FreeCompany,
+    string World,
+    string Mode,
+    string GrossGil,
+    string GilPerDay,
+    string GilPerVoyage,
+    string Voyages,
+    bool IsFarming)
+{
+    public static IncomeFcHeaderPresentation Create(
+        FcOperationalProjection projection,
+        IncomeFcMetrics metric,
+        bool favorite)
+        => new(
+            $"income-{metric.FcIdKey}",
+            $"{(favorite ? "★ " : string.Empty)}{projection.State.FreeCompanyTag}",
+            string.IsNullOrWhiteSpace(projection.State.World) ? "—" : projection.State.World,
+            projection.Mode.ToString(),
+            $"{metric.GrossGil:N0}",
+            $"{metric.GilPerDay:N0}",
+            $"{metric.GilPerVoyage:N0}",
+            metric.ValidVoyages.ToString("N0"),
+            projection.Mode == FleetMode.Farming);
+}
 
 public static class IncomeMetricsCalculator
 {

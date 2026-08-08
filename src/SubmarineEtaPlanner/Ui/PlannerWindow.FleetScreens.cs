@@ -25,6 +25,20 @@ public sealed partial class PlannerWindow
         OperationsHeaderColumn FarmReady,
         OperationsHeaderColumn Ranks);
 
+    private readonly record struct IncomeHeaderColumn(float Offset, float Width, int Line);
+
+    private sealed record IncomeHeaderLayout(
+        bool TwoLine,
+        float HeaderHeight,
+        float LegendHeight,
+        IncomeHeaderColumn FreeCompany,
+        IncomeHeaderColumn World,
+        IncomeHeaderColumn Mode,
+        IncomeHeaderColumn GrossGil,
+        IncomeHeaderColumn GilPerDay,
+        IncomeHeaderColumn GilPerVoyage,
+        IncomeHeaderColumn Voyages);
+
     private string? selectedSetupFcId;
     private string? pendingSetupFcId;
     private bool setupDraftDirty;
@@ -61,16 +75,12 @@ public sealed partial class PlannerWindow
             .Where(projection => MatchesSearch(projection.State))
             .Where(projection => FleetPresentationFiltering.Includes(projection, requiredMode))
             .ToArray();
-        var projections = this.configuration.OperationsSort == OperationsSort.NextReturnActionsFirst
-            ? FleetPresentationOrdering.ActionsFirst(filteredProjections, IsFavorite)
-            : filteredProjections
-                .OrderByDescending(IsFavorite)
-                .ThenBy(projection => projection.ActionSortBucket)
-                .ThenBy(projection => this.configuration.OperationsSort == OperationsSort.FarmReadyEta
-                    ? projection.CompletionP50AtUtc ?? DateTimeOffset.MaxValue
-                    : DateTimeOffset.MinValue)
-                .ThenBy(projection => projection.State.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+        var projections = this.configuration.OperationsSort switch
+        {
+            OperationsSort.FarmReadyEta => FleetPresentationOrdering.FarmReadyEta(filteredProjections, IsFavorite),
+            OperationsSort.FcName => FleetPresentationOrdering.ByName(filteredProjections, IsFavorite),
+            _ => FleetPresentationOrdering.ActionsFirst(filteredProjections, IsFavorite),
+        };
 
         ImGui.Spacing();
         ImGui.TextColored(PlannerUi.Muted, $"{projections.Count} fleet{(projections.Count == 1 ? string.Empty : "s")} shown of {allProjections.Count} tracked");
@@ -128,8 +138,18 @@ public sealed partial class PlannerWindow
 
         ImGui.Spacing();
         ImGui.TextColored(PlannerUi.Muted, $"{projections.Length} leveling fleet{(projections.Length == 1 ? string.Empty : "s")} · every submarine remains visible when expanded");
+        ImGui.Spacing();
+        var headerContexts = projections.ToDictionary(
+            projection => projection.State.FcIdKey,
+            projection => new OperationsHeaderRenderContext(
+                OperationsFcHeaderPresentation.Create(projection, IsFavorite(projection), now),
+                CurrentVoyageProgressFormatter.CreateForFc(projection.State.Submarines, this.catalog, now)));
+        var headerLayout = CalculateOperationsHeaderLayout(
+            headerContexts.Values.Select(context => context.Presentation),
+            ImGui.GetContentRegionAvail().X);
+        DrawOperationsHeaderLegend(headerLayout);
         foreach (var projection in projections)
-            DrawOperationalFleetGroup(projection, now, levelingPage: true);
+            DrawLevelingFleetGroup(projection, now, headerContexts[projection.State.FcIdKey], headerLayout);
     }
 
     private void DrawIncomePage()
@@ -166,38 +186,19 @@ public sealed partial class PlannerWindow
             .ToArray();
 
         DrawIncomeSummary(metrics, now, period);
+        ImGui.Spacing();
+        var incomeHeaders = metrics.ToDictionary(
+            metric => metric.FcIdKey,
+            metric => IncomeFcHeaderPresentation.Create(
+                projections[metric.FcIdKey],
+                metric,
+                this.configuration.GetFcPreferences(metric.FcIdKey).Favorite));
+        var incomeLayout = CalculateIncomeHeaderLayout(incomeHeaders.Values, ImGui.GetContentRegionAvail().X);
+        DrawIncomeHeaderLegend(incomeLayout);
         foreach (var metric in metrics)
         {
             var projection = projections[metric.FcIdKey];
-            var favorite = IsFavorite(projection) ? "★ " : string.Empty;
-            var label = $"{favorite}{projection.State.FreeCompanyTag} · {projection.State.World} · {projection.Mode}    {metric.GrossGil:N0} gil · {metric.GilPerDay:N0}/day##income-{metric.FcIdKey}";
-            ImGui.Spacing();
-            if (!ImGui.CollapsingHeader(label))
-                continue;
-
-            if (ImGui.BeginTable($"income-table-{metric.FcIdKey}", 7, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollX, new Vector2(-1, 0), 900f * ImGuiHelpers.GlobalScale))
-            {
-                ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 170f * ImGuiHelpers.GlobalScale);
-                ImGui.TableSetupColumn("Gross gil", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);
-                ImGui.TableSetupColumn("Gil/day", ImGuiTableColumnFlags.WidthFixed, 110f * ImGuiHelpers.GlobalScale);
-                ImGui.TableSetupColumn("Voyages", ImGuiTableColumnFlags.WidthFixed, 90f * ImGuiHelpers.GlobalScale);
-                ImGui.TableSetupColumn("Gil/voyage", ImGuiTableColumnFlags.WidthFixed, 115f * ImGuiHelpers.GlobalScale);
-                ImGui.TableSetupColumn("First return", ImGuiTableColumnFlags.WidthFixed, 145f * ImGuiHelpers.GlobalScale);
-                ImGui.TableSetupColumn("Last return", ImGuiTableColumnFlags.WidthFixed, 145f * ImGuiHelpers.GlobalScale);
-                ImGui.TableHeadersRow();
-                foreach (var submarine in metric.Submarines)
-                {
-                    ImGui.TableNextRow();
-                    DrawTableText(submarine.Name);
-                    DrawTableText($"{submarine.GrossGil:N0}");
-                    DrawTableText($"{submarine.GilPerDay:N0}");
-                    DrawTableText(submarine.ValidVoyages.ToString("N0"));
-                    DrawTableText($"{submarine.GilPerVoyage:N0}");
-                    DrawTableText(FormatIncomeDate(submarine.FirstReturnAtUtc));
-                    DrawTableText(FormatIncomeDate(submarine.LastReturnAtUtc));
-                }
-                ImGui.EndTable();
-            }
+            DrawIncomeFleetGroup(projection, metric, incomeHeaders[metric.FcIdKey], incomeLayout);
         }
     }
 
@@ -590,71 +591,101 @@ public sealed partial class PlannerWindow
         ImGui.EndTable();
     }
 
-    private void DrawOperationalFleetGroup(FcOperationalProjection projection, DateTimeOffset now, bool levelingPage)
+    private void DrawLevelingFleetGroup(
+        FcOperationalProjection projection,
+        DateTimeOffset now,
+        OperationsHeaderRenderContext headerContext,
+        OperationsHeaderLayout layout)
     {
-        var favorite = IsFavorite(projection) ? "★ " : string.Empty;
-        var roster = string.Join("  ", projection.Submarines.Select(submarine => $"{submarine.Name} R{submarine.Rank}"));
-        var operationalStatus = projection.ImmediateActionCount > 0
-            ? $"{projection.ImmediateActionCount} action{(projection.ImmediateActionCount == 1 ? string.Empty : "s")} now"
-            : projection.EarliestFutureReturnAtUtc is { } next ? $"next {FormatRelative(next, now)}" : "no known return";
-        var completion = projection.Mode == FleetMode.Farming
-            ? "Ready"
-            : projection.CompletionP50AtUtc is { } eta ? $"farm-ready {FormatRelative(eta, now)}" : "ETA unavailable";
-        var header = $"{favorite}{projection.State.FreeCompanyTag} · {projection.State.World} · {projection.Mode}    {operationalStatus} · {completion}    {roster}##fleet-{(levelingPage ? "level" : "ops")}-{projection.State.FcIdKey}";
-        ImGui.Spacing();
-        ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.05f, 0.22f, 0.25f, 1f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0.07f, 0.31f, 0.33f, 1f));
         if (this.viewState.ExpansionOverride is { } expansion)
             ImGui.SetNextItemOpen(expansion, ImGuiCond.Always);
-        var open = ImGui.CollapsingHeader(header);
-        ImGui.PopStyleColor(2);
-        ImGui.TextColored(
-            PlannerUi.Muted,
-            $"Target R{projection.EffectiveTargetRank} · {projection.ReadyCount}/{projection.Submarines.Count} ready" +
-            (levelingPage
-                ? $" · {projection.Submarines.Sum(submarine => submarine.VoyagesRemaining)} voyages remaining" +
-                  (projection.Submarines.Where(submarine => submarine.TargetEtaAtUtc is not null)
-                       .OrderByDescending(submarine => submarine.TargetEtaAtUtc)
-                       .FirstOrDefault() is { } bottleneck
-                      ? $" · bottleneck {bottleneck.Name}"
-                      : string.Empty)
-                : string.Empty) +
-            (projection.CompletionP10AtUtc is { } p10 && projection.CompletionP90AtUtc is { } p90
-                ? $" · P10–P90 {p10.LocalDateTime:g} – {p90.LocalDateTime:g}"
-                : string.Empty));
-        ImGui.Separator();
+
+        ImGui.Spacing();
+        var open = DrawAlignedOperationsHeader(
+            $"leveling-fc-{projection.State.FcIdKey}",
+            headerContext,
+            layout);
+        DrawOperationsHeaderTooltip(projection, headerContext, now);
         if (!open)
             return;
 
-        DrawSubmarineProjectionTable(projection, levelingPage);
+        var completion = OperationsCompletionPresentation.Create(projection);
+        var voyages = projection.Submarines.Sum(submarine => submarine.VoyagesRemaining);
+        var bottleneck = projection.Submarines
+            .Where(submarine => submarine.TargetEtaAtUtc is not null)
+            .OrderByDescending(submarine => submarine.TargetEtaAtUtc)
+            .FirstOrDefault();
+        var levelingDetails = $"{completion.Label} · {voyages} voyage{(voyages == 1 ? string.Empty : "s")} remaining" +
+                              (bottleneck is null ? string.Empty : $" · Bottleneck: {bottleneck.Name}");
+        ImGui.TextColored(PlannerUi.Muted, levelingDetails);
+        PlannerUi.Tooltip(completion.Tooltip);
+        ImGui.Spacing();
+        DrawLevelingSubmarineTable(projection, now);
+        DrawExpandedLevelingForecasts(projection, now);
     }
 
-    private void DrawSubmarineProjectionTable(FcOperationalProjection projection, bool levelingPage)
+    private void DrawLevelingSubmarineTable(FcOperationalProjection projection, DateTimeOffset now)
     {
+        const float minimumWidth = 900f;
+        var scaledMinimumWidth = minimumWidth * ImGuiHelpers.GlobalScale;
+        var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < scaledMinimumWidth;
+        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
+        if (needsHorizontalScroll)
+            flags |= ImGuiTableFlags.ScrollX;
+        var tableHeight = CalculateTableHeight(projection.Submarines.Count, needsHorizontalScroll);
         if (!ImGui.BeginTable(
-                $"projection-table-{projection.State.FcIdKey}-{levelingPage}",
-                9,
-                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollX,
-                new Vector2(-1, 0),
-                1160f * ImGuiHelpers.GlobalScale))
+                $"leveling-projection-table-{projection.State.FcIdKey}",
+                7,
+                flags,
+                new Vector2(-1, tableHeight),
+                needsHorizontalScroll ? scaledMinimumWidth : 0f))
             return;
+
         ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 165f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 70f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("State", ImGuiTableColumnFlags.WidthFixed, 165f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 285f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Current / next route", ImGuiTableColumnFlags.WidthFixed, 240f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Purpose", ImGuiTableColumnFlags.WidthFixed, 90f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Expected EXP", ImGuiTableColumnFlags.WidthFixed, 110f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Projected rank", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Target ETA", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Rank → after voyage", ImGuiTableColumnFlags.WidthFixed, 125f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("State", ImGuiTableColumnFlags.WidthFixed, 90f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Current / next route", ImGuiTableColumnFlags.WidthStretch, 1.2f);
+        ImGui.TableSetupColumn("Purpose", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Expected EXP", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Target ETA", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupScrollFreeze(1, 1);
         ImGui.TableHeadersRow();
         foreach (var submarine in projection.Submarines)
         {
+            var expansionKey = GetLevelingForecastExpansionKey(projection.State.FcIdKey, submarine.SubmarineId);
+            var expanded = this.expandedSubmarines.Contains(expansionKey);
             ImGui.TableNextRow();
-            DrawTableText(submarine.Name);
-            DrawTableText($"R{submarine.Rank}");
-            DrawTableText(submarine.StateLabel);
-            DrawTableText(submarine.ActionLabel);
+            ImGui.TableNextColumn();
+            var rowStart = ImGui.GetCursorScreenPos();
+            var clicked = ImGui.Selectable(
+                $"##leveling-submarine-{projection.State.FcIdKey}-{submarine.SubmarineId}",
+                false,
+                ImGuiSelectableFlags.SpanAllColumns,
+                new Vector2(0, ImGui.GetFrameHeight()));
+            var rowHovered = ImGui.IsItemHovered();
+            var rowEnd = ImGui.GetCursorScreenPos();
+            ImGui.SetCursorScreenPos(rowStart + new Vector2(3f * ImGuiHelpers.GlobalScale, 1f * ImGuiHelpers.GlobalScale));
+            PlannerUi.Icon(expanded ? FontAwesomeIcon.ChevronDown : FontAwesomeIcon.ChevronRight, PlannerUi.Teal);
+            ImGui.SameLine();
+            ImGui.TextUnformatted(submarine.Name);
+            ImGui.SetCursorScreenPos(rowEnd);
+            if (clicked)
+            {
+                if (!this.expandedSubmarines.Add(expansionKey))
+                    this.expandedSubmarines.Remove(expansionKey);
+            }
+            if (rowHovered)
+                ImGui.SetTooltip(expanded ? "Hide voyage forecast" : "Show complete voyage forecast");
+
+            ImGui.TableNextColumn();
+            var rankPresentation = OperationsRankPresentation.Create(submarine);
+            ImGui.TextUnformatted(rankPresentation.Label);
+            if (rankPresentation.Tooltip is not null)
+                PlannerUi.Tooltip(rankPresentation.Tooltip);
+            ImGui.TableNextColumn();
+            var compactState = CompactOperationalStatePresentation.Create(submarine);
+            ImGui.TextUnformatted(compactState.Label);
+            PlannerUi.Tooltip(compactState.Tooltip);
             ImGui.TableNextColumn();
             DrawCompactRoute(submarine.DisplayedRoute);
             if ((submarine.State is OperationalState.Underway or OperationalState.ReadyToCollect) &&
@@ -672,10 +703,257 @@ public sealed partial class PlannerWindow
             DrawTableText(submarine.ExpectedExp is { } exp ? exp.ToString("N0") : "Unavailable");
             if (submarine.ExpectedExp is null && submarine.ProjectionUnavailableReason is not null)
                 PlannerUi.Tooltip(submarine.ProjectionUnavailableReason);
-            DrawTableText(submarine.ProjectedRank is { } rank ? $"R{rank}" : "Unavailable");
             DrawTableText(submarine.Rank >= submarine.EffectiveTargetRank
                 ? "Ready"
-                : submarine.TargetEtaAtUtc is { } eta ? FormatRelative(eta, DateTimeOffset.UtcNow) : "Unavailable");
+                : submarine.TargetEtaAtUtc is { } eta ? FormatRelative(eta, now) : "Unavailable");
+        }
+        ImGui.EndTable();
+    }
+
+    private void DrawExpandedLevelingForecasts(FcOperationalProjection projection, DateTimeOffset now)
+    {
+        foreach (var submarine in projection.Submarines)
+        {
+            var expansionKey = GetLevelingForecastExpansionKey(projection.State.FcIdKey, submarine.SubmarineId);
+            if (!this.expandedSubmarines.Contains(expansionKey))
+                continue;
+
+            ImGui.PushID(expansionKey);
+            ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
+            ImGui.Spacing();
+            PlannerUi.IconText(FontAwesomeIcon.Ship, $"{submarine.Name} voyage forecast", PlannerUi.Teal);
+            var result = projection.Result?.PerSubResults.FirstOrDefault(item => item.SubmarineId == submarine.SubmarineId);
+            if (result is null)
+            {
+                PlannerUi.Callout(
+                    "forecast-unavailable",
+                    FontAwesomeIcon.ExclamationTriangle,
+                    "Forecast unavailable",
+                    submarine.ProjectionUnavailableReason ?? "No modeled voyage forecast is available for this submarine.",
+                    PlannerUi.Amber);
+            }
+            else
+            {
+                DrawSubDetails(result, this.configuration.Settings.ShowRouteDiagnostics, now);
+            }
+            ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
+            ImGui.PopID();
+        }
+    }
+
+    private static string GetLevelingForecastExpansionKey(string fcIdKey, long submarineId)
+        => $"leveling:{fcIdKey}:{submarineId}";
+
+    private static IncomeHeaderLayout CalculateIncomeHeaderLayout(
+        IEnumerable<IncomeFcHeaderPresentation> presentations,
+        float availableWidth)
+    {
+        var values = presentations.ToArray();
+        var scale = ImGuiHelpers.GlobalScale;
+        var gap = 8f * scale;
+        var gutter = 40f * scale;
+        var fcWidth = MeasureHeaderColumn(values.Select(value => value.FreeCompany), "FC", 90f, 155f);
+        var worldWidth = MeasureHeaderColumn(values.Select(value => value.World), "World", 85f, 145f);
+        var modeWidth = MeasureHeaderColumn(values.Select(value => value.Mode), "Mode", 78f, 105f);
+        var grossWidth = MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 95f, 145f);
+        var dayWidth = MeasureHeaderColumn(values.Select(value => value.GilPerDay), "Gil / day", 88f, 125f);
+        var voyageWidth = MeasureHeaderColumn(values.Select(value => value.GilPerVoyage), "Gil / voyage", 100f, 140f);
+        var countWidth = MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 72f, 100f);
+        var singleLineRequired = gutter + fcWidth + worldWidth + modeWidth + grossWidth + dayWidth + voyageWidth + countWidth + (gap * 6f);
+        var lineHeight = ImGui.GetTextLineHeight();
+
+        if (availableWidth >= singleLineRequired)
+        {
+            var fc = new IncomeHeaderColumn(gutter, fcWidth, 0);
+            var world = new IncomeHeaderColumn(fc.Offset + fc.Width + gap, worldWidth, 0);
+            var mode = new IncomeHeaderColumn(world.Offset + world.Width + gap, modeWidth, 0);
+            var gross = new IncomeHeaderColumn(mode.Offset + mode.Width + gap, grossWidth, 0);
+            var day = new IncomeHeaderColumn(gross.Offset + gross.Width + gap, dayWidth, 0);
+            var voyage = new IncomeHeaderColumn(day.Offset + day.Width + gap, voyageWidth, 0);
+            var countOffset = voyage.Offset + voyage.Width + gap;
+            return new IncomeHeaderLayout(
+                false,
+                ImGui.GetFrameHeight(),
+                ImGui.GetFrameHeight(),
+                fc,
+                world,
+                mode,
+                gross,
+                day,
+                voyage,
+                new IncomeHeaderColumn(countOffset, Math.Max(1f, availableWidth - countOffset), 0));
+        }
+
+        var contentWidth = Math.Max(1f, availableWidth - gutter);
+        var firstLineWidth = Math.Max(1f, contentWidth - (gap * 3f));
+        var fcTwoLine = Math.Max(82f * scale, firstLineWidth * 0.25f);
+        var worldTwoLine = Math.Max(82f * scale, firstLineWidth * 0.23f);
+        var modeTwoLine = Math.Max(75f * scale, firstLineWidth * 0.17f);
+        var grossTwoLine = Math.Max(1f, firstLineWidth - fcTwoLine - worldTwoLine - modeTwoLine);
+        var secondLineWidth = Math.Max(1f, contentWidth - (gap * 2f));
+        var dayTwoLine = Math.Max(90f * scale, secondLineWidth * 0.32f);
+        var voyageTwoLine = Math.Max(105f * scale, secondLineWidth * 0.38f);
+        var countTwoLine = Math.Max(1f, secondLineWidth - dayTwoLine - voyageTwoLine);
+        var height = (lineHeight * 2f) + (14f * scale);
+        return new IncomeHeaderLayout(
+            true,
+            height,
+            height,
+            new IncomeHeaderColumn(gutter, fcTwoLine, 0),
+            new IncomeHeaderColumn(gutter + fcTwoLine + gap, worldTwoLine, 0),
+            new IncomeHeaderColumn(gutter + fcTwoLine + gap + worldTwoLine + gap, modeTwoLine, 0),
+            new IncomeHeaderColumn(gutter + fcTwoLine + gap + worldTwoLine + gap + modeTwoLine + gap, grossTwoLine, 0),
+            new IncomeHeaderColumn(gutter, dayTwoLine, 1),
+            new IncomeHeaderColumn(gutter + dayTwoLine + gap, voyageTwoLine, 1),
+            new IncomeHeaderColumn(gutter + dayTwoLine + gap + voyageTwoLine + gap, countTwoLine, 1));
+    }
+
+    private static void DrawIncomeHeaderLegend(IncomeHeaderLayout layout)
+    {
+        var origin = ImGui.GetCursorScreenPos();
+        DrawIncomeHeaderFields(
+            origin,
+            layout,
+            new IncomeFcHeaderPresentation(
+                "income-legend",
+                "FC",
+                "World",
+                "Mode",
+                "Gross gil",
+                "Gil / day",
+                "Gil / voyage",
+                "Voyages",
+                false),
+            legend: true);
+        ImGui.Dummy(new Vector2(ImGui.GetContentRegionAvail().X, layout.LegendHeight));
+    }
+
+    private void DrawIncomeFleetGroup(
+        FcOperationalProjection projection,
+        IncomeFcMetrics metric,
+        IncomeFcHeaderPresentation presentation,
+        IncomeHeaderLayout layout)
+    {
+        ImGui.Spacing();
+        var origin = ImGui.GetCursorScreenPos();
+        var style = ImGui.GetStyle();
+        var paddingY = Math.Max(0f, (layout.HeaderHeight - ImGui.GetTextLineHeight()) / 2f);
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(style.FramePadding.X, paddingY));
+        ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackgroundAlt);
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(PlannerUi.PanelBackgroundAlt.X + 0.02f, PlannerUi.PanelBackgroundAlt.Y + 0.05f, PlannerUi.PanelBackgroundAlt.Z + 0.05f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(PlannerUi.PanelBackgroundAlt.X + 0.03f, PlannerUi.PanelBackgroundAlt.Y + 0.08f, PlannerUi.PanelBackgroundAlt.Z + 0.08f, 1f));
+        var open = ImGui.CollapsingHeader($"###{presentation.WidgetId}");
+        ImGui.PopStyleColor(3);
+        ImGui.PopStyleVar();
+        DrawIncomeHeaderFields(origin, layout, presentation, legend: false);
+        DrawIncomeHeaderTooltip(projection, metric);
+        if (!open)
+            return;
+
+        ImGui.Spacing();
+        DrawIncomeSubmarineTable(metric);
+    }
+
+    private static void DrawIncomeHeaderFields(
+        Vector2 origin,
+        IncomeHeaderLayout layout,
+        IncomeFcHeaderPresentation presentation,
+        bool legend)
+    {
+        var normal = legend ? PlannerUi.Muted : ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
+        DrawIncomeHeaderCell(origin, layout, layout.FreeCompany, presentation.FreeCompany, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.World, presentation.World, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.Mode, presentation.Mode,
+            legend ? PlannerUi.Muted : presentation.IsFarming ? PlannerUi.Green : PlannerUi.Teal);
+        DrawIncomeHeaderCell(origin, layout, layout.GrossGil, presentation.GrossGil,
+            legend ? PlannerUi.Muted : PlannerUi.Green);
+        DrawIncomeHeaderCell(origin, layout, layout.GilPerDay, presentation.GilPerDay, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.GilPerVoyage, presentation.GilPerVoyage, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.Voyages, presentation.Voyages, normal);
+    }
+
+    private static void DrawIncomeHeaderCell(
+        Vector2 origin,
+        IncomeHeaderLayout layout,
+        IncomeHeaderColumn column,
+        string text,
+        Vector4 color)
+    {
+        if (column.Width <= 1f)
+            return;
+
+        var scale = ImGuiHelpers.GlobalScale;
+        var lineHeight = ImGui.GetTextLineHeight();
+        var lineGap = 2f * scale;
+        var contentHeight = layout.TwoLine ? (lineHeight * 2f) + lineGap : lineHeight;
+        var firstLineY = origin.Y + ((layout.HeaderHeight - contentHeight) / 2f);
+        var y = firstLineY + (column.Line * (lineHeight + lineGap));
+        var padding = 3f * scale;
+        var fitted = FitHeaderText(text, Math.Max(1f, column.Width - (padding * 2f)));
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.PushClipRect(
+            new Vector2(origin.X + column.Offset, y),
+            new Vector2(origin.X + column.Offset + column.Width, y + lineHeight),
+            true);
+        drawList.AddText(
+            new Vector2(origin.X + column.Offset + padding, y),
+            ImGui.ColorConvertFloat4ToU32(color),
+            fitted);
+        drawList.PopClipRect();
+    }
+
+    private static void DrawIncomeHeaderTooltip(FcOperationalProjection projection, IncomeFcMetrics metric)
+    {
+        if (!ImGui.IsItemHovered())
+            return;
+
+        ImGui.BeginTooltip();
+        ImGui.TextColored(PlannerUi.Teal, $"{projection.State.FreeCompanyTag} — {projection.State.World}");
+        ImGui.TextUnformatted($"{projection.Mode} · {metric.ValidVoyages:N0} valid tracked voyage{(metric.ValidVoyages == 1 ? string.Empty : "s")}");
+        ImGui.Separator();
+        ImGui.TextColored(PlannerUi.Green, $"Gross NPC salvage value: {metric.GrossGil:N0} gil");
+        ImGui.TextUnformatted($"Gil per covered day: {metric.GilPerDay:N0}");
+        ImGui.TextUnformatted($"Gil per valid voyage: {metric.GilPerVoyage:N0}");
+        ImGui.TextColored(PlannerUi.Muted, $"Coverage: {FormatIncomeDate(metric.FirstReturnAtUtc)} – {FormatIncomeDate(metric.LastReturnAtUtc)}");
+        ImGui.EndTooltip();
+    }
+
+    private static void DrawIncomeSubmarineTable(IncomeFcMetrics metric)
+    {
+        const float minimumWidth = 900f;
+        var scaledMinimumWidth = minimumWidth * ImGuiHelpers.GlobalScale;
+        var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < scaledMinimumWidth;
+        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
+        if (needsHorizontalScroll)
+            flags |= ImGuiTableFlags.ScrollX;
+        var tableHeight = CalculateTableHeight(metric.Submarines.Count, needsHorizontalScroll);
+        if (!ImGui.BeginTable(
+                $"income-table-{metric.FcIdKey}",
+                7,
+                flags,
+                new Vector2(-1, tableHeight),
+                needsHorizontalScroll ? scaledMinimumWidth : 0f))
+            return;
+
+        ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 165f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Gross gil", ImGuiTableColumnFlags.WidthStretch, 1f);
+        ImGui.TableSetupColumn("Gil/day", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Voyages", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Gil/voyage", ImGuiTableColumnFlags.WidthFixed, 110f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("First return", ImGuiTableColumnFlags.WidthFixed, 140f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Last return", ImGuiTableColumnFlags.WidthFixed, 140f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupScrollFreeze(1, 1);
+        ImGui.TableHeadersRow();
+        foreach (var submarine in metric.Submarines)
+        {
+            ImGui.TableNextRow();
+            DrawTableText(submarine.Name);
+            DrawTableText($"{submarine.GrossGil:N0}");
+            DrawTableText($"{submarine.GilPerDay:N0}");
+            DrawTableText(submarine.ValidVoyages.ToString("N0"));
+            DrawTableText($"{submarine.GilPerVoyage:N0}");
+            DrawTableText(FormatIncomeDate(submarine.FirstReturnAtUtc));
+            DrawTableText(FormatIncomeDate(submarine.LastReturnAtUtc));
         }
         ImGui.EndTable();
     }

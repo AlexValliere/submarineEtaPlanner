@@ -989,17 +989,30 @@ public sealed partial class PlannerWindow
             }
         }
 
-        var columnCount = showDiagnostics ? 9 : 7;
-        var minimumTableWidth = (showDiagnostics ? 980f : 760f) * ImGuiHelpers.GlobalScale;
+        if (sub.VoyagePreview.Count == 0)
+        {
+            PlannerUi.Callout(
+                "no-future-voyages",
+                FontAwesomeIcon.CheckCircle,
+                "No leveling voyages remain",
+                "This submarine is already at the target rank, or the current forecast has no reliable future route sequence.",
+                sub.IsComplete ? PlannerUi.Green : PlannerUi.Muted);
+            return;
+        }
+
+        var columnCount = showDiagnostics ? 10 : 8;
+        var minimumTableWidth = (showDiagnostics ? 1260f : 1000f) * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
+        var needsVerticalScroll = sub.VoyagePreview.Count > 8;
         var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable |
                     ImGuiTableFlags.SizingStretchProp;
         if (needsHorizontalScroll)
             flags |= ImGuiTableFlags.ScrollX;
+        if (needsVerticalScroll)
+            flags |= ImGuiTableFlags.ScrollY;
 
-        var tableSize = needsHorizontalScroll
-            ? new Vector2(-1, CalculateTableHeight(sub.VoyagePreview.Count, true))
-            : new Vector2(-1, CalculateTableHeight(sub.VoyagePreview.Count, false));
+        var visibleRows = Math.Min(sub.VoyagePreview.Count, 8);
+        var tableSize = new Vector2(-1, CalculateTableHeight(visibleRows, needsHorizontalScroll));
         if (!ImGui.BeginTable(
                 "preview",
                 columnCount,
@@ -1008,18 +1021,20 @@ public sealed partial class PlannerWindow
                 needsHorizontalScroll ? minimumTableWidth : 0f))
             return;
 
-        ImGui.TableSetupColumn("#", ImGuiTableColumnFlags.WidthFixed, 34f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Step", ImGuiTableColumnFlags.WidthFixed, 42f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Returns", ImGuiTableColumnFlags.WidthFixed, 140f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 64f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Route", ImGuiTableColumnFlags.WidthStretch, 1f);
+        ImGui.TableSetupColumn("Route", ImGuiTableColumnFlags.WidthStretch, 1.1f);
+        ImGui.TableSetupColumn("Why this route", ImGuiTableColumnFlags.WidthStretch, 1.25f);
         ImGui.TableSetupColumn("EXP", ImGuiTableColumnFlags.WidthFixed, 86f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Repeats", ImGuiTableColumnFlags.WidthFixed, 65f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 64f * ImGuiHelpers.GlobalScale);
         if (showDiagnostics)
         {
             ImGui.TableSetupColumn("Per voyage", ImGuiTableColumnFlags.WidthFixed, 165f * ImGuiHelpers.GlobalScale);
             ImGui.TableSetupColumn("EXP/hour", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
         }
+        ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableHeadersRow();
 
         for (var i = 0; i < sub.VoyagePreview.Count; i++)
@@ -1030,8 +1045,6 @@ public sealed partial class PlannerWindow
             ImGui.TextUnformatted((i + 1).ToString());
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.ReturnAtUtc.LocalDateTime.ToString("g"));
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(plan.BuildCode);
             ImGui.TableNextColumn();
             DrawCompactRoute(plan.Route);
             if (plan.DependsOnProjectedUnlocks)
@@ -1046,6 +1059,10 @@ public sealed partial class PlannerWindow
                 }
             }
             ImGui.TableNextColumn();
+            var purpose = VoyageRoutePurposePresentation.Create(plan, point => this.catalog.PointName(point));
+            ImGui.TextUnformatted(purpose.Label);
+            PlannerUi.Tooltip(purpose.Tooltip);
+            ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.ExpGain.ToString("N0"));
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Total EXP represented by this row. Batched rows combine repeated voyages.");
@@ -1053,6 +1070,8 @@ public sealed partial class PlannerWindow
             ImGui.TextUnformatted($"{plan.RankBefore}→{plan.RankAfter}");
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.RepeatCount.ToString());
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(plan.BuildCode);
             if (showDiagnostics)
             {
                 ImGui.TableNextColumn();

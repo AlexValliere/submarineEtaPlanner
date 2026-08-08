@@ -239,6 +239,8 @@ public sealed record VoyagePlan(
     public bool DependsOnProjectedUnlocks { get; init; }
 
     public IReadOnlyList<uint> RequiredProjectedUnlocks { get; init; } = [];
+
+    public UnlockObjective? UnlockObjective { get; init; }
 }
 
 public sealed record PerSubEtaResult(

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3.0
+
+- Corrected Operations sorting so actions affect only the actions-first order, while farm-ready ETA and FC name follow their selected keys.
+- Brought Leveling fleet headers and submarine tables up to the aligned, responsive Operations layout and restored complete per-submarine voyage forecasts with route-purpose explanations.
+- Added aligned Income metrics, compact one-to-four-row detail tables, and stable FC expansion while live gil/day values change.
+
 ## 0.5.2.0
 
 - Replaced the redundant Returning soon view with All fleets, Leveling, and Farming filters.

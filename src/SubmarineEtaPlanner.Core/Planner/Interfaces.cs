@@ -55,7 +55,10 @@ public sealed record RouteCandidate(
     IReadOnlyList<uint> UnlockTargets,
     EtaModel EtaModel,
     bool DurationCapApplied,
-    bool AdvancesUnlockObjective = false);
+    bool AdvancesUnlockObjective = false)
+{
+    public UnlockObjective? UnlockObjective { get; init; }
+}
 
 public sealed record UnlockRule(
     uint SourcePoint,

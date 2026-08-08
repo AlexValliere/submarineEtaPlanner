@@ -31,7 +31,11 @@ public sealed class RouteSelector(ISubmarineCatalog catalog, RouteUnlockGraph un
             if (objectiveResult is not null)
             {
                 return ReservePendingUnlocks(
-                    objectiveResult with { AdvancesUnlockObjective = true },
+                    objectiveResult with
+                    {
+                        AdvancesUnlockObjective = true,
+                        UnlockObjective = objective,
+                    },
                     unlockState,
                     fleetMode);
             }
