@@ -6,8 +6,8 @@
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
-  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.4.17.0.png",
-  "Changelog": "Fixed a dashboard crash caused by transient SubmarineTracker data while collecting or redispatching submarines.",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.5.0.0.png",
+  "Changelog": "Reworked fleet management with Operations, Leveling, Income, and FC Setup screens, favorites, per-FC targets and strategies, and voyage-level salvage reporting.",
   "Tags": [
     "Submarine",
     "ETA",

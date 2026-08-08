@@ -48,7 +48,8 @@ public sealed partial class PlannerWindow : Window
     private ForecastRefreshMode? pendingRefreshMode;
     private string lastError = string.Empty;
     private string fcSearch = string.Empty;
-    private PlannerPage currentPage = PlannerPage.Dashboard;
+    private PlannerPage currentPage = PlannerPage.Operations;
+    private SettingsSection settingsSection = SettingsSection.Simulation;
     private EtaSettings draftSettings;
     private bool draftDirty;
     private bool resetDefaultsPreviewActive;
@@ -88,7 +89,7 @@ public sealed partial class PlannerWindow : Window
 
     public void OpenResults()
     {
-        this.currentPage = PlannerPage.Dashboard;
+        this.currentPage = PlannerPage.Operations;
         SetOpen(true);
         RefreshIfTrackerDataChanged();
     }
@@ -112,13 +113,13 @@ public sealed partial class PlannerWindow : Window
             this.draftSettings = CloneSettings(this.configuration.Settings);
             this.resetDefaultsPreviewActive = false;
         }
-        this.currentPage = PlannerPage.Simulation;
+        this.currentPage = PlannerPage.Settings;
         SetOpen(true);
     }
 
     public void OpenAndRefresh()
     {
-        this.currentPage = PlannerPage.Dashboard;
+        this.currentPage = PlannerPage.Operations;
         SetOpen(true);
         QueueRefresh();
     }
@@ -167,8 +168,10 @@ public sealed partial class PlannerWindow : Window
                 GetPageSubtitle(),
                 this.configuration.Settings.TargetRank,
                 EtaModelLabels[(int)this.configuration.Settings.EtaModel],
-                this.currentPage == PlannerPage.Dashboard,
-                refreshing))
+                this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Income,
+                refreshing,
+                this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Income,
+                this.configuration.FreeCompanyPreferences.Values.Count(value => value.TargetRankOverride is not null || value.StrategyOverride is not null)))
         {
             if (refreshing)
             {
@@ -182,15 +185,9 @@ public sealed partial class PlannerWindow : Window
         }
 
         ImGui.Spacing();
-        if (this.currentPage == PlannerPage.Dashboard)
+        if (this.currentPage == PlannerPage.Settings)
         {
-            if (ImGui.BeginChild("dashboard-scroll", new Vector2(-1, -1), false))
-                DrawDashboardPage();
-            ImGui.EndChild();
-        }
-        else
-        {
-            var displayPage = this.currentPage == PlannerPage.Display;
+            var displayPage = this.settingsSection == SettingsSection.Display;
             var showActionBar = !displayPage || this.resetDefaultsPreviewActive;
             var actionBarHeight = showActionBar ? 64f * ImGuiHelpers.GlobalScale : 0f;
             if (ImGui.BeginChild("settings-scroll", new Vector2(-1, -actionBarHeight), false))
@@ -199,6 +196,20 @@ public sealed partial class PlannerWindow : Window
 
             if (showActionBar)
                 DrawSettingsActionBar();
+        }
+        else
+        {
+            if (ImGui.BeginChild("fleet-screen-scroll", new Vector2(-1, -1), false))
+            {
+                switch (this.currentPage)
+                {
+                    case PlannerPage.Operations: DrawOperationsPage(); break;
+                    case PlannerPage.Leveling: DrawLevelingPage(); break;
+                    case PlannerPage.Income: DrawIncomePage(); break;
+                    case PlannerPage.FcSetup: DrawFcSetupPage(); break;
+                }
+            }
+            ImGui.EndChild();
         }
 
         ImGui.EndChild();
@@ -211,17 +222,12 @@ public sealed partial class PlannerWindow : Window
         ImGui.Separator();
         ImGui.Spacing();
 
-        DrawNavigationItem(PlannerPage.Dashboard, FontAwesomeIcon.ChartLine, "Dashboard", compact);
+        DrawNavigationItem(PlannerPage.Operations, FontAwesomeIcon.Tasks, "Operations", compact);
+        DrawNavigationItem(PlannerPage.Leveling, FontAwesomeIcon.ChartLine, "Leveling", compact);
+        DrawNavigationItem(PlannerPage.Income, FontAwesomeIcon.Coins, "Income", compact);
+        DrawNavigationItem(PlannerPage.FcSetup, FontAwesomeIcon.Building, "FC Setup", compact);
         ImGui.Spacing();
-        if (!compact)
-            PlannerUi.SectionLabel("SETTINGS");
-
-        DrawNavigationItem(PlannerPage.Simulation, FontAwesomeIcon.Cogs, "Simulation", compact);
-        DrawNavigationItem(PlannerPage.Routes, FontAwesomeIcon.Map, "Routes", compact);
-        DrawNavigationItem(PlannerPage.Limits, FontAwesomeIcon.TachometerAlt, "Limits", compact);
-        DrawNavigationItem(PlannerPage.DataSource, FontAwesomeIcon.Database, "Data source", compact);
-        DrawNavigationItem(PlannerPage.BuildProfile, FontAwesomeIcon.Wrench, "Build profile", compact);
-        DrawNavigationItem(PlannerPage.Display, FontAwesomeIcon.Eye, "Display", compact);
+        DrawNavigationItem(PlannerPage.Settings, FontAwesomeIcon.Cogs, "Settings", compact);
 
         if (this.draftDirty)
         {
@@ -253,25 +259,21 @@ public sealed partial class PlannerWindow : Window
 
     private string GetPageTitle() => this.currentPage switch
     {
-        PlannerPage.Dashboard => "Submarine ETA Planner",
-        PlannerPage.Simulation => "Simulation",
-        PlannerPage.Routes => "Route strategy",
-        PlannerPage.Limits => "Calculation limits",
-        PlannerPage.DataSource => "SubmarineTracker data",
-        PlannerPage.BuildProfile => "Build profile",
-        PlannerPage.Display => "Display preferences",
+        PlannerPage.Operations => "Fleet operations",
+        PlannerPage.Leveling => "Leveling fleets",
+        PlannerPage.Income => "Recorded income",
+        PlannerPage.FcSetup => "Free company setup",
+        PlannerPage.Settings => "Settings",
         _ => "Submarine ETA Planner",
     };
 
     private string GetPageSubtitle() => this.currentPage switch
     {
-        PlannerPage.Dashboard => "Forecast every tracked fleet from one calm command deck.",
-        PlannerPage.Simulation => "Choose the model, target rank, and fleet assumptions.",
-        PlannerPage.Routes => "Control voyage duration and unlock priorities.",
-        PlannerPage.Limits => "Keep long-running calculations within safe boundaries.",
-        PlannerPage.DataSource => "Use the default tracker database or provide an override.",
-        PlannerPage.BuildProfile => "Assign the build used throughout each rank range.",
-        PlannerPage.Display => "Tune diagnostics and result presentation.",
+        PlannerPage.Operations => "Actions first, then every known return across the fleet.",
+        PlannerPage.Leveling => "Every leveling FC and submarine in one progression view.",
+        PlannerPage.Income => "Gross NPC salvage value from recorded SubmarineTracker returns.",
+        PlannerPage.FcSetup => "Favorites and per-FC target and strategy overrides.",
+        PlannerPage.Settings => "Global simulation, route, data, build, and display preferences.",
         _ => string.Empty,
     };
 
@@ -326,6 +328,7 @@ public sealed partial class PlannerWindow : Window
         {
         }
         var settings = CloneSettings(this.configuration.Settings);
+        var calculationRequest = new PlannerCalculationRequest(settings, this.configuration.GetSimulationOverrides());
         this.refreshDataFingerprint = this.plannerService.GetDataFingerprint(settings);
         var now = DateTimeOffset.UtcNow;
         Plugin.Log.Information("Starting submarine ETA calculation.");
@@ -333,7 +336,7 @@ public sealed partial class PlannerWindow : Window
         {
             var stopwatch = Stopwatch.StartNew();
             var result = this.plannerService.Calculate(
-                settings,
+                calculationRequest,
                 now,
                 cancellationToken,
                 progress => this.refreshProgress.Enqueue(progress),
@@ -482,7 +485,7 @@ public sealed partial class PlannerWindow : Window
             var current = this.plannerService.GetDataFingerprint(this.configuration.Settings);
             this.trackerDataChanged = this.snapshotDataFingerprint is null ||
                                       current != this.snapshotDataFingerprint ||
-                                      HasCrossedVoyageReturnBoundary(this.snapshot, now, this.configuration.Settings.TargetRank);
+                                      HasCrossedVoyageReturnBoundary(this.snapshot, now);
         }
         catch (Exception ex)
         {
@@ -490,10 +493,9 @@ public sealed partial class PlannerWindow : Window
         }
     }
 
-    private static bool HasCrossedVoyageReturnBoundary(
+    private bool HasCrossedVoyageReturnBoundary(
         EtaPlannerSnapshot snapshot,
-        DateTimeOffset now,
-        int targetRank)
+        DateTimeOffset now)
     {
         var awaitingFcIds = snapshot.FcProgress
             .Where(progress => progress.Status == FcCalculationStatus.AwaitingTrackerUpdate)
@@ -502,35 +504,16 @@ public sealed partial class PlannerWindow : Window
         return snapshot.FreeCompanies.Any(fc =>
             !awaitingFcIds.Contains(fc.FcIdKey) &&
             fc.Submarines.Any(submarine =>
-                submarine.Rank < targetRank &&
+                submarine.Rank < EffectiveEtaSettingsResolver.Resolve(
+                    this.configuration.Settings,
+                    this.configuration.GetSimulationOverrides().GetValueOrDefault(fc.FcIdKey),
+                    this.catalog.MaximumRank).TargetRank &&
                 submarine.CurrentRoute.Count > 0 &&
                 submarine.ReturnAtUtc > snapshot.GeneratedAtUtc &&
                 submarine.ReturnAtUtc <= now));
     }
 
-    private static EtaSettings CloneSettings(EtaSettings settings) => new()
-    {
-        TargetRank = settings.TargetRank,
-        ExpMode = settings.ExpMode,
-        CollectionDelayMinutes = settings.CollectionDelayMinutes,
-        SimulationMode = settings.SimulationMode,
-        BuildProfile = settings.BuildProfile.Select(step => new BuildProfileStep(step.MinRank, step.MaxRank, step.BuildCode)).ToList(),
-        PrioritizeSubSlots = settings.PrioritizeSubSlots,
-        RouteGoal = settings.RouteGoal,
-        DurationLimitHours = settings.DurationLimitHours,
-        EtaModel = settings.EtaModel,
-        PracticalMaxVoyageHours = settings.PracticalMaxVoyageHours,
-        TimeoutResultBehavior = settings.TimeoutResultBehavior,
-        ShowRouteDiagnostics = settings.ShowRouteDiagnostics,
-        OptimizeExpPerHour = settings.OptimizeExpPerHour,
-        UnknownCurrentVoyagePolicy = settings.UnknownCurrentVoyagePolicy,
-        ManualCurrentRouteOverrides = settings.ManualCurrentRouteOverrides.ToDictionary(pair => pair.Key, pair => pair.Value.ToList()),
-        SubmarineTrackerDatabasePathOverride = settings.SubmarineTrackerDatabasePathOverride,
-        MaxPreviewVoyagesPerSubmarine = settings.MaxPreviewVoyagesPerSubmarine,
-        SimulationSafetyVoyageCapPerSubmarine = settings.SimulationSafetyVoyageCapPerSubmarine,
-        CalculationTimeLimitSeconds = settings.CalculationTimeLimitSeconds,
-        UnlockSuccessProbability = settings.UnlockSuccessProbability,
-    };
+    private static EtaSettings CloneSettings(EtaSettings settings) => settings.DeepClone();
 
     private static string NormalizeBuildCode(string value)
     {
@@ -612,7 +595,15 @@ public sealed partial class PlannerWindow : Window
 
     private enum PlannerPage
     {
-        Dashboard,
+        Operations,
+        Leveling,
+        Income,
+        FcSetup,
+        Settings,
+    }
+
+    private enum SettingsSection
+    {
         Simulation,
         Routes,
         Limits,

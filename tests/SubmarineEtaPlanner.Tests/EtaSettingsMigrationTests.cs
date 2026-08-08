@@ -169,7 +169,7 @@ public sealed class EtaSettingsMigrationTests
         settings.UnlockSuccessProbability = 0;
 
         Assert.True(EtaSettingsMigration.Migrate(settings, ref version));
-        Assert.Equal(9, version);
+        Assert.Equal(EtaSettingsMigration.CurrentVersion, version);
         Assert.Equal(0.33, settings.UnlockSuccessProbability, 2);
 
         settings.UnlockSuccessProbability = 5;

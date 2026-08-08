@@ -33,6 +33,26 @@ public enum EtaModel
     ExactRouteSearch,
 }
 
+public enum FcStrategyPreset
+{
+    Recommended,
+    ImmediateExpOnly,
+    SlotsFirstThenImmediateExp,
+    UnlockEverythingThenLevel,
+}
+
+public sealed record FcSimulationOverride(
+    int? TargetRank = null,
+    FcStrategyPreset? Strategy = null);
+
+public sealed record PlannerCalculationRequest(
+    EtaSettings GlobalSettings,
+    IReadOnlyDictionary<string, FcSimulationOverride> FreeCompanyOverrides)
+{
+    public static PlannerCalculationRequest FromGlobalSettings(EtaSettings settings)
+        => new(settings, new Dictionary<string, FcSimulationOverride>(StringComparer.OrdinalIgnoreCase));
+}
+
 public enum CalculationStatus
 {
     Complete,
@@ -118,6 +138,17 @@ public sealed record SubmarineSalvageSummary(
     public long ItemCount => Items.Sum(item => item.Quantity);
 
     public long TotalGil => Items.Sum(item => item.TotalGil);
+
+    public IReadOnlyList<SalvageVoyageRecord> Voyages { get; init; } = [];
+}
+
+public sealed record SalvageVoyageRecord(
+    string FcIdKey,
+    long SubmarineId,
+    DateTimeOffset ReturnAtUtc,
+    IReadOnlyList<SalvageItemTotal> Items)
+{
+    public long GrossNpcGil => Items.Sum(item => item.TotalGil);
 }
 
 public sealed record SubmarineBuildParts(ushort Hull, ushort Stern, ushort Bow, ushort Bridge)
@@ -325,6 +356,70 @@ public sealed record EtaSettings
             new BuildProfileStep(25, 999, "SSUW"),
         ],
     };
+
+    public EtaSettings DeepClone() => new()
+    {
+        TargetRank = TargetRank,
+        ExpMode = ExpMode,
+        CollectionDelayMinutes = CollectionDelayMinutes,
+        SimulationMode = SimulationMode,
+        BuildProfile = BuildProfile.Select(step => new BuildProfileStep(step.MinRank, step.MaxRank, step.BuildCode)).ToList(),
+        PrioritizeSubSlots = PrioritizeSubSlots,
+        RouteGoal = RouteGoal,
+        DurationLimitHours = DurationLimitHours,
+        EtaModel = EtaModel,
+        PracticalMaxVoyageHours = PracticalMaxVoyageHours,
+        TimeoutResultBehavior = TimeoutResultBehavior,
+        ShowRouteDiagnostics = ShowRouteDiagnostics,
+        OptimizeExpPerHour = OptimizeExpPerHour,
+        UnknownCurrentVoyagePolicy = UnknownCurrentVoyagePolicy,
+        ManualCurrentRouteOverrides = ManualCurrentRouteOverrides.ToDictionary(pair => pair.Key, pair => pair.Value.ToList()),
+        SubmarineTrackerDatabasePathOverride = SubmarineTrackerDatabasePathOverride,
+        MaxPreviewVoyagesPerSubmarine = MaxPreviewVoyagesPerSubmarine,
+        SimulationSafetyVoyageCapPerSubmarine = SimulationSafetyVoyageCapPerSubmarine,
+        CalculationTimeLimitSeconds = CalculationTimeLimitSeconds,
+        UnlockSuccessProbability = UnlockSuccessProbability,
+    };
+}
+
+public static class EffectiveEtaSettingsResolver
+{
+    public static EtaSettings Resolve(EtaSettings global, FcSimulationOverride? simulationOverride, int maximumRank)
+    {
+        var effective = global.DeepClone();
+        if (simulationOverride?.TargetRank is { } targetRank)
+            effective.TargetRank = Math.Clamp(targetRank, 1, Math.Max(1, maximumRank));
+
+        if (simulationOverride?.Strategy is not { } strategy)
+            return effective;
+
+        effective.OptimizeExpPerHour = true;
+        switch (strategy)
+        {
+            case FcStrategyPreset.Recommended:
+                effective.EtaModel = EtaModel.PracticalLeveling;
+                effective.PrioritizeSubSlots = true;
+                effective.RouteGoal = RouteGoal.UnlockLevelingRoutesThenLevel;
+                break;
+            case FcStrategyPreset.ImmediateExpOnly:
+                effective.EtaModel = EtaModel.ExactRouteSearch;
+                effective.PrioritizeSubSlots = false;
+                effective.RouteGoal = RouteGoal.FastestLevelingOnly;
+                break;
+            case FcStrategyPreset.SlotsFirstThenImmediateExp:
+                effective.EtaModel = EtaModel.ExactRouteSearch;
+                effective.PrioritizeSubSlots = true;
+                effective.RouteGoal = RouteGoal.UnlockSubSlotsThenLevel;
+                break;
+            case FcStrategyPreset.UnlockEverythingThenLevel:
+                effective.EtaModel = EtaModel.ExactRouteSearch;
+                effective.PrioritizeSubSlots = true;
+                effective.RouteGoal = RouteGoal.UnlockEverythingThenLevel;
+                break;
+        }
+
+        return effective;
+    }
 }
 
 public sealed record CalculationMetrics(

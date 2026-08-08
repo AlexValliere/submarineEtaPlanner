@@ -51,7 +51,8 @@ public sealed class Plugin : IDalamudPlugin
             stateReader,
             simulator,
             catalog as IRouteSearchDiagnostics,
-            catalog as IPlannerDataDiagnostics);
+            catalog as IPlannerDataDiagnostics,
+            catalog.MaximumRank);
 
         this.plannerWindow = new PlannerWindow(
             Configuration,

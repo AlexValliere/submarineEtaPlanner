@@ -150,6 +150,37 @@ public sealed class EtaPlannerIncrementalTests
     }
 
     [Fact]
+    public void ChangingOneFcOverrideOnlyRecalculatesThatFc()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(100);
+        var reader = new MutableStateReader([CreateFc(1, 50, now.AddDays(1)), CreateFc(2, 60, now.AddDays(1))]);
+        var simulator = new RecordingSimulator();
+        var service = new EtaPlannerService(reader, simulator, maximumRank: 120);
+        var settings = Settings();
+        var initialRequest = PlannerCalculationRequest.FromGlobalSettings(settings);
+        var first = service.Calculate(initialRequest, now, CancellationToken.None);
+        simulator.Calls.Clear();
+
+        var changedRequest = new PlannerCalculationRequest(
+            settings,
+            new Dictionary<string, FcSimulationOverride>
+            {
+                ["02"] = new(TargetRank: 110),
+            });
+        var refreshed = service.Calculate(
+            changedRequest,
+            now.AddMinutes(5),
+            CancellationToken.None,
+            previousSnapshot: first,
+            refreshMode: ForecastRefreshMode.Incremental);
+
+        Assert.Equal(["02"], simulator.Calls);
+        Assert.Equal(100, refreshed.Results.Single(result => Convert.ToHexString(result.FcId) == "01").TargetRank);
+        Assert.Equal(110, refreshed.Results.Single(result => Convert.ToHexString(result.FcId) == "02").TargetRank);
+        Assert.Equal(1, refreshed.Metrics!.ReusedFreeCompanies);
+    }
+
+    [Fact]
     public void PartialResultIsRetriedEvenWhenFcDataIsUnchanged()
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(100);

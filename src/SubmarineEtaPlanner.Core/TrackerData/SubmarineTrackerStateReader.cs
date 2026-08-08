@@ -172,7 +172,11 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
             command.Transaction = transaction;
             var parameters = this.salvageItems.Select((_, index) => $"@item{index}").ToArray();
             command.CommandText = $"""
-                WITH salvage AS (
+                WITH voyages AS (
+                    SELECT DISTINCT FreeCompanyId, SubmarineId, Return
+                    FROM loot
+                    WHERE Valid = 1
+                ), salvage AS (
                     SELECT FreeCompanyId, SubmarineId, Return, PrimaryItem AS ItemId, PrimaryCount AS Quantity
                     FROM loot
                     WHERE Valid = 1 AND PrimaryCount > 0 AND PrimaryItem IN ({string.Join(", ", parameters)})
@@ -180,11 +184,19 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
                     SELECT FreeCompanyId, SubmarineId, Return, AdditionalItem AS ItemId, AdditionalCount AS Quantity
                     FROM loot
                     WHERE Valid = 1 AND AdditionalCount > 0 AND AdditionalItem IN ({string.Join(", ", parameters)})
+                ), item_totals AS (
+                    SELECT FreeCompanyId, SubmarineId, Return, ItemId, SUM(Quantity) AS Quantity
+                    FROM salvage
+                    GROUP BY FreeCompanyId, SubmarineId, Return, ItemId
                 )
-                SELECT FreeCompanyId, SubmarineId, Return, ItemId, SUM(Quantity) AS Quantity
-                FROM salvage
-                GROUP BY FreeCompanyId, SubmarineId, Return, ItemId
-                ORDER BY FreeCompanyId, SubmarineId, Return, ItemId
+                SELECT voyages.FreeCompanyId, voyages.SubmarineId, voyages.Return,
+                       item_totals.ItemId, item_totals.Quantity
+                FROM voyages
+                LEFT JOIN item_totals
+                  ON item_totals.FreeCompanyId = voyages.FreeCompanyId
+                 AND item_totals.SubmarineId = voyages.SubmarineId
+                 AND item_totals.Return = voyages.Return
+                ORDER BY voyages.FreeCompanyId, voyages.SubmarineId, voyages.Return, item_totals.ItemId
                 """;
             for (var index = 0; index < this.salvageItems.Count; index++)
                 command.Parameters.AddWithValue(parameters[index], this.salvageItems[index].ItemId);
@@ -203,17 +215,19 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
                     builders[key] = builder;
                 }
 
+                var returnAtUtc = UnixSecondsToUtc(Convert.ToInt64(reader["Return"]));
+                builder.AddVoyage(returnAtUtc);
+                if (reader.IsDBNull(reader.GetOrdinal("ItemId")))
+                    continue;
+
                 var itemId = Convert.ToUInt32(reader["ItemId"]);
                 if (itemValues.TryGetValue(itemId, out var item))
                 {
-                    builder.Add(
-                        UnixSecondsToUtc(Convert.ToInt64(reader["Return"])),
-                        item,
-                        Convert.ToInt64(reader["Quantity"]));
+                    builder.Add(returnAtUtc, item, Convert.ToInt64(reader["Quantity"]));
                 }
             }
 
-            return builders.ToDictionary(pair => pair.Key, pair => pair.Value.Build());
+            return builders.ToDictionary(pair => pair.Key, pair => pair.Value.Build(pair.Key));
         }
         catch (Exception ex)
         {
@@ -308,17 +322,31 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
     {
         private readonly HashSet<DateTimeOffset> returns = [];
         private readonly Dictionary<uint, (SalvageItemValue Item, long Quantity)> quantities = [];
+        private readonly Dictionary<DateTimeOffset, Dictionary<uint, (SalvageItemValue Item, long Quantity)>> voyageQuantities = [];
+
+        public void AddVoyage(DateTimeOffset returnAtUtc)
+        {
+            this.returns.Add(returnAtUtc);
+            if (!this.voyageQuantities.ContainsKey(returnAtUtc))
+                this.voyageQuantities[returnAtUtc] = [];
+        }
 
         public void Add(DateTimeOffset returnAtUtc, SalvageItemValue item, long quantity)
         {
-            this.returns.Add(returnAtUtc);
+            AddVoyage(returnAtUtc);
             if (this.quantities.TryGetValue(item.ItemId, out var current))
                 this.quantities[item.ItemId] = (item, checked(current.Quantity + quantity));
             else
                 this.quantities[item.ItemId] = (item, quantity);
+
+            var voyage = this.voyageQuantities[returnAtUtc];
+            if (voyage.TryGetValue(item.ItemId, out var voyageCurrent))
+                voyage[item.ItemId] = (item, checked(voyageCurrent.Quantity + quantity));
+            else
+                voyage[item.ItemId] = (item, quantity);
         }
 
-        public SubmarineSalvageSummary Build()
+        public SubmarineSalvageSummary Build(TrackedSubmarineKey key)
         {
             var orderedReturns = this.returns.Order().ToArray();
             var items = this.quantities.Values
@@ -329,11 +357,26 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
                     value.Quantity))
                 .OrderBy(item => item.ItemId)
                 .ToArray();
-            return new SubmarineSalvageSummary(
+            var summary = new SubmarineSalvageSummary(
                 orderedReturns.Length,
                 orderedReturns.FirstOrDefault() == default ? null : orderedReturns[0],
                 orderedReturns.LastOrDefault() == default ? null : orderedReturns[^1],
                 items);
+            return summary with
+            {
+                Voyages = orderedReturns.Select(returnAtUtc => new SalvageVoyageRecord(
+                    key.FcIdKey,
+                    key.SubmarineId,
+                    returnAtUtc,
+                    this.voyageQuantities[returnAtUtc].Values
+                        .Select(value => new SalvageItemTotal(
+                            value.Item.ItemId,
+                            value.Item.Name,
+                            value.Item.NpcSalePrice,
+                            value.Quantity))
+                        .OrderBy(item => item.ItemId)
+                        .ToArray())).ToArray(),
+            };
         }
     }
 }

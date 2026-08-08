@@ -6,7 +6,8 @@ public sealed class EtaPlannerService(
     ISubmarineTrackerStateReader stateReader,
     IEtaSimulator simulator,
     IRouteSearchDiagnostics? routeSearchDiagnostics = null,
-    IPlannerDataDiagnostics? dataDiagnostics = null)
+    IPlannerDataDiagnostics? dataDiagnostics = null,
+    int maximumRank = int.MaxValue)
 {
     public SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings)
         => stateReader.GetDataFingerprint(settings);
@@ -31,7 +32,23 @@ public sealed class EtaPlannerService(
         Action<EtaPlannerSnapshot>? reportProgress,
         EtaPlannerSnapshot? previousSnapshot,
         ForecastRefreshMode refreshMode)
+        => Calculate(
+            PlannerCalculationRequest.FromGlobalSettings(settings),
+            now,
+            cancellationToken,
+            reportProgress,
+            previousSnapshot,
+            refreshMode);
+
+    public EtaPlannerSnapshot Calculate(
+        PlannerCalculationRequest request,
+        DateTimeOffset now,
+        CancellationToken cancellationToken,
+        Action<EtaPlannerSnapshot>? reportProgress = null,
+        EtaPlannerSnapshot? previousSnapshot = null,
+        ForecastRefreshMode refreshMode = ForecastRefreshMode.Full)
     {
+        var settings = request.GlobalSettings;
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         routeSearchDiagnostics?.ResetRouteSearchMetrics();
         var warnings = new List<string>();
@@ -41,15 +58,24 @@ public sealed class EtaPlannerService(
             .Select(EnsureFingerprint)
             .ToArray();
         var settingsFingerprint = CalculationSettingsFingerprint.Create(settings);
+        var effectiveSettings = fcStates.ToDictionary(
+            fc => fc.FcIdKey,
+            fc => EffectiveEtaSettingsResolver.Resolve(
+                settings,
+                request.FreeCompanyOverrides.TryGetValue(fc.FcIdKey, out var simulationOverride) ? simulationOverride : null,
+                maximumRank),
+            StringComparer.OrdinalIgnoreCase);
+        var effectiveSettingsFingerprints = effectiveSettings.ToDictionary(
+            pair => pair.Key,
+            pair => CalculationSettingsFingerprint.Create(pair.Value),
+            StringComparer.OrdinalIgnoreCase);
         var results = new Dictionary<string, EtaResult>();
         var progress = new Dictionary<string, FcCalculationProgress>();
         var calculatedCount = 0;
         var reusedCount = 0;
         var awaitingTrackerCount = 0;
 
-        var canReuse = refreshMode == ForecastRefreshMode.Incremental &&
-                       previousSnapshot is not null &&
-                       previousSnapshot.CalculationSettingsFingerprint == settingsFingerprint;
+        var canReuse = refreshMode == ForecastRefreshMode.Incremental && previousSnapshot is not null;
         var previousStates = canReuse
             ? previousSnapshot!.FreeCompanies.ToDictionary(fc => fc.FcIdKey)
             : new Dictionary<string, FcState>();
@@ -64,7 +90,8 @@ public sealed class EtaPlannerService(
         {
             if (CanReuseCompletedResult(
                     fc,
-                    settings.TargetRank,
+                    effectiveSettings[fc.FcIdKey].TargetRank,
+                    effectiveSettingsFingerprints[fc.FcIdKey],
                     now,
                     previousSnapshot,
                     previousStates,
@@ -155,6 +182,7 @@ public sealed class EtaPlannerService(
                 FcProgress = progressArray,
                 IsRunning = isRunning,
                 CalculationSettingsFingerprint = settingsFingerprint,
+                FcCalculationSettingsFingerprints = effectiveSettingsFingerprints,
                 RefreshMode = refreshMode,
             };
         }
@@ -165,13 +193,14 @@ public sealed class EtaPlannerService(
 
         var calculationOrder = fcStates
             .Where(fc => progress[fc.FcIdKey].Status == FcCalculationStatus.Queued)
-            .OrderBy(fc => IsReadyNow(fc, settings.TargetRank) ? 0 : 1)
+            .OrderBy(fc => IsReadyNow(fc, effectiveSettings[fc.FcIdKey].TargetRank) ? 0 : 1)
             .ThenByDescending(fc => fc.Submarines.Count == 0 ? 0 : fc.Submarines.Min(submarine => submarine.Rank))
             .ThenBy(fc => fc.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         foreach (var fc in calculationOrder)
         {
+            var fcSettings = effectiveSettings[fc.FcIdKey];
             cancellationToken.ThrowIfCancellationRequested();
             var startedAtUtc = DateTimeOffset.UtcNow;
             progress[fc.FcIdKey] = progress[fc.FcIdKey] with
@@ -182,13 +211,13 @@ public sealed class EtaPlannerService(
             };
             Publish(isRunning: true);
 
-            var deadlineUtc = settings.CalculationTimeLimitSeconds > 0
-                ? startedAtUtc.AddSeconds(settings.CalculationTimeLimitSeconds)
+            var deadlineUtc = fcSettings.CalculationTimeLimitSeconds > 0
+                ? startedAtUtc.AddSeconds(fcSettings.CalculationTimeLimitSeconds)
                 : (DateTimeOffset?)null;
 
             try
             {
-                var result = simulator.Simulate(fc, settings, now, deadlineUtc, cancellationToken);
+                var result = simulator.Simulate(fc, fcSettings, now, deadlineUtc, cancellationToken);
                 calculatedCount++;
                 results[fc.FcIdKey] = result;
                 var timedOut = !result.IsComplete &&
@@ -200,7 +229,7 @@ public sealed class EtaPlannerService(
                 var message = calculationStatus switch
                 {
                     FcCalculationStatus.TimedOut =>
-                        $"Timed out after {settings.CalculationTimeLimitSeconds} seconds; continuing with the next FC.",
+                        $"Timed out after {fcSettings.CalculationTimeLimitSeconds} seconds; continuing with the next FC.",
                     FcCalculationStatus.Partial => result.IncompleteReason ?? "Forecast is partial.",
                     _ => $"Completed with {result.ProbabilitySampleCount} probability samples.",
                 };
@@ -244,6 +273,7 @@ public sealed class EtaPlannerService(
     private static bool CanReuseCompletedResult(
         FcState fc,
         int targetRank,
+        CalculationSettingsFingerprint effectiveSettingsFingerprint,
         DateTimeOffset now,
         EtaPlannerSnapshot? previousSnapshot,
         IReadOnlyDictionary<string, FcState> previousStates,
@@ -255,6 +285,8 @@ public sealed class EtaPlannerService(
         previousResult = null;
         awaitingTracker = false;
         if (previousSnapshot is null ||
+            !previousSnapshot.FcCalculationSettingsFingerprints.TryGetValue(fc.FcIdKey, out var previousSettingsFingerprint) ||
+            previousSettingsFingerprint != effectiveSettingsFingerprint ||
             !previousStates.TryGetValue(fc.FcIdKey, out var previousState) ||
             previousState.DataFingerprint != fc.DataFingerprint ||
             !previousResults.TryGetValue(fc.FcIdKey, out previousResult) ||
@@ -346,6 +378,9 @@ public sealed record EtaPlannerSnapshot(
     public bool IsRunning { get; init; }
 
     public CalculationSettingsFingerprint CalculationSettingsFingerprint { get; init; }
+
+    public IReadOnlyDictionary<string, CalculationSettingsFingerprint> FcCalculationSettingsFingerprints { get; init; }
+        = new Dictionary<string, CalculationSettingsFingerprint>(StringComparer.OrdinalIgnoreCase);
 
     public ForecastRefreshMode RefreshMode { get; init; } = ForecastRefreshMode.Full;
 }

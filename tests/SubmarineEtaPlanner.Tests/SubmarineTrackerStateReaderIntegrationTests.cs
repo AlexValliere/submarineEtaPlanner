@@ -38,7 +38,9 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             Assert.Equal(new SubmarineBuildParts(1, 2, 3, 4), submarine.BuildParts);
             Assert.Equal(new uint[] { 1, 3 }, submarine.CurrentRoute);
             Assert.True(submarine.CurrentVoyageKnown);
-            Assert.Equal(2, submarine.Salvage.VoyageCount);
+            Assert.Equal(3, submarine.Salvage.VoyageCount);
+            Assert.Equal(3, submarine.Salvage.Voyages.Count);
+            Assert.Contains(submarine.Salvage.Voyages, voyage => voyage.GrossNpcGil == 0);
             Assert.Equal(7, submarine.Salvage.ItemCount);
             Assert.Equal(64_000, submarine.Salvage.TotalGil);
             Assert.Equal(3, submarine.Salvage.Items.Single(item => item.ItemId == 22500).Quantity);

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0.0
+
+- Replaced Dashboard with favorite-first Operations and added fleet-wide Leveling, Income, and FC Setup screens.
+- Added per-FC target-rank and leveling-strategy overrides with isolated incremental recalculation.
+- Added action guidance, route EXP and rank projections, complete submarine rosters, fleet completion ranges, and persistent view controls.
+- Added voyage-level salvage history and 7/30/90-day and lifetime gross-gil reporting, including valid zero-salvage returns.
+- Consolidated the existing configuration pages into one Settings screen with internal tabs.
+
 ## 0.4.17.0
 
 - Fixed the dashboard crash caused by transient SubmarineTracker rows with a missing return time and stale route while collecting or redispatching submarines.

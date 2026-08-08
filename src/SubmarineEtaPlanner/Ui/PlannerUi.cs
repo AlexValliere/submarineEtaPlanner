@@ -60,7 +60,9 @@ internal static class PlannerUi
         int targetRank,
         string etaModel,
         bool showRefresh,
-        bool refreshing)
+        bool refreshing,
+        bool showGlobalLabels = false,
+        int overrideCount = 0)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var origin = ImGui.GetCursorScreenPos();
@@ -83,9 +85,14 @@ internal static class PlannerUi
         ImGui.SetCursorScreenPos(origin + new Vector2(18f, 41f) * scale);
         ImGui.TextColored(Muted, subtitle);
         ImGui.SetCursorScreenPos(origin + new Vector2(18f, 67f) * scale);
-        DrawStatusPill($"Target {targetRank}", Cyan);
+        DrawStatusPill($"{(showGlobalLabels ? "Global target" : "Target")} {targetRank}", Cyan);
         ImGui.SameLine();
-        DrawStatusPill(etaModel, Teal);
+        DrawStatusPill($"{(showGlobalLabels ? "Global strategy · " : string.Empty)}{etaModel}", Teal);
+        if (showGlobalLabels && overrideCount > 0)
+        {
+            ImGui.SameLine();
+            DrawStatusPill($"{overrideCount} FC override{(overrideCount == 1 ? string.Empty : "s")}", Amber);
+        }
 
         var clicked = false;
         if (showRefresh)

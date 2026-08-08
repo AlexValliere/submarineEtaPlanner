@@ -10,27 +10,50 @@ public sealed partial class PlannerWindow
 {
     private void DrawSettingsPage()
     {
-        switch (this.currentPage)
+        DrawSettingsTabs();
+        ImGui.Spacing();
+        switch (this.settingsSection)
         {
-            case PlannerPage.Simulation:
+            case SettingsSection.Simulation:
                 DrawSimulationSettings();
                 break;
-            case PlannerPage.Routes:
+            case SettingsSection.Routes:
                 DrawRouteSettings();
                 break;
-            case PlannerPage.Limits:
+            case SettingsSection.Limits:
                 DrawLimitSettings();
                 break;
-            case PlannerPage.DataSource:
+            case SettingsSection.DataSource:
                 DrawDataSourceSettings();
                 break;
-            case PlannerPage.BuildProfile:
+            case SettingsSection.BuildProfile:
                 DrawBuildProfileSettings();
                 break;
-            case PlannerPage.Display:
+            case SettingsSection.Display:
                 DrawDisplaySettings();
                 break;
         }
+    }
+
+    private void DrawSettingsTabs()
+    {
+        DrawSettingsTab("Simulation", SettingsSection.Simulation);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawSettingsTab("Routes", SettingsSection.Routes);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawSettingsTab("Limits", SettingsSection.Limits);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawSettingsTab("Data source", SettingsSection.DataSource);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawSettingsTab("Build profile", SettingsSection.BuildProfile);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawSettingsTab("Display", SettingsSection.Display);
+    }
+
+    private void DrawSettingsTab(string label, SettingsSection section)
+    {
+        if (PlannerUi.SegmentedButton($"settings-tab-{section}", label, this.settingsSection == section))
+            this.settingsSection = section;
     }
 
     private void DrawSimulationSettings()
