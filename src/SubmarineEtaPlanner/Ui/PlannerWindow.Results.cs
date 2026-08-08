@@ -1072,6 +1072,7 @@ public sealed partial class PlannerWindow
             ImGui.TextUnformatted(plan.RepeatCount.ToString());
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.BuildCode);
+            PlannerUi.Tooltip("Planned build used for this modeled future voyage.");
             if (showDiagnostics)
             {
                 ImGui.TableNextColumn();

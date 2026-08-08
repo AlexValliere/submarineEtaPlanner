@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Added current-mode Income filters, a one-year reporting period, and simpler Income metric labels.",
+  "Changelog": "Restored current submarine build context across fleet views and added build-and-rank income comparisons.",
   "Tags": [
     "Submarine",
     "ETA",

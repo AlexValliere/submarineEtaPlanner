@@ -34,6 +34,7 @@ public sealed partial class PlannerWindow
         IncomeHeaderColumn FreeCompany,
         IncomeHeaderColumn World,
         IncomeHeaderColumn Mode,
+        IncomeHeaderColumn BuildsAndRanks,
         IncomeHeaderColumn GrossGil,
         IncomeHeaderColumn GilPerDay,
         IncomeHeaderColumn GilPerVoyage,
@@ -187,7 +188,7 @@ public sealed partial class PlannerWindow
         var metrics = IncomeMetricsOrdering.Order(
             currentSnapshot.FreeCompanies
             .Where(fc => includedFcIds.Contains(fc.FcIdKey))
-            .Select(fc => IncomeMetricsCalculator.Calculate(fc, now, period)),
+            .Select(fc => IncomeMetricsCalculator.Calculate(fc, now, period, this.catalog)),
             this.configuration.IncomeSort,
             metric => this.configuration.GetFcPreferences(metric.FcIdKey).Favorite);
 
@@ -538,7 +539,10 @@ public sealed partial class PlannerWindow
         ImGui.Separator();
         foreach (var submarine in projection.Submarines)
         {
-            ImGui.TextUnformatted($"{submarine.Name}: R{submarine.Rank} · {CompactOperationalStatePresentation.Create(submarine).Label}");
+            ImGui.TextUnformatted(
+                $"{submarine.Name}: R{submarine.Rank} · {submarine.CurrentBuild.Code} · {CompactOperationalStatePresentation.Create(submarine).Label}");
+            if (submarine.CurrentBuild.UnavailableReason is not null)
+                PlannerUi.Tooltip(submarine.CurrentBuild.UnavailableReason);
         }
 
         if (context.CurrentVoyages.Primary is { } primary)
@@ -558,7 +562,7 @@ public sealed partial class PlannerWindow
 
     private void DrawOperationsSubmarineTable(FcOperationalProjection projection, DateTimeOffset now)
     {
-        const float minimumWidth = 900f;
+        const float minimumWidth = 1_000f;
         var scaledMinimumWidth = minimumWidth * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < scaledMinimumWidth;
         var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
@@ -567,7 +571,7 @@ public sealed partial class PlannerWindow
         var tableHeight = CalculateTableHeight(projection.Submarines.Count, needsHorizontalScroll);
         if (!ImGui.BeginTable(
                 $"operations-projection-table-{projection.State.FcIdKey}",
-                7,
+                8,
                 flags,
                 new Vector2(-1, tableHeight),
                 needsHorizontalScroll ? scaledMinimumWidth : 0f))
@@ -575,6 +579,7 @@ public sealed partial class PlannerWindow
 
         ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 150f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Rank → after voyage", ImGuiTableColumnFlags.WidthFixed, 125f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("State", ImGuiTableColumnFlags.WidthFixed, 90f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Current / next route", ImGuiTableColumnFlags.WidthStretch, 1.2f);
         ImGui.TableSetupColumn("Purpose", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
@@ -591,6 +596,8 @@ public sealed partial class PlannerWindow
             ImGui.TextUnformatted(rankPresentation.Label);
             if (rankPresentation.Tooltip is not null)
                 PlannerUi.Tooltip(rankPresentation.Tooltip);
+            ImGui.TableNextColumn();
+            DrawCurrentBuild(submarine.CurrentBuild);
             ImGui.TableNextColumn();
             var compactState = CompactOperationalStatePresentation.Create(submarine);
             ImGui.TextUnformatted(compactState.Label);
@@ -654,7 +661,7 @@ public sealed partial class PlannerWindow
 
     private void DrawLevelingSubmarineTable(FcOperationalProjection projection, DateTimeOffset now)
     {
-        const float minimumWidth = 900f;
+        const float minimumWidth = 1_000f;
         var scaledMinimumWidth = minimumWidth * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < scaledMinimumWidth;
         var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
@@ -663,7 +670,7 @@ public sealed partial class PlannerWindow
         var tableHeight = CalculateTableHeight(projection.Submarines.Count, needsHorizontalScroll);
         if (!ImGui.BeginTable(
                 $"leveling-projection-table-{projection.State.FcIdKey}",
-                7,
+                8,
                 flags,
                 new Vector2(-1, tableHeight),
                 needsHorizontalScroll ? scaledMinimumWidth : 0f))
@@ -671,6 +678,7 @@ public sealed partial class PlannerWindow
 
         ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 165f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Rank → after voyage", ImGuiTableColumnFlags.WidthFixed, 125f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("State", ImGuiTableColumnFlags.WidthFixed, 90f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Current / next route", ImGuiTableColumnFlags.WidthStretch, 1.2f);
         ImGui.TableSetupColumn("Purpose", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
@@ -710,6 +718,8 @@ public sealed partial class PlannerWindow
             ImGui.TextUnformatted(rankPresentation.Label);
             if (rankPresentation.Tooltip is not null)
                 PlannerUi.Tooltip(rankPresentation.Tooltip);
+            ImGui.TableNextColumn();
+            DrawCurrentBuild(submarine.CurrentBuild);
             ImGui.TableNextColumn();
             var compactState = CompactOperationalStatePresentation.Create(submarine);
             ImGui.TextUnformatted(compactState.Label);
@@ -783,57 +793,56 @@ public sealed partial class PlannerWindow
         var fcWidth = MeasureHeaderColumn(values.Select(value => value.FreeCompany), "FC", 90f, 155f);
         var worldWidth = MeasureHeaderColumn(values.Select(value => value.World), "World", 85f, 145f);
         var modeWidth = MeasureHeaderColumn(values.Select(value => value.Mode), "Mode", 78f, 105f);
+        var buildsWidth = MeasureHeaderColumn(values.Select(value => value.BuildsAndRanks), "Builds / ranks", 150f, 360f);
         var grossWidth = MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 95f, 145f);
         var dayWidth = MeasureHeaderColumn(values.Select(value => value.GilPerDay), "Gil / day", 88f, 125f);
         var voyageWidth = MeasureHeaderColumn(values.Select(value => value.GilPerVoyage), "Gil / voyage", 100f, 140f);
         var countWidth = MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 72f, 100f);
-        var singleLineRequired = gutter + fcWidth + worldWidth + modeWidth + grossWidth + dayWidth + voyageWidth + countWidth + (gap * 6f);
-        var lineHeight = ImGui.GetTextLineHeight();
-
-        if (availableWidth >= singleLineRequired)
+        var widths = FitIncomeHeaderWidths(
+            [fcWidth, worldWidth, modeWidth, buildsWidth, grossWidth, dayWidth, voyageWidth, countWidth],
+            [72f * scale, 66f * scale, 60f * scale, 120f * scale, 80f * scale, 68f * scale, 78f * scale, 48f * scale],
+            Math.Max(1f, availableWidth - gutter - (gap * 7f)));
+        var offset = gutter;
+        IncomeHeaderColumn NextColumn(int index)
         {
-            var fc = new IncomeHeaderColumn(gutter, fcWidth, 0);
-            var world = new IncomeHeaderColumn(fc.Offset + fc.Width + gap, worldWidth, 0);
-            var mode = new IncomeHeaderColumn(world.Offset + world.Width + gap, modeWidth, 0);
-            var gross = new IncomeHeaderColumn(mode.Offset + mode.Width + gap, grossWidth, 0);
-            var day = new IncomeHeaderColumn(gross.Offset + gross.Width + gap, dayWidth, 0);
-            var voyage = new IncomeHeaderColumn(day.Offset + day.Width + gap, voyageWidth, 0);
-            var countOffset = voyage.Offset + voyage.Width + gap;
-            return new IncomeHeaderLayout(
-                false,
-                ImGui.GetFrameHeight(),
-                ImGui.GetFrameHeight(),
-                fc,
-                world,
-                mode,
-                gross,
-                day,
-                voyage,
-                new IncomeHeaderColumn(countOffset, Math.Max(1f, availableWidth - countOffset), 0));
+            var column = new IncomeHeaderColumn(offset, widths[index], 0);
+            offset += widths[index] + gap;
+            return column;
+        }
+        return new IncomeHeaderLayout(
+            false,
+            ImGui.GetFrameHeight(),
+            ImGui.GetFrameHeight(),
+            NextColumn(0),
+            NextColumn(1),
+            NextColumn(2),
+            NextColumn(3),
+            NextColumn(4),
+            NextColumn(5),
+            NextColumn(6),
+            NextColumn(7));
+    }
+
+    private static float[] FitIncomeHeaderWidths(
+        IReadOnlyList<float> desiredWidths,
+        IReadOnlyList<float> minimumWidths,
+        float availableWidth)
+    {
+        var desiredTotal = desiredWidths.Sum();
+        if (availableWidth >= desiredTotal)
+            return desiredWidths.ToArray();
+
+        var minimumTotal = minimumWidths.Sum();
+        if (availableWidth <= minimumTotal)
+        {
+            var compactScale = availableWidth / minimumTotal;
+            return minimumWidths.Select(width => Math.Max(1f, width * compactScale)).ToArray();
         }
 
-        var contentWidth = Math.Max(1f, availableWidth - gutter);
-        var firstLineWidth = Math.Max(1f, contentWidth - (gap * 3f));
-        var fcTwoLine = Math.Max(82f * scale, firstLineWidth * 0.25f);
-        var worldTwoLine = Math.Max(82f * scale, firstLineWidth * 0.23f);
-        var modeTwoLine = Math.Max(75f * scale, firstLineWidth * 0.17f);
-        var grossTwoLine = Math.Max(1f, firstLineWidth - fcTwoLine - worldTwoLine - modeTwoLine);
-        var secondLineWidth = Math.Max(1f, contentWidth - (gap * 2f));
-        var dayTwoLine = Math.Max(90f * scale, secondLineWidth * 0.32f);
-        var voyageTwoLine = Math.Max(105f * scale, secondLineWidth * 0.38f);
-        var countTwoLine = Math.Max(1f, secondLineWidth - dayTwoLine - voyageTwoLine);
-        var height = (lineHeight * 2f) + (14f * scale);
-        return new IncomeHeaderLayout(
-            true,
-            height,
-            height,
-            new IncomeHeaderColumn(gutter, fcTwoLine, 0),
-            new IncomeHeaderColumn(gutter + fcTwoLine + gap, worldTwoLine, 0),
-            new IncomeHeaderColumn(gutter + fcTwoLine + gap + worldTwoLine + gap, modeTwoLine, 0),
-            new IncomeHeaderColumn(gutter + fcTwoLine + gap + worldTwoLine + gap + modeTwoLine + gap, grossTwoLine, 0),
-            new IncomeHeaderColumn(gutter, dayTwoLine, 1),
-            new IncomeHeaderColumn(gutter + dayTwoLine + gap, voyageTwoLine, 1),
-            new IncomeHeaderColumn(gutter + dayTwoLine + gap + voyageTwoLine + gap, countTwoLine, 1));
+        var expansion = (availableWidth - minimumTotal) / Math.Max(1f, desiredTotal - minimumTotal);
+        return desiredWidths
+            .Select((width, index) => minimumWidths[index] + ((width - minimumWidths[index]) * expansion))
+            .ToArray();
     }
 
     private static void DrawIncomeHeaderLegend(IncomeHeaderLayout layout)
@@ -851,7 +860,10 @@ public sealed partial class PlannerWindow
                 "Gil / day",
                 "Gil / voyage",
                 "Voyages",
-                false),
+                false)
+            {
+                BuildsAndRanks = "Builds / ranks",
+            },
             legend: true);
         ImGui.Dummy(new Vector2(ImGui.GetContentRegionAvail().X, layout.LegendHeight));
     }
@@ -893,6 +905,7 @@ public sealed partial class PlannerWindow
         DrawIncomeHeaderCell(origin, layout, layout.World, presentation.World, normal);
         DrawIncomeHeaderCell(origin, layout, layout.Mode, presentation.Mode,
             legend ? PlannerUi.Muted : presentation.IsFarming ? PlannerUi.Green : PlannerUi.Teal);
+        DrawIncomeHeaderCell(origin, layout, layout.BuildsAndRanks, presentation.BuildsAndRanks, normal);
         DrawIncomeHeaderCell(origin, layout, layout.GrossGil, presentation.GrossGil,
             legend ? PlannerUi.Muted : PlannerUi.Green);
         DrawIncomeHeaderCell(origin, layout, layout.GilPerDay, presentation.GilPerDay, normal);
@@ -943,12 +956,21 @@ public sealed partial class PlannerWindow
         ImGui.TextUnformatted($"Gil per day: {metric.GilPerDay:N0}");
         ImGui.TextUnformatted($"Gil per voyage: {metric.GilPerVoyage:N0}");
         ImGui.TextColored(PlannerUi.Muted, $"Coverage: {FormatIncomeDate(metric.FirstReturnAtUtc)} – {FormatIncomeDate(metric.LastReturnAtUtc)}");
+        ImGui.Separator();
+        ImGui.TextColored(PlannerUi.Teal, "Current builds and ranks");
+        foreach (var submarine in metric.Submarines)
+        {
+            ImGui.TextUnformatted($"{submarine.Name}: {submarine.CurrentBuild.Code} · R{submarine.Rank}");
+            if (submarine.CurrentBuild.UnavailableReason is not null)
+                PlannerUi.Tooltip(submarine.CurrentBuild.UnavailableReason);
+        }
+        ImGui.TextColored(PlannerUi.Muted, "Current tracker values; recorded income may come from earlier ranks or builds.");
         ImGui.EndTooltip();
     }
 
     private static void DrawIncomeSubmarineTable(IncomeFcMetrics metric)
     {
-        const float minimumWidth = 900f;
+        const float minimumWidth = 1_080f;
         var scaledMinimumWidth = minimumWidth * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < scaledMinimumWidth;
         var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
@@ -957,13 +979,15 @@ public sealed partial class PlannerWindow
         var tableHeight = CalculateTableHeight(metric.Submarines.Count, needsHorizontalScroll);
         if (!ImGui.BeginTable(
                 $"income-table-{metric.FcIdKey}",
-                7,
+                9,
                 flags,
                 new Vector2(-1, tableHeight),
                 needsHorizontalScroll ? scaledMinimumWidth : 0f))
             return;
 
         ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 165f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 68f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Gross gil", ImGuiTableColumnFlags.WidthStretch, 1f);
         ImGui.TableSetupColumn("Gil/day", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Voyages", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
@@ -976,6 +1000,9 @@ public sealed partial class PlannerWindow
         {
             ImGui.TableNextRow();
             DrawTableText(submarine.Name);
+            DrawTableText($"R{submarine.Rank}");
+            ImGui.TableNextColumn();
+            DrawCurrentBuild(submarine.CurrentBuild);
             DrawTableText($"{submarine.GrossGil:N0}");
             DrawTableText($"{submarine.GilPerDay:N0}");
             DrawTableText(submarine.ValidVoyages.ToString("N0"));
@@ -1108,6 +1135,13 @@ public sealed partial class PlannerWindow
     {
         ImGui.TableNextColumn();
         ImGui.TextUnformatted(text);
+    }
+
+    private static void DrawCurrentBuild(CurrentBuildPresentation build)
+    {
+        ImGui.TextUnformatted(build.Code);
+        if (build.UnavailableReason is not null)
+            PlannerUi.Tooltip(build.UnavailableReason);
     }
 
     private static string FormatIncomeDate(DateTimeOffset? value)

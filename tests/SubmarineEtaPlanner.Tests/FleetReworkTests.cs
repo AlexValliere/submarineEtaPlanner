@@ -233,6 +233,38 @@ public sealed class FleetReworkTests
     }
 
     [Fact]
+    public void FleetProjectionUsesCurrentTrackedBuildAndExplainsMissingBuildData()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var fc = CreateFc(115, now.AddHours(2), [1], currentKnown: true);
+        var settings = EtaSettings.CreateDefault() with { TargetRank = 120 };
+
+        var resolved = Assert.Single(FleetPresentationBuilder.Create(
+            fc,
+            CreateResult(fc, 120, now),
+            settings,
+            new StubCatalog { BuildCode = "WSCU++" },
+            now).Submarines);
+
+        Assert.Equal("WSCU++", resolved.CurrentBuild.Code);
+        Assert.Null(resolved.CurrentBuild.UnavailableReason);
+
+        var incompleteFc = fc with
+        {
+            Submarines = [fc.Submarines[0] with { BuildParts = SubmarineBuildParts.Empty }],
+        };
+        var incomplete = Assert.Single(FleetPresentationBuilder.Create(
+            incompleteFc,
+            CreateResult(incompleteFc, 120, now),
+            settings,
+            new StubCatalog(),
+            now).Submarines);
+
+        Assert.Equal("—", incomplete.CurrentBuild.Code);
+        Assert.NotNull(incomplete.CurrentBuild.UnavailableReason);
+    }
+
+    [Fact]
     public void FarmingVoyageProjectsPastTheFcTargetToCatalogMaximum()
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(1);
@@ -405,6 +437,125 @@ public sealed class FleetReworkTests
         Assert.NotEqual(before.GilPerDay, after.GilPerDay);
     }
 
+    [Fact]
+    public void IncomeHeaderListsCurrentBuildsAndRanksInTrackedOrder()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var original = CreateFc(115, now.AddHours(2), [1], currentKnown: true);
+        var ranks = new[] { 115, 115, 116, 114 };
+        var fc = original with
+        {
+            FreeCompanyTag = "INCOME",
+            Submarines = ranks.Select((rank, index) => original.Submarines[0] with
+            {
+                SubmarineId = index + 1,
+                Name = $"Sub {index + 1}",
+                Rank = rank,
+            }).ToArray(),
+        };
+        var projection = FleetPresentationBuilder.Create(
+            fc,
+            CreateResult(fc, 120, now),
+            EtaSettings.CreateDefault() with { TargetRank = 120 },
+            new StubCatalog(),
+            now);
+        var builds = new[] { "WSCC", "WCSS", "WCUS", "WSCU++" };
+        var metric = new IncomeFcMetrics(
+            fc.FcIdKey,
+            fc.DisplayName,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null,
+            ranks.Select((rank, index) => new IncomeSubmarineMetrics(index + 1, $"Sub {index + 1}", 0, 0, 0, 0, null, null)
+            {
+                Rank = rank,
+                CurrentBuild = new CurrentBuildPresentation(builds[index], null),
+            }).ToArray());
+
+        var header = IncomeFcHeaderPresentation.Create(projection, metric, favorite: false);
+
+        Assert.Equal("[WSCC:115 | WCSS:115 | WCUS:116 | WSCU++:114]", header.BuildsAndRanks);
+        Assert.Equal("R115 · R115 · R116 · R114", OperationsFcHeaderPresentation.Create(projection, false, now).Ranks);
+    }
+
+    [Fact]
+    public void IncomeHeaderRetainsRepeatedCurrentBuildCodes()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var fc = CreateFc(115, now.AddHours(2), [1], currentKnown: true);
+        var projection = FleetPresentationBuilder.Create(
+            fc,
+            CreateResult(fc, 120, now),
+            EtaSettings.CreateDefault() with { TargetRank = 120 },
+            new StubCatalog(),
+            now);
+        var metric = new IncomeFcMetrics(
+            fc.FcIdKey,
+            fc.DisplayName,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null,
+            [
+                new IncomeSubmarineMetrics(1, "One", 0, 0, 0, 0, null, null)
+                {
+                    Rank = 115,
+                    CurrentBuild = new CurrentBuildPresentation("WSCC", null),
+                },
+                new IncomeSubmarineMetrics(2, "Two", 0, 0, 0, 0, null, null)
+                {
+                    Rank = 116,
+                    CurrentBuild = new CurrentBuildPresentation("WSCC", null),
+                },
+            ]);
+
+        var header = IncomeFcHeaderPresentation.Create(projection, metric, favorite: false);
+
+        Assert.Equal("[WSCC:115 | WSCC:116]", header.BuildsAndRanks);
+    }
+
+    [Fact]
+    public void IncomeMetricsIncludeCurrentRankAndTrackedBuild()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var fc = CreateFc(115, DateTimeOffset.MinValue, [], currentKnown: true);
+
+        var metric = IncomeMetricsCalculator.Calculate(
+            fc,
+            now,
+            period: null,
+            catalog: new StubCatalog { BuildCode = "WSCC" });
+
+        var submarine = Assert.Single(metric.Submarines);
+        Assert.Equal(115, submarine.Rank);
+        Assert.Equal("WSCC", submarine.CurrentBuild.Code);
+        Assert.Null(submarine.CurrentBuild.UnavailableReason);
+    }
+
+    [Fact]
+    public void IncomeMetricsMarkMissingTrackedBuildAsUnavailable()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var original = CreateFc(115, DateTimeOffset.MinValue, [], currentKnown: true);
+        var fc = original with
+        {
+            Submarines = [original.Submarines[0] with { BuildParts = SubmarineBuildParts.Empty }],
+        };
+
+        var metric = IncomeMetricsCalculator.Calculate(fc, now, period: null, catalog: new StubCatalog());
+        var submarine = Assert.Single(metric.Submarines);
+
+        Assert.Equal("—", submarine.CurrentBuild.Code);
+        Assert.NotNull(submarine.CurrentBuild.UnavailableReason);
+    }
+
     [Theory]
     [InlineData(IncomeView.AllFleets, null)]
     [InlineData(IncomeView.Leveling, FleetMode.Leveling)]
@@ -560,10 +711,11 @@ public sealed class FleetReworkTests
     private sealed class StubCatalog : ISubmarineCatalog
     {
         public int SupportedMaximumRank { get; init; } = 100;
+        public string BuildCode { get; init; } = "TEST";
         public int MaximumRank => SupportedMaximumRank;
         public IReadOnlyList<UnlockRule> UnlockRules => [];
         public SubmarineBuild ResolveBuild(string buildCode, int rank) => new(buildCode, rank, 0, 0, 0, 999, 100);
-        public SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank) => buildParts == SubmarineBuildParts.Empty ? null : ResolveBuild("TEST", rank);
+        public SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank) => buildParts == SubmarineBuildParts.Empty ? null : ResolveBuild(BuildCode, rank);
         public RouteSearchResult FindBestRoute(RouteSearchRequest request) => new(null, 0, false);
         public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode) => 1_000;
         public TimeSpan CalculateDuration(IReadOnlyList<uint> route, SubmarineBuild build) => TimeSpan.FromHours(1);

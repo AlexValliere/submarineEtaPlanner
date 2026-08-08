@@ -37,6 +37,24 @@ public enum RoutePurpose
     Unknown,
 }
 
+public sealed record CurrentBuildPresentation(string Code, string? UnavailableReason)
+{
+    public static CurrentBuildPresentation Unavailable { get; } = new(
+        "—",
+        "The current build is unavailable because SubmarineTracker did not provide complete build data.");
+
+    public static CurrentBuildPresentation NotResolved { get; } = new(
+        "—",
+        "Current build data was not resolved for this calculation.");
+
+    public bool IsAvailable => UnavailableReason is null;
+
+    public static CurrentBuildPresentation Create(SubmarineBuild? build)
+        => string.IsNullOrWhiteSpace(build?.Code)
+            ? Unavailable
+            : new CurrentBuildPresentation(build.Code, null);
+}
+
 public sealed record SubmarineOperationalProjection(
     long SubmarineId,
     string Name,
@@ -55,7 +73,10 @@ public sealed record SubmarineOperationalProjection(
     DateTimeOffset? TargetEtaAtUtc,
     int VoyagesRemaining,
     string? ProjectionUnavailableReason,
-    IReadOnlyList<RouteOutcome> AlternativeRoutes);
+    IReadOnlyList<RouteOutcome> AlternativeRoutes)
+{
+    public CurrentBuildPresentation CurrentBuild { get; init; } = CurrentBuildPresentation.Unavailable;
+}
 
 public sealed record FcOperationalProjection(
     FcState State,
@@ -243,6 +264,8 @@ public static class FleetPresentationBuilder
         DateTimeOffset now)
     {
         var progress = CurrentVoyageProgressFormatter.Create(submarine, catalog, now);
+        var trackedBuild = catalog.ResolveBuild(submarine.BuildParts, submarine.Rank);
+        var currentBuild = CurrentBuildPresentation.Create(trackedBuild);
         var state = !submarine.CurrentVoyageKnown && submarine.ReturnAtUtc != DateTimeOffset.MinValue
             ? OperationalState.Syncing
             : progress.State switch
@@ -284,14 +307,13 @@ public static class FleetPresentationBuilder
         }
         else
         {
-            var build = catalog.ResolveBuild(submarine.BuildParts, submarine.Rank);
-            if (build is null)
+            if (trackedBuild is null)
             {
                 unavailableReason = "The recorded submarine build is incomplete.";
             }
             else
             {
-                expectedExp = catalog.CalculateExp(route, build, settings.GetEffectiveExpMode());
+                expectedExp = catalog.CalculateExp(route, trackedBuild, settings.GetEffectiveExpMode());
                 projectedRank = catalog.ApplyExp(
                     submarine.Rank,
                     submarine.CurrentExp,
@@ -330,7 +352,10 @@ public static class FleetPresentationBuilder
             ready ? now : result?.EtaAtUtc,
             ready ? 0 : result?.VoyageCount ?? 0,
             unavailableReason,
-            result?.NextRouteOutcomes ?? []);
+            result?.NextRouteOutcomes ?? [])
+        {
+            CurrentBuild = currentBuild,
+        };
     }
 
     private static string SelectAction(OperationalState state, bool ready, bool hasKnownRoute)
@@ -429,7 +454,11 @@ public sealed record IncomeSubmarineMetrics(
     double GilPerDay,
     double GilPerVoyage,
     DateTimeOffset? FirstReturnAtUtc,
-    DateTimeOffset? LastReturnAtUtc);
+    DateTimeOffset? LastReturnAtUtc)
+{
+    public int Rank { get; init; }
+    public CurrentBuildPresentation CurrentBuild { get; init; } = CurrentBuildPresentation.Unavailable;
+}
 
 public sealed record IncomeFcMetrics(
     string FcIdKey,
@@ -481,6 +510,8 @@ internal sealed record IncomeFcHeaderPresentation(
     string Voyages,
     bool IsFarming)
 {
+    public string BuildsAndRanks { get; init; } = "—";
+
     public static IncomeFcHeaderPresentation Create(
         FcOperationalProjection projection,
         IncomeFcMetrics metric,
@@ -494,16 +525,41 @@ internal sealed record IncomeFcHeaderPresentation(
             $"{metric.GilPerDay:N0}",
             $"{metric.GilPerVoyage:N0}",
             metric.ValidVoyages.ToString("N0"),
-            projection.Mode == FleetMode.Farming);
+            projection.Mode == FleetMode.Farming)
+        {
+            BuildsAndRanks = metric.Submarines.Count == 0
+                ? "—"
+                : $"[{string.Join(" | ", metric.Submarines.Select(submarine => $"{submarine.CurrentBuild.Code}:{submarine.Rank}"))}]",
+        };
 }
 
 public static class IncomeMetricsCalculator
 {
     public static IncomeFcMetrics Calculate(FcState fc, DateTimeOffset now, TimeSpan? period)
+        => CalculateCore(fc, now, period, catalog: null);
+
+    public static IncomeFcMetrics Calculate(
+        FcState fc,
+        DateTimeOffset now,
+        TimeSpan? period,
+        ISubmarineCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        return CalculateCore(fc, now, period, catalog);
+    }
+
+    private static IncomeFcMetrics CalculateCore(
+        FcState fc,
+        DateTimeOffset now,
+        TimeSpan? period,
+        ISubmarineCatalog? catalog)
     {
         var windowStart = period is null ? (DateTimeOffset?)null : now - period.Value;
         var submarines = fc.Submarines.Select(submarine =>
         {
+            var currentBuild = catalog is null
+                ? CurrentBuildPresentation.NotResolved
+                : CurrentBuildPresentation.Create(catalog.ResolveBuild(submarine.BuildParts, submarine.Rank));
             var voyages = submarine.Salvage.Voyages
                 .Where(voyage => voyage.ReturnAtUtc <= now && (windowStart is null || voyage.ReturnAtUtc >= windowStart))
                 .OrderBy(voyage => voyage.ReturnAtUtc)
@@ -521,7 +577,11 @@ public static class IncomeMetricsCalculator
                 coveredDays <= 0 ? 0 : gil / coveredDays,
                 voyages.Length == 0 ? 0 : gil / (double)voyages.Length,
                 first,
-                last);
+                last)
+            {
+                Rank = submarine.Rank,
+                CurrentBuild = currentBuild,
+            };
         }).ToArray();
         var fcFirst = submarines.Where(item => item.FirstReturnAtUtc is not null).Select(item => item.FirstReturnAtUtc).Min();
         var fcLast = submarines.Where(item => item.LastReturnAtUtc is not null).Select(item => item.LastReturnAtUtc).Max();

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.5.0
+
+- Restored current tracked submarine build codes to Operations and Leveling detail tables and fleet-header tooltips.
+- Added current build-and-rank context to Income headers and submarine detail rows for easier fleet-income comparison.
+- Kept Income headers on one compact line and clarified that build and rank values reflect the current tracker snapshot.
+
 ## 0.5.4.0
 
 - Added All fleets, Leveling, and Farming filters to Income, with Farming as the default aggregate view.
