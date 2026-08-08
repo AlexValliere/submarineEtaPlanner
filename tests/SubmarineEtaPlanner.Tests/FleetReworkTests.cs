@@ -43,15 +43,16 @@ public sealed class FleetReworkTests
     }
 
     [Theory]
-    [InlineData(50, true, true, "Collect now; send the modeled route after synchronization")]
-    [InlineData(50, false, false, "Send recommended leveling route now")]
-    [InlineData(100, true, true, "Collect and resend farming route now")]
-    [InlineData(100, false, true, "Resend farming route after collection")]
+    [InlineData(50, true, true, "Collect now; send the modeled route after synchronization", "Ready · Collect")]
+    [InlineData(50, false, false, "Send recommended leveling route now", "Idle · Send leveling route")]
+    [InlineData(100, true, true, "Collect and resend farming route now", "Ready · Collect & resend")]
+    [InlineData(100, false, true, "Resend farming route after collection", "Underway · Resend after collection")]
     public void ActionProjectionUsesRankAndVoyageState(
         int rank,
         bool returned,
         bool hasRoute,
-        string expectedAction)
+        string expectedAction,
+        string expectedCompactState)
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(1);
         var route = hasRoute ? new uint[] { 1 } : [];
@@ -60,7 +61,9 @@ public sealed class FleetReworkTests
         var projection = FleetPresentationBuilder.Create(fc, CreateResult(fc, 90, now),
             EtaSettings.CreateDefault() with { TargetRank = 90 }, new StubCatalog(), now);
 
-        Assert.Equal(expectedAction, Assert.Single(projection.Submarines).ActionLabel);
+        var submarine = Assert.Single(projection.Submarines);
+        Assert.Equal(expectedAction, submarine.ActionLabel);
+        Assert.Equal(expectedCompactState, CompactOperationalStatePresentation.Create(submarine).Label);
         Assert.Equal(rank >= 90 ? FleetMode.Farming : FleetMode.Leveling, projection.Mode);
     }
 
@@ -79,6 +82,7 @@ public sealed class FleetReworkTests
 
         Assert.Equal(OperationalState.Syncing, submarine.State);
         Assert.Contains("SubmarineTracker", submarine.ActionLabel);
+        Assert.Equal("Syncing · Wait for tracker", CompactOperationalStatePresentation.Create(submarine).Label);
     }
 
     [Fact]
@@ -96,6 +100,61 @@ public sealed class FleetReworkTests
 
         Assert.Equal("Choose farming route", submarine.ActionLabel);
         Assert.Empty(submarine.DisplayedRoute);
+        Assert.Equal("Idle · Choose farming route", CompactOperationalStatePresentation.Create(submarine).Label);
+    }
+
+    [Fact]
+    public void OperationsHeaderUsesAlignedValuesAndRankOnlyRoster()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var original = CreateFc(142, now.AddHours(2), [1], currentKnown: true);
+        var submarines = new[] { 142, 143, 141, 140 }
+            .Select((rank, index) => original.Submarines[0] with
+            {
+                SubmarineId = index + 1,
+                Name = $"Named submarine {index + 1}",
+                Rank = rank,
+            })
+            .ToArray();
+        var fc = original with { FreeCompanyTag = "TEST", World = "Cerberus", Submarines = submarines };
+        var projection = FleetPresentationBuilder.Create(
+            fc,
+            null,
+            EtaSettings.CreateDefault() with { TargetRank = 114 },
+            new StubCatalog { SupportedMaximumRank = 150 },
+            now);
+
+        var header = OperationsFcHeaderPresentation.Create(projection, favorite: true, now);
+
+        Assert.Equal("★ TEST", header.FreeCompany);
+        Assert.Equal("Cerberus", header.World);
+        Assert.Equal("Farming", header.Mode);
+        Assert.Equal("In 2h 0m", header.Attention);
+        Assert.Equal("Ready", header.FarmReady);
+        Assert.Equal("R142 · R143 · R141 · R140", header.Ranks);
+        Assert.DoesNotContain("Named submarine", header.Ranks);
+        Assert.True(header.IsFarming);
+    }
+
+    [Fact]
+    public void OperationsHeaderShowsImmediateActionsAndFarmReadyEta()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var fc = CreateFc(50, DateTimeOffset.MinValue, [], currentKnown: true);
+        var projection = FleetPresentationBuilder.Create(
+            fc,
+            CreateResult(fc, 90, now),
+            EtaSettings.CreateDefault() with { TargetRank = 90 },
+            new StubCatalog(),
+            now);
+
+        var header = OperationsFcHeaderPresentation.Create(projection, favorite: false, now);
+
+        Assert.Equal("1 action now", header.Attention);
+        Assert.Equal("1h 0m", header.FarmReady);
+        Assert.Equal("R50", header.Ranks);
+        Assert.True(header.HasImmediateActions);
+        Assert.False(header.IsFarming);
     }
 
     [Fact]
@@ -196,7 +255,8 @@ public sealed class FleetReworkTests
 
     private sealed class StubCatalog : ISubmarineCatalog
     {
-        public int MaximumRank => 100;
+        public int SupportedMaximumRank { get; init; } = 100;
+        public int MaximumRank => SupportedMaximumRank;
         public IReadOnlyList<UnlockRule> UnlockRules => [];
         public SubmarineBuild ResolveBuild(string buildCode, int rank) => new(buildCode, rank, 0, 0, 0, 999, 100);
         public SubmarineBuild? ResolveBuild(SubmarineBuildParts buildParts, int rank) => buildParts == SubmarineBuildParts.Empty ? null : ResolveBuild("TEST", rank);

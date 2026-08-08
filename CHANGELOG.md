@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1.0
+
+- Restored aligned Operations header columns and current-voyage progress backgrounds.
+- Simplified collapsed fleet rows to rank-only rosters with details shown only after expansion.
+- Combined state and next-action guidance and sized expanded tables to their one-to-four submarine rows.
+
 ## 0.5.0.0
 
 - Replaced Dashboard with favorite-first Operations and added fleet-wide Leveling, Income, and FC Setup screens.
