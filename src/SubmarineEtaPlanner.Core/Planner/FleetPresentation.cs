@@ -119,19 +119,55 @@ internal sealed record CompactOperationalStatePresentation(string Label, string 
 {
     public static CompactOperationalStatePresentation Create(SubmarineOperationalProjection submarine)
     {
-        var ready = submarine.Rank >= submarine.EffectiveTargetRank;
         var label = submarine.State switch
         {
-            OperationalState.Syncing => "Syncing · Wait for tracker",
-            OperationalState.ReadyToCollect when ready && submarine.DisplayedRoute.Count > 0 => "Ready · Collect & resend",
-            OperationalState.ReadyToCollect => "Ready · Collect",
-            OperationalState.Underway when ready && submarine.DisplayedRoute.Count > 0 => "Underway · Resend after collection",
-            OperationalState.Underway => "Underway · Send leveling route after collection",
-            OperationalState.Idle when ready => "Idle · Choose farming route",
-            _ => "Idle · Send leveling route",
+            OperationalState.Syncing => "Syncing",
+            OperationalState.ReadyToCollect => "To collect",
+            OperationalState.Underway => "Underway",
+            _ => "Idle",
         };
         return new CompactOperationalStatePresentation(label, $"{submarine.StateLabel}\n{submarine.ActionLabel}");
     }
+}
+
+internal sealed record OperationsRankPresentation(string Label, string? Tooltip)
+{
+    public static OperationsRankPresentation Create(SubmarineOperationalProjection submarine)
+        => submarine.ProjectedRank switch
+        {
+            null => new($"R{submarine.Rank} → ?", submarine.ProjectionUnavailableReason ?? "Projected rank is unavailable."),
+            var rank when rank == submarine.Rank => new($"R{submarine.Rank}", null),
+            var rank => new($"R{submarine.Rank} → R{rank}", null),
+        };
+}
+
+internal sealed record OperationsCompletionPresentation(string Label, string Tooltip)
+{
+    public static OperationsCompletionPresentation Create(FcOperationalProjection projection)
+    {
+        if (projection.Mode == FleetMode.Farming)
+        {
+            return new OperationsCompletionPresentation(
+                $"Fleet ready · all {projection.Submarines.Count} submarines are at or above R{projection.EffectiveTargetRank}",
+                "Every currently tracked submarine has reached this FC's effective target rank.");
+        }
+
+        var prefix = $"Target R{projection.EffectiveTargetRank} · {projection.ReadyCount}/{projection.Submarines.Count} ready";
+        if (projection.CompletionP50AtUtc is not { } expected)
+            return new OperationsCompletionPresentation($"{prefix} · Expected readiness unavailable", "The forecast did not produce a reliable completion date.");
+        var label = $"{prefix} · Expected ready around {expected.LocalDateTime:g}";
+        if (projection.CompletionP10AtUtc is { } earliest && projection.CompletionP90AtUtc is { } latest)
+            label += $" · Likely between {earliest.LocalDateTime:g} and {latest.LocalDateTime:g}";
+        return new OperationsCompletionPresentation(
+            label,
+            "Based on simulated voyage and unlock outcomes; most simulated results completed within the displayed range.");
+    }
+}
+
+public static class FleetPresentationFiltering
+{
+    public static bool Includes(FcOperationalProjection projection, FleetMode? requiredMode)
+        => requiredMode is null || projection.Mode == requiredMode.Value;
 }
 
 public static class FleetPresentationBuilder

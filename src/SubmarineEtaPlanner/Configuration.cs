@@ -16,7 +16,7 @@ public sealed class Configuration : IPluginConfiguration
 
     public Dictionary<string, FcPreferences> FreeCompanyPreferences { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public OperationsView OperationsView { get; set; } = OperationsView.ReturningSoon;
+    public OperationsView OperationsView { get; set; } = OperationsView.AllFleets;
 
     public OperationsSort OperationsSort { get; set; } = OperationsSort.NextReturnActionsFirst;
 
@@ -47,6 +47,11 @@ public sealed class Configuration : IPluginConfiguration
             changed = true;
         }
         var version = Version;
+        if (version < 11 && OperationsView == OperationsView.ReturningSoon)
+        {
+            OperationsView = OperationsView.AllFleets;
+            changed = true;
+        }
         changed |= EtaSettingsMigration.Migrate(Settings, ref version);
         Version = version;
         changed |= NormalizeViewPreferences();
@@ -75,7 +80,7 @@ public sealed class Configuration : IPluginConfiguration
     private bool NormalizeViewPreferences()
     {
         var changed = false;
-        if (!Enum.IsDefined(OperationsView)) { OperationsView = global::SubmarineEtaPlanner.OperationsView.ReturningSoon; changed = true; }
+        if (!Enum.IsDefined(OperationsView) || OperationsView == global::SubmarineEtaPlanner.OperationsView.ReturningSoon) { OperationsView = global::SubmarineEtaPlanner.OperationsView.AllFleets; changed = true; }
         if (!Enum.IsDefined(OperationsSort)) { OperationsSort = global::SubmarineEtaPlanner.OperationsSort.NextReturnActionsFirst; changed = true; }
         if (!Enum.IsDefined(LevelingSort)) { LevelingSort = global::SubmarineEtaPlanner.LevelingSort.FarmReadyEta; changed = true; }
         if (!Enum.IsDefined(LevelingFilter)) { LevelingFilter = global::SubmarineEtaPlanner.LevelingFilter.All; changed = true; }
@@ -117,7 +122,7 @@ public sealed class FcPreferences
     public FcStrategyPreset? StrategyOverride { get; set; }
 }
 
-public enum OperationsView { ReturningSoon, AllFleets }
+public enum OperationsView { ReturningSoon = 0, AllFleets = 1, Leveling = 2, Farming = 3 }
 public enum OperationsSort { NextReturnActionsFirst, FarmReadyEta, FcName }
 public enum LevelingSort { FarmReadyEta, LowestRank, NextAction, FcName }
 public enum LevelingFilter { All, Actionable, Favorites }

@@ -41,17 +41,25 @@ public sealed partial class PlannerWindow
         DrawFleetNotices(currentSnapshot);
         DrawSearch("Search FC, world, or submarine…");
         ImGui.SameLine();
-        DrawOperationsViewButton("Returning soon", OperationsView.ReturningSoon);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
         DrawOperationsViewButton("All fleets", OperationsView.AllFleets);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawOperationsViewButton("Leveling", OperationsView.Leveling);
+        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        DrawOperationsViewButton("Farming", OperationsView.Farming);
         ImGui.SameLine();
         DrawOperationsSortCombo();
 
         var now = DateTimeOffset.UtcNow;
-        var filteredProjections = CreateProjections(currentSnapshot, now)
+        var allProjections = CreateProjections(currentSnapshot, now);
+        var requiredMode = this.configuration.OperationsView switch
+        {
+            OperationsView.Leveling => FleetMode.Leveling,
+            OperationsView.Farming => FleetMode.Farming,
+            _ => (FleetMode?)null,
+        };
+        var filteredProjections = allProjections
             .Where(projection => MatchesSearch(projection.State))
-            .Where(projection => this.configuration.OperationsView == OperationsView.AllFleets ||
-                                 projection.Submarines.Any(submarine => submarine.NextActionAtUtc is not null))
+            .Where(projection => FleetPresentationFiltering.Includes(projection, requiredMode))
             .ToArray();
         var projections = this.configuration.OperationsSort == OperationsSort.NextReturnActionsFirst
             ? FleetPresentationOrdering.ActionsFirst(filteredProjections, IsFavorite)
@@ -65,7 +73,7 @@ public sealed partial class PlannerWindow
                 .ToArray();
 
         ImGui.Spacing();
-        ImGui.TextColored(PlannerUi.Muted, $"{projections.Count} fleet{(projections.Count == 1 ? string.Empty : "s")} · immediate actions are followed by every known future return");
+        ImGui.TextColored(PlannerUi.Muted, $"{projections.Count} fleet{(projections.Count == 1 ? string.Empty : "s")} shown of {allProjections.Count} tracked");
         ImGui.Spacing();
         var headerContexts = projections.ToDictionary(
             projection => projection.State.FcIdKey,
@@ -333,12 +341,9 @@ public sealed partial class PlannerWindow
         if (!open)
             return;
 
-        ImGui.TextColored(
-            PlannerUi.Muted,
-            $"Target R{projection.EffectiveTargetRank} · {projection.ReadyCount}/{projection.Submarines.Count} ready" +
-            (projection.CompletionP10AtUtc is { } p10 && projection.CompletionP90AtUtc is { } p90
-                ? $" · P10–P90 {p10.LocalDateTime:g} – {p90.LocalDateTime:g}"
-                : string.Empty));
+        var completion = OperationsCompletionPresentation.Create(projection);
+        ImGui.TextColored(PlannerUi.Muted, completion.Label);
+        PlannerUi.Tooltip(completion.Tooltip);
         ImGui.Spacing();
         DrawOperationsSubmarineTable(projection, now);
     }
@@ -517,14 +522,14 @@ public sealed partial class PlannerWindow
         if (projection.CompletionP10AtUtc is { } p10 && projection.CompletionP90AtUtc is { } p90)
         {
             ImGui.Separator();
-            ImGui.TextColored(PlannerUi.Muted, $"Farm-ready range: {FormatRelative(p10, now)}–{FormatRelative(p90, now)}");
+            ImGui.TextColored(PlannerUi.Muted, $"Likely ready between {FormatRelative(p10, now)} and {FormatRelative(p90, now)}");
         }
         ImGui.EndTooltip();
     }
 
     private void DrawOperationsSubmarineTable(FcOperationalProjection projection, DateTimeOffset now)
     {
-        const float minimumWidth = 1040f;
+        const float minimumWidth = 900f;
         var scaledMinimumWidth = minimumWidth * ImGuiHelpers.GlobalScale;
         var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < scaledMinimumWidth;
         var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
@@ -533,19 +538,18 @@ public sealed partial class PlannerWindow
         var tableHeight = CalculateTableHeight(projection.Submarines.Count, needsHorizontalScroll);
         if (!ImGui.BeginTable(
                 $"operations-projection-table-{projection.State.FcIdKey}",
-                8,
+                7,
                 flags,
                 new Vector2(-1, tableHeight),
                 needsHorizontalScroll ? scaledMinimumWidth : 0f))
             return;
 
         ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 150f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 62f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("State / next step", ImGuiTableColumnFlags.WidthFixed, 235f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Rank → after voyage", ImGuiTableColumnFlags.WidthFixed, 125f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("State", ImGuiTableColumnFlags.WidthFixed, 90f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Current / next route", ImGuiTableColumnFlags.WidthStretch, 1.2f);
         ImGui.TableSetupColumn("Purpose", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Expected EXP", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Projected rank", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("Target ETA", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupScrollFreeze(1, 1);
         ImGui.TableHeadersRow();
@@ -553,7 +557,11 @@ public sealed partial class PlannerWindow
         {
             ImGui.TableNextRow();
             DrawTableText(submarine.Name);
-            DrawTableText($"R{submarine.Rank}");
+            ImGui.TableNextColumn();
+            var rankPresentation = OperationsRankPresentation.Create(submarine);
+            ImGui.TextUnformatted(rankPresentation.Label);
+            if (rankPresentation.Tooltip is not null)
+                PlannerUi.Tooltip(rankPresentation.Tooltip);
             ImGui.TableNextColumn();
             var compactState = CompactOperationalStatePresentation.Create(submarine);
             ImGui.TextUnformatted(compactState.Label);
@@ -575,7 +583,6 @@ public sealed partial class PlannerWindow
             DrawTableText(submarine.ExpectedExp is { } exp ? exp.ToString("N0") : "Unavailable");
             if (submarine.ExpectedExp is null && submarine.ProjectionUnavailableReason is not null)
                 PlannerUi.Tooltip(submarine.ProjectionUnavailableReason);
-            DrawTableText(submarine.ProjectedRank is { } rank ? $"R{rank}" : "Unavailable");
             DrawTableText(submarine.Rank >= submarine.EffectiveTargetRank
                 ? "Ready"
                 : submarine.TargetEtaAtUtc is { } eta ? FormatRelative(eta, now) : "Unavailable");

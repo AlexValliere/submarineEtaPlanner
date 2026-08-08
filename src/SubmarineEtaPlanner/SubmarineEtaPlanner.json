@@ -6,8 +6,8 @@
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
-  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.5.1.0.png",
-  "Changelog": "Restored aligned, progress-aware Operations headers and made expanded submarine tables compact and easier to read.",
+  "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon-0.5.2.0.png",
+  "Changelog": "Simplified Operations with fleet-mode filters, compact state and rank columns, and plain-language readiness forecasts.",
   "Tags": [
     "Submarine",
     "ETA",

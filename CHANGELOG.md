@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2.0
+
+- Replaced the redundant Returning soon view with All fleets, Leveling, and Farming filters.
+- Simplified submarine states and combined current and projected ranks into one compact column.
+- Replaced percentile terminology with plain-language expected and likely readiness dates.
+
 ## 0.5.1.0
 
 - Restored aligned Operations header columns and current-voyage progress backgrounds.
