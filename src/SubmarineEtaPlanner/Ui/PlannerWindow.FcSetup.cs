@@ -422,9 +422,7 @@ public sealed partial class PlannerWindow
                 "Refill before",
                 forecast.Status == FuelRunwayStatus.Unavailable
                     ? "Unavailable"
-                    : forecast.RefillBeforeUtc is { } refillBefore
-                        ? refillBefore.LocalDateTime.ToString("MMMM d 'at' HH:mm")
-                        : forecast.TanksPerDay <= 0 ? "Not required" : "Beyond forecast horizon");
+                    : FormatRefillDeadline(forecast, now));
             ImGui.EndTable();
         }
 
