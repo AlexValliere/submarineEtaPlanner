@@ -32,7 +32,7 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
-    public void ExplicitScopeDoesNotChangeSimulatorOutputYet()
+    public void AutoOnlyScopeKeepsExistingSimulatorOutput()
     {
         var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 100));
         var settings = EtaSettings.CreateDefault() with
@@ -47,7 +47,7 @@ public sealed class EtaSimulatorTests
         var scoped = simulator.Simulate(
             fc,
             settings,
-            new EtaSimulationScope(new HashSet<long>()),
+            EtaSimulationScope.CreateDefault(fc, settings.TargetRank),
             now,
             deadlineUtc: null,
             CancellationToken.None);
@@ -59,6 +59,171 @@ public sealed class EtaSimulatorTests
             legacy.PerSubResults.Select(result => (result.SubmarineId, result.FinalRank, result.VoyageCount, result.EtaAtUtc)),
             scoped.PerSubResults.Select(result => (result.SubmarineId, result.FinalRank, result.VoyageCount, result.EtaAtUtc)));
         Assert.Equal(legacy.PlannedRoutes.Count, scoped.PlannedRoutes.Count);
+    }
+
+    [Theory]
+    [InlineData(SimulationMode.Fleet)]
+    [InlineData(SimulationMode.OptimisticPerSub)]
+    public void MixedFleetOnlyPlansFutureVoyagesForLevelingTarget(SimulationMode simulationMode)
+    {
+        var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 100));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            TargetRank = 2,
+            SimulationMode = simulationMode,
+            UnlockSuccessProbability = 1.0,
+            CollectionDelayMinutes = 0,
+        };
+        var fc = CreateFc(
+            CreateSub(1, "Farming A", 1) with { NextLevelExp = 100 },
+            CreateSub(2, "Farming B", 1) with { NextLevelExp = 100 },
+            CreateSub(3, "Farming C", 1) with { NextLevelExp = 100 },
+            CreateSub(4, "Leveling", 1) with { NextLevelExp = 100 });
+        var now = DateTimeOffset.UnixEpoch;
+
+        var result = SimulateScoped(simulator, fc, settings, now, 4);
+
+        var leveling = Assert.Single(result.PerSubResults, sub => sub.IncludedInLevelingTarget);
+        Assert.Equal(4, leveling.SubmarineId);
+        Assert.Equal(leveling.EtaAtUtc, result.FcCompletionAtUtc);
+        Assert.Equal(leveling.VoyageCount, result.VoyageCount);
+        Assert.True(leveling.VoyageCount > 0);
+        Assert.All(
+            result.PerSubResults.Where(sub => !sub.IncludedInLevelingTarget),
+            passive =>
+            {
+                Assert.Equal(0, passive.VoyageCount);
+                Assert.Empty(passive.VoyagePreview);
+                Assert.Empty(passive.NextRoute);
+                Assert.Equal(passive.StartingRank, passive.FinalRank);
+                Assert.Equal(now, passive.EtaAtUtc);
+            });
+        Assert.All(result.PlannedRoutes, plan => Assert.Equal(4, plan.SubmarineId));
+    }
+
+    [Fact]
+    public void FarmingSubmarineBelowTargetReceivesNoLevelingRoute()
+    {
+        var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 100));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            TargetRank = 2,
+            UnlockSuccessProbability = 1.0,
+            CollectionDelayMinutes = 0,
+        };
+        var farming = CreateSub(1, "Farming", 1) with { NextLevelExp = 100 };
+        var leveling = CreateSub(2, "Leveling", 1) with { NextLevelExp = 100 };
+
+        var result = SimulateScoped(
+            simulator,
+            CreateFc(farming, leveling),
+            settings,
+            DateTimeOffset.UnixEpoch,
+            leveling.SubmarineId);
+
+        var farmingResult = Assert.Single(result.PerSubResults, sub => sub.SubmarineId == farming.SubmarineId);
+        Assert.False(farmingResult.IncludedInLevelingTarget);
+        Assert.Equal(0, farmingResult.VoyageCount);
+        Assert.DoesNotContain(result.PlannedRoutes, plan => plan.SubmarineId == farming.SubmarineId);
+    }
+
+    [Theory]
+    [InlineData(SimulationMode.Fleet)]
+    [InlineData(SimulationMode.OptimisticPerSub)]
+    public void PausedUnderwayVoyageCanUnlockButDoesNotScheduleSecondVoyage(SimulationMode simulationMode)
+    {
+        var catalog = new ScriptedCatalog([new UnlockRule(7, 8, 1, 1, IsMainProgression: true)]);
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with
+        {
+            TargetRank = 2,
+            SimulationMode = simulationMode,
+            UnlockSuccessProbability = 1.0,
+            CollectionDelayMinutes = 0,
+        };
+        var returnAt = DateTimeOffset.UnixEpoch.AddHours(1);
+        var paused = CreateSub(1, "Paused", 1) with
+        {
+            ReturnAtUtc = returnAt,
+            CurrentRoute = [7],
+            CurrentVoyageKnown = true,
+        };
+        var leveling = CreateSub(2, "Leveling", 1) with
+        {
+            NextLevelExp = 100,
+            ReturnAtUtc = returnAt,
+            CurrentVoyageKnown = false,
+        };
+
+        var result = SimulateScoped(
+            simulator,
+            CreateFc(new HashSet<uint>([7]), paused, leveling),
+            settings,
+            DateTimeOffset.UnixEpoch,
+            leveling.SubmarineId);
+
+        var pausedResult = Assert.Single(result.PerSubResults, sub => sub.SubmarineId == paused.SubmarineId);
+        Assert.False(pausedResult.IncludedInLevelingTarget);
+        Assert.Equal(paused.Rank, pausedResult.FinalRank);
+        Assert.Equal(0, pausedResult.VoyageCount);
+        Assert.Empty(pausedResult.VoyagePreview);
+        Assert.Contains(result.UnlockMilestones, milestone =>
+            milestone.SubmarineId == paused.SubmarineId && milestone.UnlockedPoint == 8);
+        Assert.Contains(catalog.ObservedUnlockedStates, points => points.Contains(8));
+        Assert.DoesNotContain(result.PlannedRoutes, plan => plan.SubmarineId == paused.SubmarineId);
+    }
+
+    [Fact]
+    public void NoLevelingTargetsCompletesImmediately()
+    {
+        var catalog = new ScriptedCatalog(routeExp: 100);
+        var simulator = CreateSimulator(catalog);
+        var settings = EtaSettings.CreateDefault() with { TargetRank = 2 };
+        var now = DateTimeOffset.UnixEpoch.AddDays(10);
+        var fc = CreateFc(CreateSub(rank: 1));
+
+        var result = SimulateScoped(simulator, fc, settings, now);
+
+        Assert.True(result.IsComplete);
+        Assert.Equal(now, result.FcCompletionAtUtc);
+        Assert.Equal(0, result.VoyageCount);
+        Assert.Empty(result.PlannedRoutes);
+        Assert.Empty(catalog.ObservedUnlockedStates);
+        Assert.All(result.PerSubResults, sub => Assert.False(sub.IncludedInLevelingTarget));
+    }
+
+    [Fact]
+    public void PassiveVoyageReturningAfterTargetsFinishDoesNotExtendCompletion()
+    {
+        var simulator = CreateSimulator(new ScriptedCatalog(
+            [new UnlockRule(7, 8, 1, 1, IsMainProgression: true)],
+            routeExp: 100,
+            routeDuration: TimeSpan.FromHours(1)));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            TargetRank = 2,
+            UnlockSuccessProbability = 1.0,
+            CollectionDelayMinutes = 0,
+        };
+        var passive = CreateSub(1, "Farming", 1) with
+        {
+            ReturnAtUtc = DateTimeOffset.UnixEpoch.AddHours(10),
+            CurrentRoute = [7],
+            CurrentVoyageKnown = true,
+        };
+        var target = CreateSub(2, "Leveling", 1) with { NextLevelExp = 100 };
+
+        var result = SimulateScoped(
+            simulator,
+            CreateFc(new HashSet<uint>([7, 99]), passive, target),
+            settings,
+            DateTimeOffset.UnixEpoch,
+            target.SubmarineId);
+
+        var targetResult = Assert.Single(result.PerSubResults, sub => sub.IncludedInLevelingTarget);
+        Assert.Equal(targetResult.EtaAtUtc, result.FcCompletionAtUtc);
+        Assert.True(result.FcCompletionAtUtc < passive.ReturnAtUtc);
+        Assert.DoesNotContain(result.UnlockMilestones, milestone => milestone.SubmarineId == passive.SubmarineId);
     }
 
     [Fact]
@@ -1085,13 +1250,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.5.12.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.5.13.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("Passes role-aware submarine scope into ETA calculations", repoJson);
+        Assert.Contains("Honors mixed leveling, farming, and paused assignments", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -1165,6 +1330,20 @@ public sealed class EtaSimulatorTests
         var selector = new RouteSelector(catalog, unlockGraph);
         return new EtaSimulator(buildResolver, unlockGraph, selector, catalog);
     }
+
+    private static EtaResult SimulateScoped(
+        EtaSimulator simulator,
+        FcState fc,
+        EtaSettings settings,
+        DateTimeOffset now,
+        params long[] targetSubmarineIds)
+        => simulator.Simulate(
+            fc,
+            settings,
+            new EtaSimulationScope(targetSubmarineIds.ToHashSet()),
+            now,
+            deadlineUtc: null,
+            CancellationToken.None);
 
     private static FcState CreateFc(params SubmarineState[] submarines)
         => CreateFc(Enumerable.Range(1, 20).Select(i => (uint)i).ToHashSet(), submarines);

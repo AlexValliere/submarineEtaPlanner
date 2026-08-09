@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.13.0
+
+- Honored mixed submarine assignments in ETA simulations so only leveling targets receive future routes or determine FC completion, while relevant farming and paused voyages can still apply shared unlock effects.
+
 ## 0.5.12.0
 
 - Passed role-aware submarine scope through ETA calculations and invalidated cached forecasts when assignments change without changing simulator behavior.

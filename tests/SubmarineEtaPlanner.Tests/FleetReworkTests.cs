@@ -88,6 +88,35 @@ public sealed class FleetReworkTests
     }
 
     [Fact]
+    public void PassiveSubmarineHasNoTargetEtaOrRemainingLevelingVoyages()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(1);
+        var fc = CreateFc(50, now.AddHours(2), [1], currentKnown: true);
+        var result = CreateResult(fc, 90, now);
+        result = result with
+        {
+            PerSubResults =
+            [
+                result.PerSubResults[0] with { IncludedInLevelingTarget = false },
+            ],
+        };
+
+        var submarine = Assert.Single(FleetPresentationBuilder.Create(
+            fc,
+            result,
+            EtaSettings.CreateDefault() with { TargetRank = 90 },
+            new StubCatalog(),
+            now,
+            new Dictionary<long, SubmarineAssignment>
+            {
+                [1] = SubmarineAssignment.Farming,
+            }).Submarines);
+
+        Assert.Null(submarine.TargetEtaAtUtc);
+        Assert.Equal(0, submarine.VoyagesRemaining);
+    }
+
+    [Fact]
     public void TargetReadySubmarineWithoutKnownRouteRequiresAChoice()
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(1);

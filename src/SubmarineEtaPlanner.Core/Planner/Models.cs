@@ -298,6 +298,8 @@ public sealed record PerSubEtaResult(
 {
     public bool IsComplete => Status == CalculationStatus.Complete;
 
+    public bool IncludedInLevelingTarget { get; init; } = true;
+
     public IReadOnlyList<uint> CurrentRoute { get; init; } = [];
 
     public DateTimeOffset? CurrentReturnAtUtc { get; init; }

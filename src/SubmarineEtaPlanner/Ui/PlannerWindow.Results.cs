@@ -737,8 +737,10 @@ public sealed partial class PlannerWindow
             if (!ready)
             {
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(sub.StartingRank >= result.TargetRank ? "now" : $"P50 {FormatRelative(sub.EtaAtUtc, renderNow)}");
-                if (sub.EtaForecast is not null && ImGui.IsItemHovered())
+                ImGui.TextUnformatted(!sub.IncludedInLevelingTarget
+                    ? "—"
+                    : sub.StartingRank >= result.TargetRank ? "now" : $"P50 {FormatRelative(sub.EtaAtUtc, renderNow)}");
+                if (sub.IncludedInLevelingTarget && sub.EtaForecast is not null && ImGui.IsItemHovered())
                 {
                     ImGui.SetTooltip(
                         $"Likely range: {FormatRelative(sub.EtaForecast.P10AtUtc, renderNow)}–" +
@@ -803,6 +805,12 @@ public sealed partial class PlannerWindow
 
     private void DrawSubmarineStatus(PerSubEtaResult sub, int targetRank, VoyageProgressState voyageState)
     {
+        if (!sub.IncludedInLevelingTarget)
+        {
+            PlannerUi.DrawStatusPill("Passive", PlannerUi.Muted);
+            return;
+        }
+
         if (voyageState == VoyageProgressState.ReadyToCollect)
         {
             PlannerUi.DrawStatusPill("Ready to collect", PlannerUi.Amber);
@@ -960,9 +968,11 @@ public sealed partial class PlannerWindow
                 readyToCollect
                     ? "Voyage ready to collect"
                     : $"Current voyage · returns {sub.CurrentReturnAtUtc.Value.LocalDateTime:g}",
-                readyToCollect
-                    ? $"{FormatRoute(sub.CurrentRoute)}\nRetrieve it in-game, then wait for SubmarineTracker to record the actual EXP and rank. It remains included in Voyages left until then."
-                    : $"{FormatRoute(sub.CurrentRoute)}\nThis underway voyage is included in Voyages left.",
+                !sub.IncludedInLevelingTarget
+                    ? $"{FormatRoute(sub.CurrentRoute)}\nThis current voyage may update shared sector unlocks, but no future leveling voyage will be scheduled."
+                    : readyToCollect
+                        ? $"{FormatRoute(sub.CurrentRoute)}\nRetrieve it in-game, then wait for SubmarineTracker to record the actual EXP and rank. It remains included in Voyages left until then."
+                        : $"{FormatRoute(sub.CurrentRoute)}\nThis underway voyage is included in Voyages left.",
                 readyToCollect ? PlannerUi.Amber : PlannerUi.Cyan);
         }
 
@@ -994,8 +1004,10 @@ public sealed partial class PlannerWindow
             PlannerUi.Callout(
                 "no-future-voyages",
                 FontAwesomeIcon.CheckCircle,
-                "No leveling voyages remain",
-                "This submarine is already at the target rank, or the current forecast has no reliable future route sequence.",
+                sub.IncludedInLevelingTarget ? "No leveling voyages remain" : "No leveling voyages scheduled",
+                sub.IncludedInLevelingTarget
+                    ? "This submarine is already at the target rank, or the current forecast has no reliable future route sequence."
+                    : "This submarine is not included in the leveling target. Its current voyage remains visible because it may affect shared unlocks.",
                 sub.IsComplete ? PlannerUi.Green : PlannerUi.Muted);
             return;
         }

@@ -122,6 +122,7 @@ public static class FleetPresentationBuilder
         DateTimeOffset? nextAction = immediate
             ? now
             : submarine.ReturnAtUtc == DateTimeOffset.MinValue ? null : submarine.ReturnAtUtc;
+        var includedInLevelingTarget = result?.IncludedInLevelingTarget == true;
         return new SubmarineOperationalProjection(
             submarine.SubmarineId,
             submarine.Name,
@@ -137,8 +138,8 @@ public static class FleetPresentationBuilder
             purpose,
             expectedExp,
             projectedRank,
-            ready ? now : result?.EtaAtUtc,
-            ready ? 0 : result?.VoyageCount ?? 0,
+            includedInLevelingTarget ? ready ? now : result?.EtaAtUtc : null,
+            includedInLevelingTarget ? ready ? 0 : result?.VoyageCount ?? 0 : 0,
             unavailableReason,
             result?.NextRouteOutcomes ?? [])
         {

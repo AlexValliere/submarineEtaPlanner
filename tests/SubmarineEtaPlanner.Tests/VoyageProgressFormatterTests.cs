@@ -86,6 +86,25 @@ public sealed class VoyageProgressFormatterTests
         Assert.Equal(VoyageProgressState.TargetReached, display.State);
     }
 
+    [Fact]
+    public void PassiveSubmarineDoesNotExposeLevelingVoyagesLeft()
+    {
+        var result = CreateResult(
+            voyageCount: 0,
+            currentRoute: [7],
+            currentReturnAtUtc: Now.AddHours(6)) with
+        {
+            IncludedInLevelingTarget = false,
+        };
+
+        var display = VoyageProgressFormatter.Create(result, targetRank: 85, Now);
+
+        Assert.Equal("—", display.Label);
+        Assert.Null(display.VoyagesLeft);
+        Assert.Equal(VoyageProgressState.Planned, display.State);
+        Assert.Contains("not included", display.Tooltip, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PerSubEtaResult CreateResult(
         int voyageCount,
         int startingRank = 84,

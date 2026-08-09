@@ -22,6 +22,15 @@ public static class VoyageProgressFormatter
         int targetRank,
         DateTimeOffset now)
     {
+        if (!submarine.IncludedInLevelingTarget)
+        {
+            return new VoyageProgressPresentation(
+                "—",
+                "This submarine is not included in the leveling target, so no leveling voyages are scheduled.",
+                null,
+                VoyageProgressState.Planned);
+        }
+
         if (submarine.StartingRank >= targetRank)
         {
             return new VoyageProgressPresentation(
