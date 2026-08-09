@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Projects recurring farming dispatch cycles with collection delays, next departures, and explicit tracking of already-paid current voyages.",
+  "Changelog": "Forecasts ceruleum runway from local stock with reserve-aware refill deadlines and stale-observation safety checks.",
   "Tags": [
     "Submarine",
     "ETA",

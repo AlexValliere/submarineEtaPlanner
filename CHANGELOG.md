@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.27.0
+
+- Forecasted ceruleum runway from live, manual, or schedule-compatible last-observed stock, with grouped departure simulation, reserve-aware refill deadlines, and explicit stale-stock warnings.
+
 ## 0.5.26.0
 
 - Added recurring farming dispatch-cycle projections with per-submarine collection-delay overrides, next-departure timing, and explicit tracking of already-paid current voyages.

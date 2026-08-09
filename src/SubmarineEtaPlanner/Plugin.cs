@@ -84,6 +84,7 @@ public sealed class Plugin : IDalamudPlugin
             SaveConfiguration,
             service,
             catalog,
+            () => this.fuelObservationCoordinator.Observations,
             GetSubmarineTrackerState,
             OpenSubmarineTrackerInstaller);
         this.windowSystem.AddWindow(this.plannerWindow);

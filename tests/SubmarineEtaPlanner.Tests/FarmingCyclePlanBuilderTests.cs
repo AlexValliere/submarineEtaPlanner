@@ -164,6 +164,19 @@ public sealed class FarmingCyclePlanBuilderTests
         Assert.Equal(Now.AddHours(9), plan.NextDepartureAtUtc);
     }
 
+    [Fact]
+    public void UnknownCurrentVoyageDoesNotInventADepartureFromPinnedRouteDuration()
+    {
+        var submarine = CreateSubmarine(1, Now.AddHours(7)) with { CurrentVoyageKnown = false };
+
+        var plan = Assert.Single(Build(
+            [submarine],
+            [CreateRoutePlan(1, TimeSpan.FromHours(5), tanks: 17)]));
+
+        Assert.True(plan.CurrentVoyageAlreadyPaid);
+        Assert.Null(plan.CurrentVoyageDepartureAtUtc);
+    }
+
     private static IReadOnlyList<FarmingCyclePlan> Build(
         IReadOnlyList<SubmarineState> submarines,
         IReadOnlyList<FarmingRoutePlan> routePlans,

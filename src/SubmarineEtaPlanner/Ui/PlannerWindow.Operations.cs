@@ -82,6 +82,8 @@ public sealed partial class PlannerWindow
         ImGui.TextColored(PlannerUi.Muted, completion.Label);
         PlannerUi.Tooltip(completion.Tooltip);
         ImGui.Spacing();
+        DrawFuelRunway(projection, now);
+        ImGui.Spacing();
         DrawOperationsSubmarineTable(projection, now);
     }
 

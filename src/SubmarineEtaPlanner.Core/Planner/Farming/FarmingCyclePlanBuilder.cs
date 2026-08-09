@@ -52,7 +52,7 @@ public static class FarmingCyclePlanBuilder
 
             var collectionDelay = TimeSpan.FromMinutes(collectionDelayMinutes);
             var currentVoyageAlreadyPaid = submarine.ReturnAtUtc != DateTimeOffset.MinValue;
-            var currentVoyageDepartureAtUtc = currentVoyageAlreadyPaid
+            var currentVoyageDepartureAtUtc = currentVoyageAlreadyPaid && submarine.CurrentVoyageKnown
                 ? submarine.ReturnAtUtc - voyageDuration
                 : (DateTimeOffset?)null;
             var nextDepartureAtUtc = currentVoyageAlreadyPaid && submarine.ReturnAtUtc > now
