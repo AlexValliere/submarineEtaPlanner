@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.6.0
+
+- Compactly display fully upgraded tracker builds using community notation (for example, `S+C+U+S+` becomes `SCUS++`) throughout Operations, Leveling, and Income.
+- Keep partial upgrades and planned-build codes unchanged.
+
 ## 0.5.5.0
 
 - Restored current tracked submarine build codes to Operations and Leveling detail tables and fleet-header tooltips.

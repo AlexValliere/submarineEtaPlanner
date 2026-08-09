@@ -52,7 +52,7 @@ public sealed record CurrentBuildPresentation(string Code, string? UnavailableRe
     public static CurrentBuildPresentation Create(SubmarineBuild? build)
         => string.IsNullOrWhiteSpace(build?.Code)
             ? Unavailable
-            : new CurrentBuildPresentation(build.Code, null);
+            : new CurrentBuildPresentation(CurrentBuildCodeFormatter.Format(build.Code), null);
 }
 
 public sealed record SubmarineOperationalProjection(

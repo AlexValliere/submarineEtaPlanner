@@ -459,7 +459,7 @@ public sealed class FleetReworkTests
             EtaSettings.CreateDefault() with { TargetRank = 120 },
             new StubCatalog(),
             now);
-        var builds = new[] { "WSCC", "WCSS", "WCUS", "WSCU++" };
+        var builds = new[] { "WSCC", "WCSS", "WCUS", "S+C+U+S+" };
         var metric = new IncomeFcMetrics(
             fc.FcIdKey,
             fc.DisplayName,
@@ -473,12 +473,12 @@ public sealed class FleetReworkTests
             ranks.Select((rank, index) => new IncomeSubmarineMetrics(index + 1, $"Sub {index + 1}", 0, 0, 0, 0, null, null)
             {
                 Rank = rank,
-                CurrentBuild = new CurrentBuildPresentation(builds[index], null),
+                CurrentBuild = CurrentBuildPresentation.Create(new SubmarineBuild(builds[index], rank, 0, 0, 0, 0, 0)),
             }).ToArray());
 
         var header = IncomeFcHeaderPresentation.Create(projection, metric, favorite: false);
 
-        Assert.Equal("[WSCC:115 | WCSS:115 | WCUS:116 | WSCU++:114]", header.BuildsAndRanks);
+        Assert.Equal("[WSCC:115 | WCSS:115 | WCUS:116 | SCUS++:114]", header.BuildsAndRanks);
         Assert.Equal("R115 · R115 · R116 · R114", OperationsFcHeaderPresentation.Create(projection, false, now).Ranks);
     }
 
