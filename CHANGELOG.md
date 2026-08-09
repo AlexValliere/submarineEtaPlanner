@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.22.0
+
+- Added read-only fuel-stock observations and deterministic manual, selected-character, and automatic resolution without summing inventories across characters.
+
 ## 0.5.21.0
 
 - Added historical ceruleum tank totals, tanks per voyage, gross gil per tank, and gross gil aggregation by deterministic route signature.

@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Adds historical ceruleum usage and recorded fuel-efficiency metrics by submarine, free company, and route signature.",
+  "Changelog": "Adds read-only fuel-stock models and deterministic manual, selected-character, and automatic resolution rules.",
   "Tags": [
     "Submarine",
     "ETA",
