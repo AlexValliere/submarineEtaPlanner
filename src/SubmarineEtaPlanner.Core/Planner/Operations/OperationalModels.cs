@@ -47,7 +47,7 @@ public sealed record SubmarineOperationalProjection(
     int EffectiveTargetRank,
     OperationalState State,
     string StateLabel,
-    string ActionLabel,
+    RecommendedAction Action,
     bool NeedsImmediateAction,
     DateTimeOffset? NextActionAtUtc,
     IReadOnlyList<uint> DisplayedRoute,

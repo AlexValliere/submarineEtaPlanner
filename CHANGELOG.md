@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.14.0
+
+- Replaced English action strings in Core projections with typed recommended actions, centralized their UI wording, and made explicit Farming and Paused recommendations role-aware.
+
 ## 0.5.13.0
 
 - Honored mixed submarine assignments in ETA simulations so only leveling targets receive future routes or determine FC completion, while relevant farming and paused voyages can still apply shared unlock effects.

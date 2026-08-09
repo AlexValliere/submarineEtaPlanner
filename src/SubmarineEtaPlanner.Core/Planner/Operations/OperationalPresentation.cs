@@ -62,7 +62,9 @@ internal sealed record CompactOperationalStatePresentation(string Label, string 
             OperationalState.Underway => "Underway",
             _ => "Idle",
         };
-        return new CompactOperationalStatePresentation(label, $"{submarine.StateLabel}\n{submarine.ActionLabel}");
+        return new CompactOperationalStatePresentation(
+            label,
+            $"{submarine.StateLabel}\n{RecommendedActionFormatter.Format(submarine.Action)}");
     }
 }
 

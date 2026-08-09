@@ -110,7 +110,8 @@ public static class FleetPresentationBuilder
             }
         }
 
-        var action = SelectAction(state, ready, route.Count > 0);
+        var effectiveRole = SubmarineRoleResolver.Resolve(assignment, submarine.Rank, settings.TargetRank);
+        var action = SelectAction(state, effectiveRole, route.Count > 0);
         var stateLabel = state switch
         {
             OperationalState.ReadyToCollect => "Ready to collect",
@@ -144,30 +145,35 @@ public static class FleetPresentationBuilder
             result?.NextRouteOutcomes ?? [])
         {
             CurrentBuild = currentBuild,
-            EffectiveRole = SubmarineRoleResolver.Resolve(assignment, submarine.Rank, settings.TargetRank),
+            EffectiveRole = effectiveRole,
         };
     }
 
-    private static string SelectAction(OperationalState state, bool ready, bool hasKnownRoute)
+    private static RecommendedAction SelectAction(
+        OperationalState state,
+        EffectiveSubmarineRole role,
+        bool hasKnownRoute)
     {
+        if (role == EffectiveSubmarineRole.Paused)
+            return RecommendedAction.Paused;
         if (state == OperationalState.Syncing)
-            return "Wait for SubmarineTracker synchronization";
-        if (ready)
+            return RecommendedAction.WaitForTracker;
+        if (role == EffectiveSubmarineRole.Farming)
         {
             if (!hasKnownRoute)
-                return "Choose farming route";
+                return RecommendedAction.ChooseFarmingRoute;
             return state == OperationalState.ReadyToCollect
-                ? "Collect and resend farming route now"
+                ? RecommendedAction.CollectAndResendFarmingRouteNow
                 : state == OperationalState.Idle
-                    ? "Send farming route now"
-                    : "Resend farming route after collection";
+                    ? RecommendedAction.SendFarmingRouteNow
+                    : RecommendedAction.ResendFarmingRouteAfterCollection;
         }
 
         return state switch
         {
-            OperationalState.ReadyToCollect => "Collect now; send the modeled route after synchronization",
-            OperationalState.Idle => "Send recommended leveling route now",
-            _ => "Send recommended leveling route after collection",
+            OperationalState.ReadyToCollect => RecommendedAction.CollectThenWaitForTracker,
+            OperationalState.Idle => RecommendedAction.SendLevelingRouteNow,
+            _ => RecommendedAction.SendLevelingRouteAfterCollection,
         };
     }
 }

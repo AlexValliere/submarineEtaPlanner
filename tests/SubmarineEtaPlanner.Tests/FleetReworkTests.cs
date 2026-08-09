@@ -43,15 +43,16 @@ public sealed class FleetReworkTests
     }
 
     [Theory]
-    [InlineData(50, true, true, "Collect now; send the modeled route after synchronization", "To collect")]
-    [InlineData(50, false, false, "Send recommended leveling route now", "Idle")]
-    [InlineData(100, true, true, "Collect and resend farming route now", "To collect")]
-    [InlineData(100, false, true, "Resend farming route after collection", "Underway")]
+    [InlineData(50, true, true, RecommendedAction.CollectThenWaitForTracker, "To collect")]
+    [InlineData(50, false, false, RecommendedAction.SendLevelingRouteNow, "Idle")]
+    [InlineData(50, false, true, RecommendedAction.SendLevelingRouteAfterCollection, "Underway")]
+    [InlineData(100, true, true, RecommendedAction.CollectAndResendFarmingRouteNow, "To collect")]
+    [InlineData(100, false, true, RecommendedAction.ResendFarmingRouteAfterCollection, "Underway")]
     public void ActionProjectionUsesRankAndVoyageState(
         int rank,
         bool returned,
         bool hasRoute,
-        string expectedAction,
+        RecommendedAction expectedAction,
         string expectedCompactState)
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(1);
@@ -62,10 +63,10 @@ public sealed class FleetReworkTests
             EtaSettings.CreateDefault() with { TargetRank = 90 }, new StubCatalog(), now);
 
         var submarine = Assert.Single(projection.Submarines);
-        Assert.Equal(expectedAction, submarine.ActionLabel);
+        Assert.Equal(expectedAction, submarine.Action);
         var compactState = CompactOperationalStatePresentation.Create(submarine);
         Assert.Equal(expectedCompactState, compactState.Label);
-        Assert.Contains(expectedAction, compactState.Tooltip);
+        Assert.Contains(RecommendedActionFormatter.Format(expectedAction), compactState.Tooltip);
         Assert.Equal(rank >= 90 ? FleetMode.Farming : FleetMode.Leveling, projection.Mode);
     }
 
@@ -83,8 +84,10 @@ public sealed class FleetReworkTests
             now).Submarines);
 
         Assert.Equal(OperationalState.Syncing, submarine.State);
-        Assert.Contains("SubmarineTracker", submarine.ActionLabel);
-        Assert.Equal("Syncing", CompactOperationalStatePresentation.Create(submarine).Label);
+        Assert.Equal(RecommendedAction.WaitForTracker, submarine.Action);
+        var compactState = CompactOperationalStatePresentation.Create(submarine);
+        Assert.Equal("Syncing", compactState.Label);
+        Assert.Contains(RecommendedActionFormatter.Format(submarine.Action), compactState.Tooltip);
     }
 
     [Fact]
@@ -129,7 +132,7 @@ public sealed class FleetReworkTests
             new StubCatalog(),
             now).Submarines);
 
-        Assert.Equal("Choose farming route", submarine.ActionLabel);
+        Assert.Equal(RecommendedAction.ChooseFarmingRoute, submarine.Action);
         Assert.Empty(submarine.DisplayedRoute);
         Assert.Equal("Idle", CompactOperationalStatePresentation.Create(submarine).Label);
     }

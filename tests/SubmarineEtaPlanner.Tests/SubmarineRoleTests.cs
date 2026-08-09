@@ -62,6 +62,7 @@ public sealed class SubmarineRoleTests
 
         Assert.Equal(EffectiveSubmarineRole.Leveling, submarine.EffectiveRole);
         Assert.True(submarine.IsTargetComplete);
+        Assert.Equal(RecommendedAction.SendLevelingRouteNow, submarine.Action);
     }
 
     [Fact]
@@ -73,6 +74,7 @@ public sealed class SubmarineRoleTests
 
         Assert.Equal(EffectiveSubmarineRole.Farming, submarine.EffectiveRole);
         Assert.False(submarine.IsTargetComplete);
+        Assert.Equal(RecommendedAction.ChooseFarmingRoute, submarine.Action);
     }
 
     [Fact]
@@ -87,6 +89,10 @@ public sealed class SubmarineRoleTests
             });
 
         Assert.Equal(new FcRoleSummary(0, 0, 2), projection.RoleSummary);
+        Assert.All(projection.Submarines, submarine =>
+        {
+            Assert.Equal(RecommendedAction.Paused, submarine.Action);
+        });
         Assert.False(FleetPresentationFiltering.Includes(projection, FleetMode.Leveling));
         Assert.False(FleetPresentationFiltering.Includes(projection, FleetMode.Farming));
         Assert.True(FleetPresentationFiltering.Includes(projection, null));
