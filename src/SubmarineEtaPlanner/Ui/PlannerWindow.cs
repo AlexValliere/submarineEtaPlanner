@@ -272,7 +272,7 @@ public sealed partial class PlannerWindow : Window
         PlannerPage.Operations => "Actions first, then every known return across the fleet.",
         PlannerPage.Leveling => "Every leveling FC and submarine in one progression view.",
         PlannerPage.Income => "Gross NPC salvage value from recorded SubmarineTracker returns.",
-        PlannerPage.FcSetup => "Favorites and per-FC target and strategy overrides.",
+        PlannerPage.FcSetup => "Favorites, targets, strategies, submarine roles, and pinned farming routes.",
         PlannerPage.Settings => "Global simulation, route, data, build, and display preferences.",
         _ => string.Empty,
     };

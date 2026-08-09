@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.15.0
+
+- Added staged per-submarine assignment and pinned farming route controls to FC Setup, including route validation and catalog-name previews.
+
 ## 0.5.14.0
 
 - Replaced English action strings in Core projections with typed recommended actions, centralized their UI wording, and made explicit Farming and Paused recommendations role-aware.
