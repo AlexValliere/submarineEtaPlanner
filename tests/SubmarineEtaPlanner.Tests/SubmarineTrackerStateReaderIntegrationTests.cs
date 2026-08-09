@@ -44,14 +44,54 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             Assert.Equal(new SubmarineBuildParts(1, 2, 3, 4), submarine.BuildParts);
             Assert.Equal(new uint[] { 1, 3 }, submarine.CurrentRoute);
             Assert.True(submarine.CurrentVoyageKnown);
+            Assert.Equal(3, submarine.VoyageHistory.Count);
+            var firstVoyage = submarine.VoyageHistory[0];
+            Assert.Equal(GameFreeCompanyId, firstVoyage.GameFreeCompanyId);
+            Assert.Equal(42, firstVoyage.SubmarineId);
+            Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1700000000), firstVoyage.ReturnAtUtc);
+            Assert.Equal(new uint[] { 2, 7 }, firstVoyage.SectorIds);
+            Assert.Equal(73, firstVoyage.Rank);
+            Assert.Equal(150, firstVoyage.Surveillance);
+            Assert.Equal(120, firstVoyage.Retrieval);
+            Assert.Equal(90, firstVoyage.Favor);
+            Assert.Collection(
+                firstVoyage.Items,
+                item =>
+                {
+                    Assert.Equal(22500u, item.ItemId);
+                    Assert.Equal(3, item.Quantity);
+                },
+                item =>
+                {
+                    Assert.Equal(22501u, item.ItemId);
+                    Assert.Equal(4, item.Quantity);
+                });
+            Assert.DoesNotContain(
+                submarine.VoyageHistory,
+                observation => observation.ReturnAtUtc == DateTimeOffset.FromUnixTimeSeconds(1700200000));
+            Assert.Contains(submarine.VoyageHistory, voyage => voyage.GrossNpcGil == 0);
             Assert.Equal(3, submarine.Salvage.VoyageCount);
             Assert.Equal(3, submarine.Salvage.Voyages.Count);
             Assert.Contains(submarine.Salvage.Voyages, voyage => voyage.GrossNpcGil == 0);
-            Assert.Equal(7, submarine.Salvage.ItemCount);
-            Assert.Equal(64_000, submarine.Salvage.TotalGil);
-            Assert.Equal(3, submarine.Salvage.Items.Single(item => item.ItemId == 22500).Quantity);
+            Assert.Equal(9, submarine.Salvage.ItemCount);
+            Assert.Equal(81_000, submarine.Salvage.TotalGil);
+            Assert.Equal(4, submarine.Salvage.Items.Single(item => item.ItemId == 22500).Quantity);
             Assert.Equal(8_000u, submarine.Salvage.Items.Single(item => item.ItemId == 22500).NpcSalePrice);
-            Assert.Equal(64_000, fc.RecordedSalvageGil);
+            Assert.Equal(submarine.VoyageHistory.Sum(voyage => voyage.GrossNpcGil), submarine.Salvage.TotalGil);
+            Assert.Equal(
+                submarine.VoyageHistory.SelectMany(voyage => voyage.Items).Sum(item => item.Quantity),
+                submarine.Salvage.ItemCount);
+            Assert.Equal(
+                submarine.VoyageHistory
+                    .SelectMany(voyage => voyage.Items)
+                    .GroupBy(item => item.ItemId)
+                    .OrderBy(group => group.Key)
+                    .Select(group => (ItemId: group.Key, Quantity: group.Sum(item => item.Quantity))),
+                submarine.Salvage.Items.Select(item => (item.ItemId, item.Quantity)));
+            Assert.Equal(
+                submarine.VoyageHistory.Select(voyage => (voyage.ReturnAtUtc, voyage.GrossNpcGil)),
+                submarine.Salvage.Voyages.Select(voyage => (voyage.ReturnAtUtc, voyage.GrossNpcGil)));
+            Assert.Equal(81_000, fc.RecordedSalvageGil);
             Assert.False(fc.DataFingerprint.IsEmpty);
             Assert.Equal(
                 fc.DataFingerprint,
@@ -61,12 +101,12 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             {
                 connection.Open();
                 using var command = connection.CreateCommand();
-                command.CommandText = "UPDATE loot SET PrimaryCount = 3 WHERE SubmarineId = 42 AND Return = 1700000000";
+                command.CommandText = "UPDATE loot SET PrimaryCount = 3 WHERE SubmarineId = 42 AND Return = 1700000000 AND Sector = 7";
                 command.ExecuteNonQuery();
             }
 
             var lootChanged = new SubmarineTrackerStateReader().Read(settings, new List<string>())[0];
-            Assert.Equal(72_000, Assert.Single(lootChanged.Submarines).Salvage.TotalGil);
+            Assert.Equal(89_000, Assert.Single(lootChanged.Submarines).Salvage.TotalGil);
             Assert.Equal(fc.DataFingerprint, lootChanged.DataFingerprint);
 
             using (var connection = new SQLiteConnection($"Data Source={databasePath}"))
@@ -104,6 +144,65 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             Assert.False(transition.CurrentVoyageKnown);
             Assert.Equal([7u, 9u], transition.ManualCurrentRouteOverride);
             Assert.Empty(warnings);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MissingLootTableProducesEmptyHistoryWithoutFailure()
+    {
+        var directory = Directory.CreateTempSubdirectory("seta-tracker-no-loot-");
+        try
+        {
+            var databasePath = Path.Combine(directory.FullName, "submarine-sqlite.db");
+            CreateDatabase(databasePath);
+            Execute(databasePath, "DROP TABLE loot");
+            var settings = EtaSettings.CreateDefault() with
+            {
+                SubmarineTrackerDatabasePathOverride = databasePath,
+            };
+            var warnings = new List<string>();
+
+            var fc = Assert.Single(new SubmarineTrackerStateReader().Read(settings, warnings));
+
+            var submarine = Assert.Single(fc.Submarines);
+            Assert.Empty(submarine.VoyageHistory);
+            Assert.Equal(SubmarineSalvageSummary.Empty, submarine.Salvage);
+            Assert.Empty(warnings);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MalformedLootTableWarnsButOperationalStateRemainsAvailable()
+    {
+        var directory = Directory.CreateTempSubdirectory("seta-tracker-malformed-loot-");
+        try
+        {
+            var databasePath = Path.Combine(directory.FullName, "submarine-sqlite.db");
+            CreateDatabase(databasePath);
+            Execute(databasePath, "ALTER TABLE loot DROP COLUMN Sector");
+            var settings = EtaSettings.CreateDefault() with
+            {
+                SubmarineTrackerDatabasePathOverride = databasePath,
+            };
+            var warnings = new List<string>();
+
+            var fc = Assert.Single(new SubmarineTrackerStateReader().Read(settings, warnings));
+
+            var submarine = Assert.Single(fc.Submarines);
+            Assert.Equal(73, submarine.Rank);
+            Assert.Empty(submarine.VoyageHistory);
+            Assert.Equal(SubmarineSalvageSummary.Empty, submarine.Salvage);
+            var warning = Assert.Single(warnings);
+            Assert.Contains("Could not read SubmarineTracker loot history", warning);
+            Assert.Contains("Voyage history and recorded salvage value are unavailable", warning);
         }
         finally
         {
@@ -173,6 +272,11 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
                     FreeCompanyId BLOB NOT NULL,
                     SubmarineId INTEGER NOT NULL,
                     Return INTEGER NOT NULL,
+                    Sector INTEGER NOT NULL,
+                    Rank INTEGER NOT NULL,
+                    Surv INTEGER NOT NULL,
+                    Ret INTEGER NOT NULL,
+                    Fav INTEGER NOT NULL,
                     PrimaryItem INTEGER NOT NULL,
                     PrimaryCount INTEGER NOT NULL,
                     AdditionalItem INTEGER NOT NULL,
@@ -218,15 +322,26 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
         {
             command.CommandText = """
                 INSERT INTO loot
-                    (FreeCompanyId, SubmarineId, Return, PrimaryItem, PrimaryCount, AdditionalItem, AdditionalCount, Valid)
+                    (FreeCompanyId, SubmarineId, Return, Sector, Rank, Surv, Ret, Fav,
+                     PrimaryItem, PrimaryCount, AdditionalItem, AdditionalCount, Valid)
                 VALUES
-                    (@fc, 42, 1700000000, 22500, 2, 22501, 3, 1),
-                    (@fc, 42, 1700100000, 22503, 1, 22500, 1, 1),
-                    (@fc, 42, 1700200000, 22507, 10, 0, 0, 0),
-                    (@fc, 42, 1700300000, 5069, 999, 0, 0, 1)
+                    (@fc, 42, 1700000000, 7, 73, 150, 120, 90, 22500, 2, 22501, 3, 1),
+                    (@fc, 42, 1700000000, 2, 73, 150, 120, 90, 22501, 1, 22500, 1, 1),
+                    (@fc, 42, 1700100000, 9, 74, 155, 125, 95, 22503, 1, 22500, 1, 1),
+                    (@fc, 42, 1700200000, 4, 72, 140, 110, 80, 22507, 10, 0, 0, 0),
+                    (@fc, 42, 1700300000, 12, 75, 160, 130, 100, 5069, 999, 0, 0, 1)
                 """;
             command.Parameters.AddWithValue("@fc", fcId);
             command.ExecuteNonQuery();
         }
+    }
+
+    private static void Execute(string databasePath, string commandText)
+    {
+        using var connection = new SQLiteConnection($"Data Source={databasePath}");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        command.ExecuteNonQuery();
     }
 }

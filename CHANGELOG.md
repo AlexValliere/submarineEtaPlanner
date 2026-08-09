@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.18.0
+
+- Read canonical voyage history from SubmarineTracker and derived the existing recorded-salvage summaries from those observations without changing operational ETA cache fingerprints.
+
 ## 0.5.17.0
 
 - Added canonical historical voyage observations and pure grouping of submarine loot rows with deterministic sectors, salvage totals, and inconsistent-stat warnings.
