@@ -90,6 +90,8 @@ The default discovery chance is **33% per eligible source visit**. This is a com
 
 The plugin performs no runtime web requests. Loot history and all calculated gil totals remain local; the plugin does not learn from, upload, or otherwise transmit them.
 
+The planner also keeps a local `workshop-fuel-observations.json` file in its supplied configuration directory so a manually played character's last observed ceruleum tank count remains available after switching characters. It stores the character content ID, character name and world, FC ID, observed tank count, and observation timestamp. This data is never uploaded.
+
 ## Transparency
 
 The project is licensed under the [MIT License](LICENSE). SubmarineTracker attribution, its complete MIT notice, and the exact provenance of the bundled route data are recorded in [Third Party Notices](THIRD_PARTY_NOTICES.md) and [Route Data Provenance](docs/ROUTE_DATA_PROVENANCE.md).

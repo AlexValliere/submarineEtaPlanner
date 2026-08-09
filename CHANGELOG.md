@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.24.0
+
+- Persisted manually observed character ceruleum inventories locally with throttled atomic writes, character and FC identity updates, timestamp refreshes, and corrupt-file recovery.
+
 ## 0.5.23.0
 
 - Added a framework-thread-only, read-only reader for the logged-in character's ceruleum tank inventory, identity, home world, and free company ID.

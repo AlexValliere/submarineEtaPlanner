@@ -23,5 +23,11 @@
              Link="Runtime\Fuel\ICurrentCharacterFuelReader.cs" />
     <Compile Include="..\..\src\SubmarineEtaPlanner\Fuel\CurrentCharacterFuelReader.cs"
              Link="Runtime\Fuel\CurrentCharacterFuelReader.cs" />
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Fuel\IFuelObservationStore.cs"
+             Link="Runtime\Fuel\IFuelObservationStore.cs" />
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Fuel\JsonFuelObservationStore.cs"
+             Link="Runtime\Fuel\JsonFuelObservationStore.cs" />
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Fuel\FuelObservationCoordinator.cs"
+             Link="Runtime\Fuel\FuelObservationCoordinator.cs" />
   </ItemGroup>
 </Project>
