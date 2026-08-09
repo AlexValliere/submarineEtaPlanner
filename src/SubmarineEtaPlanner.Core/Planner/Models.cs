@@ -153,6 +153,30 @@ public sealed record SubmarineState(
     public bool IsAvailable(DateTimeOffset now) => ReturnAtUtc <= now;
 
     public SubmarineSalvageSummary Salvage { get; init; } = SubmarineSalvageSummary.Empty;
+
+    public IReadOnlyList<VoyageObservation> VoyageHistory { get; init; } = [];
+}
+
+/// <summary>
+/// A canonical observation of one completed submarine voyage.
+/// </summary>
+/// <param name="SectorIds">
+/// The distinct, sorted representation of the voyage's unordered historical sector set.
+/// The ordering does not imply the route in which the sectors were visited.
+/// </param>
+public sealed record VoyageObservation(
+    string FcIdKey,
+    ulong? GameFreeCompanyId,
+    long SubmarineId,
+    DateTimeOffset ReturnAtUtc,
+    IReadOnlyList<uint> SectorIds,
+    int Rank,
+    int Surveillance,
+    int Retrieval,
+    int Favor,
+    IReadOnlyList<SalvageItemTotal> Items)
+{
+    public long GrossNpcGil => Items.Sum(item => item.TotalGil);
 }
 
 public sealed record SalvageItemTotal(

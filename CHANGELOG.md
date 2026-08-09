@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.17.0
+
+- Added canonical historical voyage observations and pure grouping of submarine loot rows with deterministic sectors, salvage totals, and inconsistent-stat warnings.
+
 ## 0.5.16.0
 
 - Added route ceruleum fuel and ordered operational profiles with explicit unknown-sector reporting.
