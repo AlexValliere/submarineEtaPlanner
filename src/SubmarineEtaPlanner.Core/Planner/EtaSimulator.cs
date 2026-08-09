@@ -21,6 +21,21 @@ public sealed class EtaSimulator(
         DateTimeOffset now,
         DateTimeOffset? deadlineUtc,
         CancellationToken cancellationToken)
+        => Simulate(
+            fc,
+            settings,
+            EtaSimulationScope.CreateDefault(fc, settings.TargetRank),
+            now,
+            deadlineUtc,
+            cancellationToken);
+
+    public EtaResult Simulate(
+        FcState fc,
+        EtaSettings settings,
+        EtaSimulationScope scope,
+        DateTimeOffset now,
+        DateTimeOffset? deadlineUtc,
+        CancellationToken cancellationToken)
         => SimulateProbabilistic(fc, settings, now, deadlineUtc, cancellationToken);
 
     private EtaResult SimulateTrial(

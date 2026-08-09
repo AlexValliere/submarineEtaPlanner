@@ -43,6 +43,15 @@ public interface IEtaSimulator
         DateTimeOffset now,
         DateTimeOffset? deadlineUtc,
         CancellationToken cancellationToken);
+
+    EtaResult Simulate(
+        FcState fc,
+        EtaSettings settings,
+        EtaSimulationScope scope,
+        DateTimeOffset now,
+        DateTimeOffset? deadlineUtc,
+        CancellationToken cancellationToken)
+        => Simulate(fc, settings, now, deadlineUtc, cancellationToken);
 }
 
 public sealed record SubmarineBuild(string Code, int Rank, int Surveillance, int Retrieval, int Favor, int Range, int Speed);

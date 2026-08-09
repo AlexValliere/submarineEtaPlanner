@@ -69,6 +69,36 @@ public sealed class ForecastFingerprintTests
         Assert.NotEqual(original, CalculationSettingsFingerprint.Create(settings));
     }
 
+    [Fact]
+    public void AssignmentFingerprintIsStableBySubmarineIdAndChangesWithRole()
+    {
+        var settings = EtaSettings.CreateDefault();
+        var first = CalculationSettingsFingerprint.Create(
+            settings,
+            new Dictionary<long, SubmarineAssignment>
+            {
+                [20] = SubmarineAssignment.Paused,
+                [10] = SubmarineAssignment.Farming,
+            });
+        var reordered = CalculationSettingsFingerprint.Create(
+            settings,
+            new Dictionary<long, SubmarineAssignment>
+            {
+                [10] = SubmarineAssignment.Farming,
+                [20] = SubmarineAssignment.Paused,
+            });
+        var changed = CalculationSettingsFingerprint.Create(
+            settings,
+            new Dictionary<long, SubmarineAssignment>
+            {
+                [10] = SubmarineAssignment.Farming,
+                [20] = SubmarineAssignment.Leveling,
+            });
+
+        Assert.Equal(first, reordered);
+        Assert.NotEqual(first, changed);
+    }
+
     private static FcState CreateFc(
         IReadOnlySet<uint>? unlocked = null,
         IReadOnlySet<uint>? explored = null,

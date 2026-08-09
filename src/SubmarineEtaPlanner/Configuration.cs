@@ -73,10 +73,15 @@ public sealed class Configuration : IPluginConfiguration
 
     public IReadOnlyDictionary<string, FcSimulationOverride> GetSimulationOverrides()
         => FreeCompanyPreferences
-            .Where(pair => pair.Value.TargetRankOverride is not null || pair.Value.StrategyOverride is not null)
+            .Select(pair => new
+            {
+                pair.Key,
+                SimulationOverride = FcSimulationOverride.FromPreferences(pair.Value),
+            })
+            .Where(pair => pair.SimulationOverride is not null)
             .ToDictionary(
                 pair => pair.Key,
-                pair => new FcSimulationOverride(pair.Value.TargetRankOverride, pair.Value.StrategyOverride),
+                pair => pair.SimulationOverride!,
                 StringComparer.OrdinalIgnoreCase);
 
     private bool NormalizeViewPreferences()

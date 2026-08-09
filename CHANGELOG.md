@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.12.0
+
+- Passed role-aware submarine scope through ETA calculations and invalidated cached forecasts when assignments change without changing simulator behavior.
+
 ## 0.5.11.0
 
 - Added explicit per-submarine leveling, farming, and paused roles with mixed-role FC summaries and filtering.

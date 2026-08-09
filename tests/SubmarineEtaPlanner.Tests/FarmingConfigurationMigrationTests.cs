@@ -127,4 +127,67 @@ public sealed class FarmingConfigurationMigrationTests
         Assert.Equal([7u, 12u, 18u], submarine.PinnedFarmingRoute);
         Assert.Equal(25, submarine.CollectionDelayMinutes);
     }
+
+    [Fact]
+    public void SimulationOverrideContainsOnlyExplicitAssignments()
+    {
+        var preferences = new FcPreferences
+        {
+            Submarines = new Dictionary<long, SubmarinePreferences>
+            {
+                [1] = new() { Assignment = SubmarineAssignment.Auto },
+                [2] = new() { Assignment = SubmarineAssignment.Farming, PinnedFarmingRoute = [7, 8] },
+                [3] = new() { Assignment = SubmarineAssignment.Paused },
+            },
+            FuelHolderCharacterId = 100,
+            ManualCeruleumTanks = 200,
+            CeruleumReserve = 50,
+        };
+
+        var simulationOverride = FcSimulationOverride.FromPreferences(preferences);
+
+        Assert.NotNull(simulationOverride);
+        Assert.Equal(
+            new Dictionary<long, SubmarineAssignment>
+            {
+                [2] = SubmarineAssignment.Farming,
+                [3] = SubmarineAssignment.Paused,
+            },
+            simulationOverride.SubmarineAssignments);
+    }
+
+    [Fact]
+    public void PinnedRouteAndInventoryDoNotAffectEtaFingerprint()
+    {
+        var before = new FcPreferences
+        {
+            Submarines = new Dictionary<long, SubmarinePreferences>
+            {
+                [2] = new() { Assignment = SubmarineAssignment.Farming, PinnedFarmingRoute = [7, 8] },
+            },
+            FuelHolderCharacterId = 100,
+            ManualCeruleumTanks = 200,
+            CeruleumReserve = 50,
+        };
+        var after = new FcPreferences
+        {
+            Submarines = new Dictionary<long, SubmarinePreferences>
+            {
+                [2] = new() { Assignment = SubmarineAssignment.Farming, PinnedFarmingRoute = [10, 11] },
+            },
+            FuelHolderCharacterId = 999,
+            ManualCeruleumTanks = 1,
+            CeruleumReserve = 500,
+        };
+        var settings = EtaSettings.CreateDefault();
+
+        var beforeFingerprint = CalculationSettingsFingerprint.Create(
+            settings,
+            FcSimulationOverride.FromPreferences(before)!.SubmarineAssignments);
+        var afterFingerprint = CalculationSettingsFingerprint.Create(
+            settings,
+            FcSimulationOverride.FromPreferences(after)!.SubmarineAssignments);
+
+        Assert.Equal(beforeFingerprint, afterFingerprint);
+    }
 }

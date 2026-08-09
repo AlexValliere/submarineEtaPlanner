@@ -32,6 +32,36 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
+    public void ExplicitScopeDoesNotChangeSimulatorOutputYet()
+    {
+        var simulator = CreateSimulator(new ScriptedCatalog(routeExp: 100));
+        var settings = EtaSettings.CreateDefault() with
+        {
+            TargetRank = 2,
+            UnlockSuccessProbability = 1.0,
+        };
+        var fc = CreateFc(new HashSet<uint> { 99 }, CreateSub(rank: 1) with { NextLevelExp = 100 });
+        var now = DateTimeOffset.UnixEpoch;
+
+        var legacy = simulator.Simulate(fc, settings, now);
+        var scoped = simulator.Simulate(
+            fc,
+            settings,
+            new EtaSimulationScope(new HashSet<long>()),
+            now,
+            deadlineUtc: null,
+            CancellationToken.None);
+
+        Assert.Equal(legacy.Status, scoped.Status);
+        Assert.Equal(legacy.FcCompletionAtUtc, scoped.FcCompletionAtUtc);
+        Assert.Equal(legacy.ProbabilitySampleCount, scoped.ProbabilitySampleCount);
+        Assert.Equal(
+            legacy.PerSubResults.Select(result => (result.SubmarineId, result.FinalRank, result.VoyageCount, result.EtaAtUtc)),
+            scoped.PerSubResults.Select(result => (result.SubmarineId, result.FinalRank, result.VoyageCount, result.EtaAtUtc)));
+        Assert.Equal(legacy.PlannedRoutes.Count, scoped.PlannedRoutes.Count);
+    }
+
+    [Fact]
     public void FleetModeSharesUnlockState()
     {
         var simulator = CreateSimulator();
@@ -1055,13 +1085,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.5.11.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.5.12.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("Adds effective per-submarine leveling, farming, and paused roles", repoJson);
+        Assert.Contains("Passes role-aware submarine scope into ETA calculations", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 

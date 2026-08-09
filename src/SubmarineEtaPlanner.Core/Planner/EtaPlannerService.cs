@@ -58,16 +58,31 @@ public sealed class EtaPlannerService(
             .Select(EnsureFingerprint)
             .ToArray();
         var settingsFingerprint = CalculationSettingsFingerprint.Create(settings);
+        var calculationOverrides = fcStates.ToDictionary(
+            fc => fc.FcIdKey,
+            fc => request.FreeCompanyOverrides.TryGetValue(fc.FcIdKey, out var simulationOverride)
+                ? simulationOverride
+                : new FcSimulationOverride(),
+            StringComparer.OrdinalIgnoreCase);
         var effectiveSettings = fcStates.ToDictionary(
             fc => fc.FcIdKey,
             fc => EffectiveEtaSettingsResolver.Resolve(
                 settings,
-                request.FreeCompanyOverrides.TryGetValue(fc.FcIdKey, out var simulationOverride) ? simulationOverride : null,
+                calculationOverrides[fc.FcIdKey],
                 maximumRank),
+            StringComparer.OrdinalIgnoreCase);
+        var simulationScopes = fcStates.ToDictionary(
+            fc => fc.FcIdKey,
+            fc => CreateSimulationScope(
+                fc,
+                effectiveSettings[fc.FcIdKey].TargetRank,
+                calculationOverrides[fc.FcIdKey].SubmarineAssignments),
             StringComparer.OrdinalIgnoreCase);
         var effectiveSettingsFingerprints = effectiveSettings.ToDictionary(
             pair => pair.Key,
-            pair => CalculationSettingsFingerprint.Create(pair.Value),
+            pair => CalculationSettingsFingerprint.Create(
+                pair.Value,
+                calculationOverrides[pair.Key].SubmarineAssignments),
             StringComparer.OrdinalIgnoreCase);
         var results = new Dictionary<string, EtaResult>();
         var progress = new Dictionary<string, FcCalculationProgress>();
@@ -217,7 +232,13 @@ public sealed class EtaPlannerService(
 
             try
             {
-                var result = simulator.Simulate(fc, fcSettings, now, deadlineUtc, cancellationToken);
+                var result = simulator.Simulate(
+                    fc,
+                    fcSettings,
+                    simulationScopes[fc.FcIdKey],
+                    now,
+                    deadlineUtc,
+                    cancellationToken);
                 calculatedCount++;
                 results[fc.FcIdKey] = result;
                 var timedOut = !result.IsComplete &&
@@ -269,6 +290,20 @@ public sealed class EtaPlannerService(
 
     private static FcState EnsureFingerprint(FcState fc)
         => fc.DataFingerprint.IsEmpty ? fc with { DataFingerprint = FcDataFingerprint.Create(fc) } : fc;
+
+    private static EtaSimulationScope CreateSimulationScope(
+        FcState fc,
+        int effectiveTargetRank,
+        IReadOnlyDictionary<long, SubmarineAssignment> submarineAssignments)
+        => new(fc.Submarines
+            .Where(submarine =>
+                submarine.Rank < effectiveTargetRank &&
+                SubmarineRoleResolver.Resolve(
+                    submarineAssignments.GetValueOrDefault(submarine.SubmarineId),
+                    submarine.Rank,
+                    effectiveTargetRank) == EffectiveSubmarineRole.Leveling)
+            .Select(submarine => submarine.SubmarineId)
+            .ToHashSet());
 
     private static bool CanReuseCompletedResult(
         FcState fc,

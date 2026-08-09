@@ -41,9 +41,44 @@ public enum FcStrategyPreset
     UnlockEverythingThenLevel,
 }
 
+public sealed record EtaSimulationScope(
+    IReadOnlySet<long> TargetSubmarineIds)
+{
+    public static EtaSimulationScope CreateDefault(FcState fc, int effectiveTargetRank)
+        => new(fc.Submarines
+            .Where(submarine => submarine.Rank < effectiveTargetRank)
+            .Select(submarine => submarine.SubmarineId)
+            .ToHashSet());
+}
+
 public sealed record FcSimulationOverride(
     int? TargetRank = null,
-    FcStrategyPreset? Strategy = null);
+    FcStrategyPreset? Strategy = null)
+{
+    private static IReadOnlyDictionary<long, SubmarineAssignment> EmptyAssignments { get; }
+        = new System.Collections.ObjectModel.ReadOnlyDictionary<long, SubmarineAssignment>(
+            new Dictionary<long, SubmarineAssignment>());
+
+    public IReadOnlyDictionary<long, SubmarineAssignment> SubmarineAssignments { get; init; }
+        = EmptyAssignments;
+
+    public static FcSimulationOverride? FromPreferences(FcPreferences preferences)
+    {
+        var assignments = preferences.Submarines
+            .Where(pair => pair.Value.Assignment != SubmarineAssignment.Auto)
+            .ToDictionary(pair => pair.Key, pair => pair.Value.Assignment);
+        return preferences.TargetRankOverride is null &&
+               preferences.StrategyOverride is null &&
+               assignments.Count == 0
+            ? null
+            : new FcSimulationOverride(
+                preferences.TargetRankOverride,
+                preferences.StrategyOverride)
+            {
+                SubmarineAssignments = assignments,
+            };
+    }
+}
 
 public sealed record PlannerCalculationRequest(
     EtaSettings GlobalSettings,

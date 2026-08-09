@@ -181,6 +181,89 @@ public sealed class EtaPlannerIncrementalTests
     }
 
     [Fact]
+    public void AssignmentChangeInvalidatesPerFcCalculationFingerprint()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(100);
+        var reader = new MutableStateReader([CreateFc(1, 50, now.AddDays(1))]);
+        var simulator = new RecordingSimulator();
+        var service = new EtaPlannerService(reader, simulator);
+        var settings = Settings();
+        var first = service.Calculate(
+            PlannerCalculationRequest.FromGlobalSettings(settings),
+            now,
+            CancellationToken.None);
+        simulator.Calls.Clear();
+        var changedRequest = new PlannerCalculationRequest(
+            settings,
+            new Dictionary<string, FcSimulationOverride>
+            {
+                ["01"] = new()
+                {
+                    SubmarineAssignments = new Dictionary<long, SubmarineAssignment>
+                    {
+                        [1] = SubmarineAssignment.Farming,
+                    },
+                },
+            });
+
+        var refreshed = service.Calculate(
+            changedRequest,
+            now.AddMinutes(5),
+            CancellationToken.None,
+            previousSnapshot: first,
+            refreshMode: ForecastRefreshMode.Incremental);
+
+        Assert.Equal(["01"], simulator.Calls);
+        Assert.Equal(0, refreshed.Metrics!.ReusedFreeCompanies);
+        Assert.NotEqual(
+            first.FcCalculationSettingsFingerprints["01"],
+            refreshed.FcCalculationSettingsFingerprints["01"]);
+    }
+
+    [Fact]
+    public void SimulatorReceivesRoleAwareTargetScope()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(100);
+        var fc = CreateFc(1, 50, now.AddDays(1));
+        var prototype = fc.Submarines[0];
+        fc = fc with
+        {
+            Submarines =
+            [
+                prototype with { SubmarineId = 1, Rank = 50 },
+                prototype with { SubmarineId = 2, Rank = 50 },
+                prototype with { SubmarineId = 3, Rank = 50 },
+                prototype with { SubmarineId = 4, Rank = 50 },
+                prototype with { SubmarineId = 5, Rank = 100 },
+            ],
+        };
+        fc = fc with { DataFingerprint = FcDataFingerprint.Create(fc) };
+        var reader = new MutableStateReader([fc]);
+        var simulator = new RecordingSimulator();
+        var service = new EtaPlannerService(reader, simulator);
+        var request = new PlannerCalculationRequest(
+            Settings(),
+            new Dictionary<string, FcSimulationOverride>
+            {
+                ["01"] = new()
+                {
+                    SubmarineAssignments = new Dictionary<long, SubmarineAssignment>
+                    {
+                        [2] = SubmarineAssignment.Farming,
+                        [3] = SubmarineAssignment.Paused,
+                        [4] = SubmarineAssignment.Leveling,
+                        [5] = SubmarineAssignment.Leveling,
+                    },
+                },
+            });
+
+        service.Calculate(request, now, CancellationToken.None);
+
+        var scope = Assert.Single(simulator.Scopes);
+        Assert.Equal([1L, 4L], scope.Order().ToArray());
+    }
+
+    [Fact]
     public void PartialResultIsRetriedEvenWhenFcDataIsUnchanged()
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(100);
@@ -268,6 +351,8 @@ public sealed class EtaPlannerIncrementalTests
     {
         public List<string> Calls { get; } = [];
 
+        public List<IReadOnlySet<long>> Scopes { get; } = [];
+
         public bool ReturnPartial { get; set; }
 
         public EtaResult Simulate(
@@ -307,6 +392,18 @@ public sealed class EtaPlannerIncrementalTests
                 [],
                 ReturnPartial ? CalculationStatus.Partial : CalculationStatus.Complete,
                 ReturnPartial ? "Fixture partial result." : null);
+        }
+
+        public EtaResult Simulate(
+            FcState fc,
+            EtaSettings settings,
+            EtaSimulationScope scope,
+            DateTimeOffset now,
+            DateTimeOffset? deadlineUtc,
+            CancellationToken cancellationToken)
+        {
+            Scopes.Add(scope.TargetSubmarineIds);
+            return Simulate(fc, settings, now, deadlineUtc, cancellationToken);
         }
     }
 }

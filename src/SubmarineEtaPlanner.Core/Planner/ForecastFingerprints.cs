@@ -61,6 +61,11 @@ public readonly record struct FcDataFingerprint(string Value)
 public readonly record struct CalculationSettingsFingerprint(string Value)
 {
     public static CalculationSettingsFingerprint Create(EtaSettings settings)
+        => Create(settings, new Dictionary<long, SubmarineAssignment>());
+
+    public static CalculationSettingsFingerprint Create(
+        EtaSettings settings,
+        IReadOnlyDictionary<long, SubmarineAssignment> submarineAssignments)
         => new(FcDataFingerprint.Hash(writer =>
         {
             writer.Write(settings.TargetRank);
@@ -95,6 +100,14 @@ public readonly record struct CalculationSettingsFingerprint(string Value)
                 writer.Write(route.Count);
                 foreach (var point in route)
                     writer.Write(point);
+            }
+
+            var assignments = submarineAssignments.OrderBy(pair => pair.Key).ToArray();
+            writer.Write(assignments.Length);
+            foreach (var (submarineId, assignment) in assignments)
+            {
+                writer.Write(submarineId);
+                writer.Write((int)assignment);
             }
         }));
 }
