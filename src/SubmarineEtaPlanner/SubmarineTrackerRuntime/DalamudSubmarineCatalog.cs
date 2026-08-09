@@ -7,7 +7,11 @@ using SubmarineEtaPlanner.Planner;
 
 namespace SubmarineEtaPlanner.SubmarineTrackerRuntime;
 
-public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDiagnostics, IPlannerDataDiagnostics
+public sealed class DalamudSubmarineCatalog :
+    ISubmarineCatalog,
+    IRouteOperationalCatalog,
+    IRouteSearchDiagnostics,
+    IPlannerDataDiagnostics
 {
     private const int FixedVoyageTimeSeconds = 43200;
     private const int RouteSearchCacheLimit = 32768;
@@ -16,6 +20,7 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
     private readonly ExcelSheet<SubmarinePart> partSheet;
     private readonly ExcelSheet<SubmarineRank> rankSheet;
     private readonly Dictionary<uint, SubmarineExploration> sectorById;
+    private readonly RouteOperationalCalculator routeOperationalCalculator;
     private readonly uint[] reversedMapStartSectors;
     private readonly CalculatedRouteData calculatedRoutes;
     private readonly RouteCandidateIndex routeIndex;
@@ -46,6 +51,11 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
         this.partSheet = dataManager.GetExcelSheet<SubmarinePart>();
         this.rankSheet = dataManager.GetExcelSheet<SubmarineRank>();
         this.sectorById = this.explorationSheet.ToDictionary(row => row.RowId, row => row);
+        this.routeOperationalCalculator = new RouteOperationalCalculator(
+            this.sectorById.ToDictionary(
+                pair => pair.Key,
+                pair => checked((int)pair.Value.CeruleumTankReq)),
+            CalculateDuration);
         this.reversedMapStartSectors = this.explorationSheet
             .Where(row => row.StartingPoint)
             .Select(row => row.RowId)
@@ -430,6 +440,14 @@ public sealed class DalamudSubmarineCatalog : ISubmarineCatalog, IRouteSearchDia
 
         return TimeSpan.FromSeconds(seconds + FixedVoyageTimeSeconds);
     }
+
+    public RouteFuelProfile CalculateFuel(IReadOnlyCollection<uint> sectors)
+        => this.routeOperationalCalculator.CalculateFuel(sectors);
+
+    public OrderedRouteOperationalProfile AnalyzeOrderedRoute(
+        IReadOnlyList<uint> route,
+        SubmarineBuild build)
+        => this.routeOperationalCalculator.AnalyzeOrderedRoute(route, build);
 
     public (int Rank, uint CurrentExp, uint NextLevelExp) ApplyExp(int rank, uint currentExp, uint gainedExp, int targetRank)
     {

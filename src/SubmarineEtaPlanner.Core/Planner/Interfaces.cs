@@ -23,6 +23,26 @@ public interface ISubmarineCatalog
     IReadOnlyList<UnlockRule> UnlockRules { get; }
 }
 
+public sealed record RouteFuelProfile(
+    int CeruleumTanks,
+    bool IsComplete,
+    IReadOnlyList<uint> UnknownSectors);
+
+public sealed record OrderedRouteOperationalProfile(
+    IReadOnlyList<uint> Route,
+    RouteFuelProfile Fuel,
+    TimeSpan Duration);
+
+public interface IRouteOperationalCatalog
+{
+    RouteFuelProfile CalculateFuel(
+        IReadOnlyCollection<uint> sectors);
+
+    OrderedRouteOperationalProfile AnalyzeOrderedRoute(
+        IReadOnlyList<uint> route,
+        SubmarineBuild build);
+}
+
 public interface IRouteSearchDiagnostics
 {
     void ResetRouteSearchMetrics();

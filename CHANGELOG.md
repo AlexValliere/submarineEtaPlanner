@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.16.0
+
+- Added route ceruleum fuel and ordered operational profiles with explicit unknown-sector reporting.
+
 ## 0.5.15.0
 
 - Added staged per-submarine assignment and pinned farming route controls to FC Setup, including route validation and catalog-name previews.
