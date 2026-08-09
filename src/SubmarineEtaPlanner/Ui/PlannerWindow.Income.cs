@@ -112,33 +112,33 @@ public sealed partial class PlannerWindow
         DrawIncomeSubmarineTable(metric);
     }
 
-    private static void DrawIncomeSubmarineTable(IncomeFcMetrics metric)
+    private void DrawIncomeSubmarineTable(IncomeFcMetrics metric)
     {
-        const float minimumWidth = 1_220f;
-        var scaledMinimumWidth = minimumWidth * ImGuiHelpers.GlobalScale;
-        var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < scaledMinimumWidth;
-        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
-        if (needsHorizontalScroll)
+        var layout = CalculateResponsiveTableLayout(
+            ImGui.GetContentRegionAvail().X,
+            new ResponsiveTableColumn("Submarine", metric.Submarines.Select(submarine => submarine.Name), 120, 220, Flexible: true),
+            new ResponsiveTableColumn("Rank", metric.Submarines.Select(submarine => $"R{submarine.Rank}"), 68, 90),
+            new ResponsiveTableColumn("Build", metric.Submarines.Select(submarine => submarine.CurrentBuild.Code), 72, 100),
+            new ResponsiveTableColumn("Gross gil", metric.Submarines.Select(submarine => $"{submarine.GrossGil:N0}"), 105, 175),
+            new ResponsiveTableColumn("Recorded avg / day", metric.Submarines.Select(submarine => $"{submarine.RecordedAverageGilPerDay:N0}"), 125, 175),
+            new ResponsiveTableColumn("Observed run rate", metric.Submarines.Select(submarine => $"{submarine.ObservedRunRateGilPerDay:N0}"), 125, 175),
+            new ResponsiveTableColumn("Voyages", metric.Submarines.Select(submarine => submarine.VoyageCount.ToString("N0")), 82, 105),
+            new ResponsiveTableColumn("Gil/voyage", metric.Submarines.Select(submarine => $"{submarine.GilPerVoyage:N0}"), 105, 155),
+            new ResponsiveTableColumn("First return", metric.Submarines.Select(submarine => FormatIncomeDate(submarine.FirstReturnAtUtc)), 125, 170),
+            new ResponsiveTableColumn("Last return", metric.Submarines.Select(submarine => FormatIncomeDate(submarine.LastReturnAtUtc)), 125, 170));
+        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit;
+        if (layout.RequiresHorizontalScroll)
             flags |= ImGuiTableFlags.ScrollX;
-        var tableHeight = CalculateTableHeight(metric.Submarines.Count, needsHorizontalScroll);
+        var tableHeight = CalculateTableHeight(metric.Submarines.Count, layout.RequiresHorizontalScroll);
         if (!ImGui.BeginTable(
                 $"income-table-{metric.FcIdKey}",
                 10,
                 flags,
                 new Vector2(-1, tableHeight),
-                needsHorizontalScroll ? scaledMinimumWidth : 0f))
+                layout.RequiresHorizontalScroll ? layout.InnerWidth : 0f))
             return;
 
-        ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 165f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 68f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Gross gil", ImGuiTableColumnFlags.WidthStretch, 1f);
-        ImGui.TableSetupColumn("Recorded avg / day", ImGuiTableColumnFlags.WidthFixed, 130f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Observed run rate", ImGuiTableColumnFlags.WidthFixed, 130f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Voyages", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Gil/voyage", ImGuiTableColumnFlags.WidthFixed, 110f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("First return", ImGuiTableColumnFlags.WidthFixed, 140f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Last return", ImGuiTableColumnFlags.WidthFixed, 140f * ImGuiHelpers.GlobalScale);
+        SetupResponsiveTableColumns(layout);
         ImGui.TableSetupScrollFreeze(1, 1);
         ImGui.TableHeadersRow();
         foreach (var submarine in metric.Submarines)

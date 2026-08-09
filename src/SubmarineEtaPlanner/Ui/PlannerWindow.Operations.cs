@@ -89,29 +89,29 @@ public sealed partial class PlannerWindow
 
     private void DrawOperationsSubmarineTable(FcOperationalProjection projection, DateTimeOffset now)
     {
-        const float minimumWidth = 1_000f;
-        var scaledMinimumWidth = minimumWidth * ImGuiHelpers.GlobalScale;
-        var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < scaledMinimumWidth;
-        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
-        if (needsHorizontalScroll)
+        var layout = CalculateResponsiveTableLayout(
+            ImGui.GetContentRegionAvail().X,
+            new ResponsiveTableColumn("Submarine", projection.Submarines.Select(submarine => submarine.Name), 115, 220),
+            new ResponsiveTableColumn("Rank → after voyage", projection.Submarines.Select(submarine => OperationsRankPresentation.Create(submarine).Label), 125, 165),
+            new ResponsiveTableColumn("Build", projection.Submarines.Select(submarine => submarine.CurrentBuild.Code), 72, 100),
+            new ResponsiveTableColumn("State", projection.Submarines.Select(submarine => CompactOperationalStatePresentation.Create(submarine).Label), 88, 145),
+            new ResponsiveTableColumn("Current / next route", projection.Submarines.Select(submarine => FormatCompactRoute(submarine.DisplayedRoute)), 170, 420, Flexible: true, FlexWeight: 1.5f),
+            new ResponsiveTableColumn("Purpose", projection.Submarines.Select(submarine => submarine.RoutePurpose.ToString()), 82, 145),
+            new ResponsiveTableColumn("Expected EXP", projection.Submarines.Select(submarine => submarine.ExpectedExp?.ToString("N0") ?? "Unavailable"), 105, 145),
+            new ResponsiveTableColumn("Target ETA", projection.Submarines.Select(submarine => submarine.Rank >= submarine.EffectiveTargetRank ? "Ready" : submarine.TargetEtaAtUtc is { } eta ? FormatRelative(eta, now) : "Unavailable"), 105, 155));
+        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit;
+        if (layout.RequiresHorizontalScroll)
             flags |= ImGuiTableFlags.ScrollX;
-        var tableHeight = CalculateTableHeight(projection.Submarines.Count, needsHorizontalScroll);
+        var tableHeight = CalculateTableHeight(projection.Submarines.Count, layout.RequiresHorizontalScroll);
         if (!ImGui.BeginTable(
                 $"operations-projection-table-{projection.State.FcIdKey}",
                 8,
                 flags,
                 new Vector2(-1, tableHeight),
-                needsHorizontalScroll ? scaledMinimumWidth : 0f))
+                layout.RequiresHorizontalScroll ? layout.InnerWidth : 0f))
             return;
 
-        ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 150f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Rank → after voyage", ImGuiTableColumnFlags.WidthFixed, 125f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("State", ImGuiTableColumnFlags.WidthFixed, 90f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Current / next route", ImGuiTableColumnFlags.WidthStretch, 1.2f);
-        ImGui.TableSetupColumn("Purpose", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Expected EXP", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Target ETA", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
+        SetupResponsiveTableColumns(layout);
         ImGui.TableSetupScrollFreeze(1, 1);
         ImGui.TableHeadersRow();
         foreach (var submarine in projection.Submarines)

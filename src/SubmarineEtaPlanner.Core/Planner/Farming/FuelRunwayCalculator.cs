@@ -64,7 +64,7 @@ public static class FuelRunwayCalculator
         if (!cyclesAreComplete)
         {
             warnings.Add(
-                "Fuel runway is unavailable because one or more active farming submarines do not have complete route, fuel, and duration data.");
+                "Fuel forecast is unavailable because one or more active farming submarines do not have complete route, fuel, and duration data.");
         }
 
         var usableCycles = cycles

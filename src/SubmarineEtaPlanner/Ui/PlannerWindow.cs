@@ -31,6 +31,7 @@ public sealed partial class PlannerWindow : Window
     private readonly EtaPlannerService plannerService;
     private readonly ISubmarineCatalog catalog;
     private readonly IRouteOperationalCatalog operationalCatalog;
+    private readonly IRouteSelectionCatalog routeSelectionCatalog;
     private readonly Func<IReadOnlyList<CharacterFuelObservation>> getFuelObservations;
     private readonly Action<ulong> forgetFuelObservation;
     private readonly Func<SubmarineTrackerDependencyState> getSubmarineTrackerState;
@@ -74,6 +75,8 @@ public sealed partial class PlannerWindow : Window
         this.catalog = catalog;
         this.operationalCatalog = catalog as IRouteOperationalCatalog ??
             throw new ArgumentException("The submarine catalog must provide route operational data.", nameof(catalog));
+        this.routeSelectionCatalog = catalog as IRouteSelectionCatalog ??
+            throw new ArgumentException("The submarine catalog must provide route selection data.", nameof(catalog));
         this.getFuelObservations = getFuelObservations ?? throw new ArgumentNullException(nameof(getFuelObservations));
         this.forgetFuelObservation = forgetFuelObservation ?? throw new ArgumentNullException(nameof(forgetFuelObservation));
         this.getSubmarineTrackerState = getSubmarineTrackerState;
@@ -206,6 +209,15 @@ public sealed partial class PlannerWindow : Window
             if (showActionBar)
                 DrawSettingsActionBar();
         }
+        else if (this.currentPage == PlannerPage.FcSetup)
+        {
+            var actionBarHeight = 64f * ImGuiHelpers.GlobalScale;
+            if (ImGui.BeginChild("fc-setup-scroll", new Vector2(-1, -actionBarHeight), false))
+                DrawFcSetupPage();
+            ImGui.EndChild();
+
+            DrawFcSetupActionBar();
+        }
         else
         {
             if (ImGui.BeginChild("fleet-screen-scroll", new Vector2(-1, -1), false))
@@ -215,7 +227,6 @@ public sealed partial class PlannerWindow : Window
                     case PlannerPage.Operations: DrawOperationsPage(); break;
                     case PlannerPage.Leveling: DrawLevelingPage(); break;
                     case PlannerPage.Income: DrawIncomePage(); break;
-                    case PlannerPage.FcSetup: DrawFcSetupPage(); break;
                 }
             }
             ImGui.EndChild();

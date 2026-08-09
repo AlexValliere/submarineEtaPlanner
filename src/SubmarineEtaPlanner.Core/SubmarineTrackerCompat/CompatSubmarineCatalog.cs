@@ -2,7 +2,7 @@ using SubmarineEtaPlanner.Planner;
 
 namespace SubmarineEtaPlanner.SubmarineTrackerCompat;
 
-public sealed class CompatSubmarineCatalog : ISubmarineCatalog
+public sealed class CompatSubmarineCatalog : ISubmarineCatalog, IRouteSelectionCatalog
 {
     public int MaximumRank => 149;
 
@@ -17,6 +17,18 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
     private static readonly Dictionary<uint, SectorInfo> Sectors = Enumerable.Range(1, 149)
         .Select(i => CreateSector((uint)i))
         .ToDictionary(s => s.Point, s => s);
+
+    public IReadOnlyList<RouteDestination> RouteDestinations { get; } = Sectors.Values
+        .Select(sector => new RouteDestination(
+            sector.Point,
+            RouteDisplayFormatter.ExtractPointCode(sector.Point, $"{sector.MapCode}{sector.Point}"),
+            $"{sector.MapCode}{sector.Point}",
+            sector.MapId,
+            sector.MapCode,
+            sector.RequiredRank))
+        .OrderBy(destination => destination.MapId)
+        .ThenBy(destination => destination.SectorId)
+        .ToArray();
 
     public IReadOnlyList<UnlockRule> UnlockRules { get; } =
     [
@@ -194,6 +206,45 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
     public int GetPointRequiredRank(uint point)
         => Sectors.TryGetValue(point, out var sector) ? sector.RequiredRank : int.MaxValue;
 
+    public RouteSelectionValidation ValidateRoute(
+        IReadOnlyList<uint> route,
+        SubmarineBuild build,
+        IReadOnlySet<uint> unlockedPoints)
+    {
+        ArgumentNullException.ThrowIfNull(route);
+        ArgumentNullException.ThrowIfNull(build);
+        ArgumentNullException.ThrowIfNull(unlockedPoints);
+
+        var selected = route.ToArray();
+        var errors = new List<string>();
+        if (selected.Length == 0)
+            errors.Add("Select at least one destination.");
+        if (selected.Length > 5)
+            errors.Add("A voyage can visit at most five destinations.");
+        if (selected.Distinct().Count() != selected.Length)
+            errors.Add("A destination can only be selected once.");
+
+        var known = selected.Where(Sectors.ContainsKey).Select(point => Sectors[point]).ToArray();
+        var unknown = selected.Where(point => !Sectors.ContainsKey(point)).ToArray();
+        if (unknown.Length > 0)
+            errors.Add($"Unknown destinations: {string.Join(", ", unknown)}.");
+        var locked = known.Where(sector => !unlockedPoints.Contains(sector.Point)).ToArray();
+        if (locked.Length > 0)
+            errors.Add($"Not unlocked: {string.Join(", ", locked.Select(sector => sector.MapCode + sector.Point))}.");
+        var aboveRank = known.Where(sector => sector.RequiredRank > build.Rank).ToArray();
+        if (aboveRank.Length > 0)
+            errors.Add($"Requires a higher rank: {string.Join(", ", aboveRank.Select(sector => sector.MapCode + sector.Point))}.");
+        if (known.Select(sector => sector.MapId).Distinct().Skip(1).Any())
+            errors.Add("Every destination must be on the same map.");
+
+        var distance = known.Sum(sector => checked((long)sector.Distance));
+        if (known.Length == selected.Length && distance > build.Range)
+            errors.Add($"This route needs {distance:N0} range; the current build has {build.Range:N0}.");
+
+        TimeSpan? duration = errors.Count == 0 ? CalculateDuration(selected, build) : null;
+        return new RouteSelectionValidation(selected, errors.ToArray(), null, duration);
+    }
+
     private static uint ExpToNext(int rank)
         => (uint)(1000 + rank * rank * 24 + rank * 240);
 
@@ -244,10 +295,10 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog
         var requiredRank = Math.Max(1, (int)point - 2);
         var exp = (uint)(850 + point * 95 + Math.Pow(point, 1.35));
         var distance = 45u + point * 3u + (uint)(mapIndex * 20);
-        return new SectorInfo(point, $"M{mapIndex + 1}", requiredRank, exp, distance);
+        return new SectorInfo(point, $"M{mapIndex + 1}", mapIndex + 1, requiredRank, exp, distance);
     }
 
     private sealed record PartStats(int Surveillance, int Retrieval, int Favor, int Range, int Speed);
 
-    private sealed record SectorInfo(uint Point, string MapCode, int RequiredRank, uint Exp, uint Distance);
+    private sealed record SectorInfo(uint Point, string MapCode, uint MapId, int RequiredRank, uint Exp, uint Distance);
 }

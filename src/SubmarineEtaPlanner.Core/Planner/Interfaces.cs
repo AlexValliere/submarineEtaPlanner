@@ -43,6 +43,33 @@ public interface IRouteOperationalCatalog
         SubmarineBuild build);
 }
 
+public sealed record RouteDestination(
+    uint SectorId,
+    string Code,
+    string Name,
+    uint MapId,
+    string MapName,
+    int RequiredRank);
+
+public sealed record RouteSelectionValidation(
+    IReadOnlyList<uint> Route,
+    IReadOnlyList<string> Errors,
+    int? CeruleumTanks,
+    TimeSpan? Duration)
+{
+    public bool IsRunnable => Errors.Count == 0;
+}
+
+public interface IRouteSelectionCatalog
+{
+    IReadOnlyList<RouteDestination> RouteDestinations { get; }
+
+    RouteSelectionValidation ValidateRoute(
+        IReadOnlyList<uint> route,
+        SubmarineBuild build,
+        IReadOnlySet<uint> unlockedPoints);
+}
+
 public interface IRouteSearchDiagnostics
 {
     void ResetRouteSearchMetrics();

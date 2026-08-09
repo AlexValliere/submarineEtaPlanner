@@ -509,11 +509,57 @@ public sealed partial class PlannerWindow
         return changed;
     }
 
+    private readonly record struct ContentPanelFrame(
+        ImDrawListPtr DrawList,
+        Vector2 Start,
+        float Width,
+        float Padding);
+
+    private static readonly Stack<ContentPanelFrame> ContentPanelFrames = [];
+
+    private static void BeginContentPanel(string id)
+    {
+        var start = ImGui.GetCursorScreenPos();
+        var width = Math.Max(1f, ImGui.GetContentRegionAvail().X);
+        var padding = 10f * ImGuiHelpers.GlobalScale;
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.ChannelsSplit(2);
+        drawList.ChannelsSetCurrent(1);
+        ImGui.PushID(id);
+        ImGui.BeginGroup();
+        ImGui.Dummy(new Vector2(0, padding));
+        ImGui.Indent(padding);
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X - padding);
+        ContentPanelFrames.Push(new ContentPanelFrame(drawList, start, width, padding));
+    }
+
+    private static void EndContentPanel()
+    {
+        var frame = ContentPanelFrames.Pop();
+        ImGui.PopTextWrapPos();
+        ImGui.Unindent(frame.Padding);
+        ImGui.Dummy(new Vector2(0, frame.Padding));
+        ImGui.EndGroup();
+        var endY = ImGui.GetItemRectMax().Y;
+        frame.DrawList.ChannelsSetCurrent(0);
+        frame.DrawList.AddRectFilled(
+            frame.Start,
+            new Vector2(frame.Start.X + frame.Width, endY),
+            ImGui.ColorConvertFloat4ToU32(PlannerUi.PanelBackground),
+            6f * ImGuiHelpers.GlobalScale);
+        frame.DrawList.AddRect(
+            frame.Start,
+            new Vector2(frame.Start.X + frame.Width, endY),
+            ImGui.ColorConvertFloat4ToU32(PlannerUi.Border),
+            6f * ImGuiHelpers.GlobalScale);
+        frame.DrawList.ChannelsSetCurrent(1);
+        frame.DrawList.ChannelsMerge();
+        ImGui.PopID();
+    }
+
     private static void BeginSettingsCard(string id, string title, string description)
     {
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, PlannerUi.PanelBackground);
-        ImGui.PushStyleColor(ImGuiCol.Border, PlannerUi.Border);
-        ImGui.BeginChild(id, new Vector2(-1, 0), true);
+        BeginContentPanel(id);
         ImGui.TextColored(PlannerUi.Teal, title);
         ImGui.TextColored(PlannerUi.Muted, description);
         ImGui.Spacing();
@@ -523,8 +569,7 @@ public sealed partial class PlannerWindow
 
     private static void EndSettingsCard()
     {
-        ImGui.EndChild();
-        ImGui.PopStyleColor(2);
+        EndContentPanel();
     }
 
     private static void SettingLabel(string label, string help)

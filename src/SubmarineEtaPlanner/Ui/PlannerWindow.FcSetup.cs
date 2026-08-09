@@ -21,9 +21,10 @@ public sealed partial class PlannerWindow
     private int setupFixedReserve;
     private ulong? pendingForgottenFuelCharacterId;
     private readonly Dictionary<long, SubmarineSetupDraft> setupSubmarineDrafts = [];
-    private readonly HashSet<long> setupRouteEditors = [];
-    private readonly Dictionary<long, string> setupRouteInputs = [];
-    private readonly Dictionary<long, PinnedFarmingRouteParseResult> setupRouteValidation = [];
+    private long? setupRoutePickerSubmarineId;
+    private readonly List<uint> setupRoutePickerRoute = [];
+    private string setupRouteSearch = string.Empty;
+    private bool setupRoutePickerOpenRequested;
 
     private void DrawFcSetupPage()
     {
@@ -95,21 +96,28 @@ public sealed partial class PlannerWindow
 
         ImGui.Spacing();
         DrawCeruleumStockCard(selected);
+        DrawPinnedRoutePicker();
+        DrawUnsavedSetupModal();
+        DrawForgetFuelObservationModal();
+    }
 
-        var routesValid = SetupRoutesAreValid();
-        if (!routesValid)
-            PlannerUi.DrawStatusPill("Fix invalid pinned routes", PlannerUi.Amber);
-        else if (this.setupDraftDirty)
+    private void DrawFcSetupActionBar()
+    {
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, PlannerUi.PanelBackground);
+        if (!ImGui.BeginChild("fc-setup-action-bar", new Vector2(-1, 58f * ImGuiHelpers.GlobalScale), true, ImGuiWindowFlags.NoScrollbar))
+        {
+            ImGui.EndChild();
+            ImGui.PopStyleColor();
+            return;
+        }
+
+        if (this.setupDraftDirty)
             PlannerUi.DrawStatusPill("Unsaved FC changes", PlannerUi.Amber);
         else
             PlannerUi.DrawStatusPill("FC settings up to date", PlannerUi.Green);
         ImGui.SameLine();
-        if (!routesValid)
-            ImGui.BeginDisabled();
         if (PlannerUi.IconButtonWithText("save-fc-settings", FontAwesomeIcon.Check, "Save"))
             SaveSetupDraft();
-        if (!routesValid)
-            ImGui.EndDisabled();
         ImGui.SameLine();
         if (PlannerUi.IconButtonWithText("reset-fc-settings", FontAwesomeIcon.Undo, "Reset to global"))
         {
@@ -119,10 +127,13 @@ public sealed partial class PlannerWindow
         }
         ImGui.SameLine();
         if (PlannerUi.IconButtonWithText("revert-fc-settings", FontAwesomeIcon.Times, "Revert"))
-            SelectSetupFc(selected.FcIdKey);
+        {
+            if (this.selectedSetupFcId is { } fcIdKey)
+                SelectSetupFc(fcIdKey);
+        }
 
-        DrawUnsavedSetupModal();
-        DrawForgetFuelObservationModal();
+        ImGui.EndChild();
+        ImGui.PopStyleColor();
     }
 
     private void DrawCeruleumStockCard(FcState selected)
@@ -143,7 +154,7 @@ public sealed partial class PlannerWindow
         BeginSettingsCard(
             "fc-ceruleum-stock-card",
             "Ceruleum stock",
-            "Choose the local stock observation used for this FC and preview its read-only fuel runway.");
+            "Choose the local stock observation used for this FC and preview its read-only fuel forecast.");
 
         SettingLabel("Source", "Automatic selects a single matching local observation, or the current live character when it belongs to this FC.");
         var sourceLabels = new Dictionary<FuelStockMode, string>
@@ -185,9 +196,9 @@ public sealed partial class PlannerWindow
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
-        SettingLabel("Reserve", "Automatic reserve keeps enough tanks for one complete resend of every farming submarine.");
+        SettingLabel("Safety stock", "Automatic safety stock keeps enough tanks for one complete resend of every active farming submarine.");
         var automaticReserve = this.setupAutomaticReserve;
-        if (ImGui.Checkbox("Automatic reserve##setup-automatic-reserve", ref automaticReserve))
+        if (ImGui.Checkbox("Automatic safety stock##setup-automatic-reserve", ref automaticReserve))
         {
             this.setupAutomaticReserve = automaticReserve;
             this.setupDraftDirty = true;
@@ -197,14 +208,14 @@ public sealed partial class PlannerWindow
             ImGui.TextColored(
                 PlannerUi.Muted,
                 forecast.TanksPerFullResend is { } tanksPerFullResend
-                    ? $"One complete resend of all farming submarines: {tanksPerFullResend:N0} tanks"
-                    : "One complete resend of all farming submarines: unavailable");
+                    ? $"One complete fleet trip: {tanksPerFullResend:N0} tanks"
+                    : "One complete fleet trip: unavailable");
         }
         else
         {
             var reserve = this.setupFixedReserve;
             ImGui.SetNextItemWidth(Math.Min(180f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
-            if (ImGui.InputInt("Fixed reserve##setup-fixed-reserve", ref reserve))
+            if (ImGui.InputInt("Fixed safety stock##setup-fixed-reserve", ref reserve))
             {
                 this.setupFixedReserve = Math.Max(0, reserve);
                 this.setupDraftDirty = true;
@@ -387,7 +398,7 @@ public sealed partial class PlannerWindow
         DateTimeOffset now,
         string fcIdKey)
     {
-        ImGui.TextColored(PlannerUi.Teal, "Runway preview");
+        ImGui.TextColored(PlannerUi.Teal, "Fuel forecast preview");
         var source = FuelStockPresentation.Describe(stock, now);
         if (ImGui.BeginTable(
                 $"setup-fuel-runway-{fcIdKey}",
@@ -399,13 +410,13 @@ public sealed partial class PlannerWindow
             DrawSetupRunwayRow("Stock basis", forecast.StockBasis is { } stockBasis ? $"{stockBasis:N0} tanks" : "Unavailable");
             DrawSetupRunwayRow("Stock source", source.SourceLine);
             DrawSetupRunwayRow(
-                "Tanks per full resend",
+                "Tanks per fleet trip",
                 forecast.TanksPerFullResend is { } tanksPerFullResend
                     ? tanksPerFullResend.ToString("N0")
                     : "Unavailable");
             DrawSetupRunwayRow("Estimated tanks/day", forecast.TanksPerDay.ToString("N1"));
             DrawSetupRunwayRow(
-                "Full fleet sends remaining",
+                "Fleet trips left",
                 forecast.Status == FuelRunwayStatus.Unavailable ? "Unavailable" : forecast.FullFleetSendsRemaining.ToString("N0"));
             DrawSetupRunwayRow(
                 "Refill before",
@@ -419,7 +430,7 @@ public sealed partial class PlannerWindow
 
         if (forecast.Status == FuelRunwayStatus.Unavailable)
         {
-            ImGui.TextColored(PlannerUi.Amber, "Runway unavailable");
+            ImGui.TextColored(PlannerUi.Amber, "Fuel forecast unavailable");
             foreach (var warning in forecast.Warnings)
                 ImGui.TextWrapped(warning);
         }
@@ -479,35 +490,56 @@ public sealed partial class PlannerWindow
             return;
         }
 
-        const float minimumWidth = 940f;
-        var scaledMinimumWidth = minimumWidth * ImGuiHelpers.GlobalScale;
-        var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < scaledMinimumWidth;
+        var effectiveTargetRank = this.setupUseGlobalTarget
+            ? this.configuration.Settings.TargetRank
+            : Math.Clamp(this.setupTargetRank, 1, this.catalog.MaximumRank);
+        var layout = CalculateResponsiveTableLayout(
+            ImGui.GetContentRegionAvail().X,
+            new ResponsiveTableColumn("Submarine", selected.Submarines.Select(submarine => submarine.Name), 115, 220),
+            new ResponsiveTableColumn("Rank", selected.Submarines.Select(submarine => submarine.Rank.ToString()), 58, 80),
+            new ResponsiveTableColumn("Tracked route", selected.Submarines.Select(submarine => FormatCompactRoute(submarine.CurrentRoute)), 135, 320, Flexible: true),
+            new ResponsiveTableColumn(
+                "Assignment",
+                selected.Submarines.Select(submarine =>
+                {
+                    var draft = this.setupSubmarineDrafts.GetValueOrDefault(submarine.SubmarineId, SubmarineSetupDraft.Automatic);
+                    return AssignmentLabel(draft.Assignment, SubmarineRoleResolver.Resolve(draft.Assignment, submarine.Rank, effectiveTargetRank));
+                }),
+                165,
+                235),
+            new ResponsiveTableColumn(
+                "Pinned farming route",
+                selected.Submarines.Select(submarine =>
+                {
+                    var route = this.setupSubmarineDrafts.GetValueOrDefault(submarine.SubmarineId, SubmarineSetupDraft.Automatic).PinnedFarmingRoute;
+                    return route is { Count: > 0 } ? FormatCompactRoute(route) : "No pin — tracked route is used";
+                }),
+                210,
+                420,
+                Flexible: true,
+                FlexWeight: 1.35f));
         var flags = ImGuiTableFlags.Borders |
                     ImGuiTableFlags.RowBg |
                     ImGuiTableFlags.Resizable |
-                    ImGuiTableFlags.SizingStretchProp;
-        if (needsHorizontalScroll)
+                    ImGuiTableFlags.SizingFixedFit;
+        if (layout.RequiresHorizontalScroll)
             flags |= ImGuiTableFlags.ScrollX;
+        var tableHeight = layout.RequiresHorizontalScroll
+            ? CalculateTableHeight(selected.Submarines.Count * 2, true)
+            : 0f;
 
         if (!ImGui.BeginTable(
                 $"setup-submarines-{selected.FcIdKey}",
                 5,
                 flags,
-                Vector2.Zero,
-                needsHorizontalScroll ? scaledMinimumWidth : 0f))
+                new Vector2(-1, tableHeight),
+                layout.RequiresHorizontalScroll ? layout.InnerWidth : 0f))
             return;
 
-        ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthFixed, 145f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 58f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Tracked route", ImGuiTableColumnFlags.WidthStretch, 0.9f);
-        ImGui.TableSetupColumn("Assignment", ImGuiTableColumnFlags.WidthFixed, 180f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Pinned farming route", ImGuiTableColumnFlags.WidthStretch, 1.35f);
+        SetupResponsiveTableColumns(layout);
         ImGui.TableSetupScrollFreeze(1, 1);
         ImGui.TableHeadersRow();
 
-        var effectiveTargetRank = this.setupUseGlobalTarget
-            ? this.configuration.Settings.TargetRank
-            : Math.Clamp(this.setupTargetRank, 1, this.catalog.MaximumRank);
         foreach (var submarine in selected.Submarines.OrderBy(submarine => submarine.SubmarineId))
         {
             var draft = this.setupSubmarineDrafts.GetValueOrDefault(
@@ -530,15 +562,14 @@ public sealed partial class PlannerWindow
             }
             else
             {
-                ImGui.TextColored(PlannerUi.Cyan, FormatRoute(submarine.CurrentRoute));
-                PlannerUi.Tooltip("Tracked route from SubmarineTracker.");
+                DrawCompactRoute(submarine.CurrentRoute);
             }
 
             ImGui.TableNextColumn();
             DrawAssignmentCombo(submarine, draft, effectiveTargetRank);
 
             ImGui.TableNextColumn();
-            DrawPinnedRouteControls(submarine, draft);
+            DrawPinnedRouteControls(selected, submarine, draft);
         }
 
         ImGui.EndTable();
@@ -573,12 +604,19 @@ public sealed partial class PlannerWindow
         ImGui.EndCombo();
     }
 
-    private void DrawPinnedRouteControls(SubmarineState submarine, SubmarineSetupDraft draft)
+    private void DrawPinnedRouteControls(FcState freeCompany, SubmarineState submarine, SubmarineSetupDraft draft)
     {
         if (draft.PinnedFarmingRoute is { Count: > 0 } pinnedRoute)
         {
-            ImGui.TextColored(PlannerUi.Teal, $"Pinned: {FormatRoute(pinnedRoute)}");
-            PlannerUi.Tooltip("Saved farming route. This is independent of the tracked voyage route.");
+            ImGui.TextColored(PlannerUi.Muted, "Pinned:");
+            ImGui.SameLine();
+            DrawCompactRoute(pinnedRoute, PlannerUi.Teal);
+            var validation = ValidateSetupRoute(freeCompany, submarine, pinnedRoute);
+            if (!validation.IsRunnable)
+            {
+                ImGui.TextColored(PlannerUi.Amber, "Saved route is not runnable now");
+                PlannerUi.Tooltip(string.Join('\n', validation.Errors));
+            }
         }
         else
         {
@@ -589,7 +627,7 @@ public sealed partial class PlannerWindow
         if (!canUseTrackedRoute)
             ImGui.BeginDisabled();
         if (ImGui.SmallButton($"Use tracked route##setup-use-tracked-{submarine.SubmarineId}"))
-            SetPinnedRouteFromTracked(submarine);
+            SetPinnedRouteFromTracked(freeCompany, submarine);
         if (!canUseTrackedRoute)
             ImGui.EndDisabled();
         if (!canUseTrackedRoute)
@@ -597,14 +635,7 @@ public sealed partial class PlannerWindow
 
         ImGui.SameLine();
         if (ImGui.SmallButton($"Edit##setup-edit-route-{submarine.SubmarineId}"))
-        {
-            this.setupRouteEditors.Add(submarine.SubmarineId);
-            var input = draft.PinnedFarmingRoute is { Count: > 0 }
-                ? string.Join(", ", draft.PinnedFarmingRoute)
-                : string.Empty;
-            this.setupRouteInputs[submarine.SubmarineId] = input;
-            this.setupRouteValidation[submarine.SubmarineId] = ParsePinnedRoute(input);
-        }
+            OpenPinnedRoutePicker(submarine, draft.PinnedFarmingRoute);
 
         ImGui.SameLine();
         var hasPin = draft.PinnedFarmingRoute is { Count: > 0 };
@@ -613,80 +644,226 @@ public sealed partial class PlannerWindow
         if (ImGui.SmallButton($"Clear pin##setup-clear-route-{submarine.SubmarineId}"))
         {
             this.setupSubmarineDrafts[submarine.SubmarineId] = draft.WithPinnedFarmingRoute(null);
-            ClosePinnedRouteEditor(submarine.SubmarineId);
+            if (this.setupRoutePickerSubmarineId == submarine.SubmarineId)
+                ClosePinnedRoutePicker();
             this.setupDraftDirty = true;
         }
         if (!hasPin)
             ImGui.EndDisabled();
 
-        if (!this.setupRouteEditors.Contains(submarine.SubmarineId))
-            return;
-
-        var routeInput = this.setupRouteInputs.GetValueOrDefault(submarine.SubmarineId, string.Empty);
-        ImGui.SetNextItemWidth(-1);
-        if (ImGui.InputTextWithHint(
-                $"##setup-route-input-{submarine.SubmarineId}",
-                "Sector IDs, e.g. 7, 12, 18",
-                ref routeInput,
-                256))
-        {
-            this.setupRouteInputs[submarine.SubmarineId] = routeInput;
-            var validation = ParsePinnedRoute(routeInput);
-            this.setupRouteValidation[submarine.SubmarineId] = validation;
-            if (validation.IsValid)
-            {
-                this.setupSubmarineDrafts[submarine.SubmarineId] = draft.WithPinnedFarmingRoute(validation.SectorIds);
-                this.setupDraftDirty = true;
-            }
-        }
-
-        var result = this.setupRouteValidation.GetValueOrDefault(submarine.SubmarineId) ?? ParsePinnedRoute(routeInput);
-        this.setupRouteValidation[submarine.SubmarineId] = result;
-        if (!result.IsValid)
-        {
-            ImGui.TextColored(PlannerUi.Amber, result.ErrorMessage);
-            return;
-        }
-
-        ImGui.TextColored(
-            PlannerUi.Muted,
-            $"Preview: {string.Join(" → ", result.SectorIds.Select(this.catalog.PointName))}");
     }
 
-    private void SetPinnedRouteFromTracked(SubmarineState submarine)
+    private void SetPinnedRouteFromTracked(FcState freeCompany, SubmarineState submarine)
     {
-        var input = string.Join(", ", submarine.CurrentRoute);
-        var validation = ParsePinnedRoute(input);
-        if (!validation.IsValid)
+        var validation = ValidateSetupRoute(freeCompany, submarine, submarine.CurrentRoute);
+        if (!validation.IsRunnable)
         {
-            this.setupRouteEditors.Add(submarine.SubmarineId);
-            this.setupRouteInputs[submarine.SubmarineId] = input;
-            this.setupRouteValidation[submarine.SubmarineId] = validation;
+            OpenPinnedRoutePicker(submarine, submarine.CurrentRoute);
             return;
         }
 
         var draft = this.setupSubmarineDrafts.GetValueOrDefault(
             submarine.SubmarineId,
             SubmarineSetupDraft.Automatic);
-        this.setupSubmarineDrafts[submarine.SubmarineId] = draft.WithPinnedFarmingRoute(validation.SectorIds);
-        ClosePinnedRouteEditor(submarine.SubmarineId);
+        this.setupSubmarineDrafts[submarine.SubmarineId] = draft.WithPinnedFarmingRoute(validation.Route);
+        ClosePinnedRoutePicker();
         this.setupDraftDirty = true;
     }
 
-    private PinnedFarmingRouteParseResult ParsePinnedRoute(string input)
-        => PinnedFarmingRouteParser.Parse(
-            input,
-            sectorId => this.catalog.GetPointRequiredRank(sectorId) != int.MaxValue);
-
-    private bool SetupRoutesAreValid()
-        => this.setupRouteEditors.All(submarineId =>
-            this.setupRouteValidation.TryGetValue(submarineId, out var result) && result.IsValid);
-
-    private void ClosePinnedRouteEditor(long submarineId)
+    private void OpenPinnedRoutePicker(SubmarineState submarine, IReadOnlyList<uint>? route)
     {
-        this.setupRouteEditors.Remove(submarineId);
-        this.setupRouteInputs.Remove(submarineId);
-        this.setupRouteValidation.Remove(submarineId);
+        this.setupRoutePickerSubmarineId = submarine.SubmarineId;
+        this.setupRoutePickerRoute.Clear();
+        if (route is not null)
+            this.setupRoutePickerRoute.AddRange(route);
+        this.setupRouteSearch = string.Empty;
+        this.setupRoutePickerOpenRequested = true;
+    }
+
+    private void ClosePinnedRoutePicker()
+    {
+        this.setupRoutePickerSubmarineId = null;
+        this.setupRoutePickerRoute.Clear();
+        this.setupRouteSearch = string.Empty;
+        this.setupRoutePickerOpenRequested = false;
+    }
+
+    private RouteSelectionValidation ValidateSetupRoute(
+        FcState freeCompany,
+        SubmarineState submarine,
+        IReadOnlyList<uint> route)
+    {
+        var build = this.catalog.ResolveBuild(submarine.BuildParts, submarine.Rank);
+        return build is null
+            ? new RouteSelectionValidation(route.ToArray(), ["The current submarine build could not be resolved."], null, null)
+            : this.routeSelectionCatalog.ValidateRoute(route, build, freeCompany.UnlockedPoints);
+    }
+
+    private void DrawPinnedRoutePicker()
+    {
+        const string popupId = "Choose farming route###setup-route-picker";
+        if (this.setupRoutePickerOpenRequested)
+        {
+            ImGui.OpenPopup(popupId);
+            this.setupRoutePickerOpenRequested = false;
+        }
+
+        ImGui.SetNextWindowSize(new Vector2(760f, 640f) * ImGuiHelpers.GlobalScale, ImGuiCond.FirstUseEver);
+        if (!ImGui.BeginPopupModal(popupId, ImGuiWindowFlags.NoSavedSettings))
+            return;
+
+        var freeCompany = this.snapshot?.FreeCompanies.FirstOrDefault(fc => fc.FcIdKey == this.selectedSetupFcId);
+        var submarine = freeCompany?.Submarines.FirstOrDefault(sub => sub.SubmarineId == this.setupRoutePickerSubmarineId);
+        if (freeCompany is null || submarine is null)
+        {
+            ImGui.TextColored(PlannerUi.Amber, "The selected submarine is no longer available.");
+            if (ImGui.Button("Close"))
+            {
+                ClosePinnedRoutePicker();
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.EndPopup();
+            return;
+        }
+
+        var build = this.catalog.ResolveBuild(submarine.BuildParts, submarine.Rank);
+        PlannerUi.IconText(FontAwesomeIcon.Ship, $"{submarine.Name} · R{submarine.Rank} · {build?.Code ?? "Unknown build"}", PlannerUi.Teal);
+        ImGui.TextColored(PlannerUi.Muted, "Choose up to five unlocked destinations. Their order is the order the submarine will visit them.");
+        if (submarine.CurrentRoute.Count > 0)
+        {
+            ImGui.TextUnformatted("Tracked route:");
+            ImGui.SameLine();
+            DrawCompactRoute(submarine.CurrentRoute);
+        }
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Selected route");
+        if (this.setupRoutePickerRoute.Count == 0)
+        {
+            ImGui.TextColored(PlannerUi.Muted, "No destinations selected.");
+        }
+        else
+        {
+            DrawCompactRoute(this.setupRoutePickerRoute, PlannerUi.Teal);
+            for (var index = 0; index < this.setupRoutePickerRoute.Count; index++)
+            {
+                var sectorId = this.setupRoutePickerRoute[index];
+                ImGui.PushID($"selected-route-{sectorId}-{index}");
+                ImGui.TextUnformatted($"{index + 1}. {this.catalog.PointName(sectorId)}");
+                ImGui.SameLine();
+                if (index == 0)
+                    ImGui.BeginDisabled();
+                if (ImGui.SmallButton("Up"))
+                    (this.setupRoutePickerRoute[index - 1], this.setupRoutePickerRoute[index]) =
+                        (this.setupRoutePickerRoute[index], this.setupRoutePickerRoute[index - 1]);
+                if (index == 0)
+                    ImGui.EndDisabled();
+                ImGui.SameLine();
+                if (index == this.setupRoutePickerRoute.Count - 1)
+                    ImGui.BeginDisabled();
+                if (ImGui.SmallButton("Down"))
+                    (this.setupRoutePickerRoute[index + 1], this.setupRoutePickerRoute[index]) =
+                        (this.setupRoutePickerRoute[index], this.setupRoutePickerRoute[index + 1]);
+                if (index == this.setupRoutePickerRoute.Count - 1)
+                    ImGui.EndDisabled();
+                ImGui.SameLine();
+                if (ImGui.SmallButton("Remove"))
+                {
+                    this.setupRoutePickerRoute.RemoveAt(index);
+                    ImGui.PopID();
+                    break;
+                }
+                ImGui.PopID();
+            }
+        }
+
+        ImGui.Separator();
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("##route-search", "Search destination name or letter…", ref this.setupRouteSearch, 128);
+        var search = this.setupRouteSearch.Trim();
+        var destinations = this.routeSelectionCatalog.RouteDestinations
+            .Where(destination => freeCompany.UnlockedPoints.Contains(destination.SectorId))
+            .Where(destination => destination.RequiredRank <= submarine.Rank)
+            .Where(destination => string.IsNullOrEmpty(search) ||
+                                  destination.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                                  destination.Code.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                                  destination.MapName.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(destination => (destination.MapId, destination.MapName))
+            .OrderBy(group => group.Key.MapId)
+            .ToArray();
+
+        if (ImGui.BeginChild("route-destination-list", new Vector2(-1, 230f * ImGuiHelpers.GlobalScale), true))
+        {
+            if (destinations.Length == 0)
+            {
+                ImGui.TextColored(
+                    PlannerUi.Muted,
+                    freeCompany.UnlockDataKnown
+                        ? "No unlocked destinations match this search and submarine rank."
+                        : "Unlocked destination data is not available for this free company.");
+            }
+            foreach (var map in destinations)
+            {
+                ImGui.TextColored(PlannerUi.Teal, map.Key.MapName);
+                foreach (var destination in map)
+                {
+                    var alreadySelected = this.setupRoutePickerRoute.Contains(destination.SectorId);
+                    var tentative = this.setupRoutePickerRoute.Append(destination.SectorId).ToArray();
+                    var tentativeValidation = build is null
+                        ? new RouteSelectionValidation(tentative, ["The current submarine build could not be resolved."], null, null)
+                        : this.routeSelectionCatalog.ValidateRoute(tentative, build, freeCompany.UnlockedPoints);
+                    var canAdd = !alreadySelected && tentativeValidation.IsRunnable;
+                    if (!canAdd)
+                        ImGui.BeginDisabled();
+                    if (ImGui.Selectable(
+                            $"{destination.Code} — {destination.Name} · R{destination.RequiredRank}##destination-{destination.SectorId}"))
+                    {
+                        this.setupRoutePickerRoute.Add(destination.SectorId);
+                    }
+                    if (!canAdd)
+                        ImGui.EndDisabled();
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    {
+                        ImGui.SetTooltip(alreadySelected
+                            ? "Already selected."
+                            : string.Join('\n', tentativeValidation.Errors));
+                    }
+                }
+                ImGui.Spacing();
+            }
+        }
+        ImGui.EndChild();
+
+        var validation = ValidateSetupRoute(freeCompany, submarine, this.setupRoutePickerRoute);
+        if (this.setupRoutePickerRoute.Count > 0)
+        {
+            var tanksText = validation.CeruleumTanks is { } tanks ? $"{tanks:N0} tanks" : "Fuel unavailable";
+            var durationText = validation.Duration is { } duration ? FormatDuration(duration) : "duration unavailable";
+            ImGui.TextColored(PlannerUi.Muted, $"Preview: {tanksText} · {durationText}");
+        }
+        foreach (var error in validation.Errors)
+            ImGui.TextColored(PlannerUi.Amber, error);
+
+        if (!validation.IsRunnable)
+            ImGui.BeginDisabled();
+        if (PlannerUi.IconButtonWithText("apply-pinned-route", FontAwesomeIcon.Check, "Use route"))
+        {
+            var draft = this.setupSubmarineDrafts.GetValueOrDefault(submarine.SubmarineId, SubmarineSetupDraft.Automatic);
+            this.setupSubmarineDrafts[submarine.SubmarineId] = draft.WithPinnedFarmingRoute(validation.Route);
+            this.setupDraftDirty = true;
+            ClosePinnedRoutePicker();
+            ImGui.CloseCurrentPopup();
+        }
+        if (!validation.IsRunnable)
+            ImGui.EndDisabled();
+        ImGui.SameLine();
+        if (PlannerUi.IconButtonWithText("cancel-pinned-route", FontAwesomeIcon.Times, "Cancel"))
+        {
+            ClosePinnedRoutePicker();
+            ImGui.CloseCurrentPopup();
+        }
+
+        ImGui.EndPopup();
     }
 
     private static string AssignmentLabel(
@@ -728,17 +905,13 @@ public sealed partial class PlannerWindow
             fleet?.Submarines.Select(submarine => submarine.SubmarineId) ?? []);
         foreach (var (submarineId, submarineDraft) in draft.Submarines)
             this.setupSubmarineDrafts[submarineId] = submarineDraft;
-        this.setupRouteEditors.Clear();
-        this.setupRouteInputs.Clear();
-        this.setupRouteValidation.Clear();
+        ClosePinnedRoutePicker();
         this.setupDraftDirty = false;
     }
 
     private void SaveSetupDraft()
     {
         if (this.selectedSetupFcId is null)
-            return;
-        if (!SetupRoutesAreValid())
             return;
         var preferences = this.configuration.GetFcPreferences(this.selectedSetupFcId);
         var draft = FcSetupDraft.Capture(preferences, this.setupSubmarineDrafts.Keys) with
@@ -756,9 +929,7 @@ public sealed partial class PlannerWindow
             draft = draft.WithSubmarine(submarineId, submarineDraft);
         var applyResult = draft.ApplyTo(preferences);
         this.setupDraftDirty = false;
-        this.setupRouteEditors.Clear();
-        this.setupRouteInputs.Clear();
-        this.setupRouteValidation.Clear();
+        ClosePinnedRoutePicker();
         this.saveConfiguration();
         if (applyResult.EtaRefreshRequired)
             QueueRefresh(ForecastRefreshMode.Incremental);
@@ -770,13 +941,6 @@ public sealed partial class PlannerWindow
             return;
         ImGui.TextWrapped("Save the staged FC setup changes before opening another free company?");
         ImGui.Spacing();
-        var routesValid = SetupRoutesAreValid();
-        if (!routesValid)
-        {
-            ImGui.TextColored(PlannerUi.Amber, "Fix invalid pinned routes before saving.");
-            ImGui.Spacing();
-            ImGui.BeginDisabled();
-        }
         if (PlannerUi.IconButtonWithText("save-switch-fc", FontAwesomeIcon.Check, "Save"))
         {
             SaveSetupDraft();
@@ -785,8 +949,6 @@ public sealed partial class PlannerWindow
             this.pendingSetupFcId = null;
             ImGui.CloseCurrentPopup();
         }
-        if (!routesValid)
-            ImGui.EndDisabled();
         ImGui.SameLine();
         if (PlannerUi.IconButtonWithText("discard-switch-fc", FontAwesomeIcon.Trash, "Discard"))
         {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.29.0
+
+- Added player-friendly fuel forecasting, responsive content-aware table columns, compact FC route displays with full-name tooltips, a validated farming-route picker, and persistent FC Setup actions.
+
 ## 0.5.28.0
 
 - Added staged FC ceruleum source and reserve controls with FC-scoped live and timestamped local observations, immediate stale-safe runway previews, and confirmed local snapshot removal.

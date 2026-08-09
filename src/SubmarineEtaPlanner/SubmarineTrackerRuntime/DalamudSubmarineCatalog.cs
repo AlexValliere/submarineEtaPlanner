@@ -10,6 +10,7 @@ namespace SubmarineEtaPlanner.SubmarineTrackerRuntime;
 public sealed class DalamudSubmarineCatalog :
     ISubmarineCatalog,
     IRouteOperationalCatalog,
+    IRouteSelectionCatalog,
     IRouteSearchDiagnostics,
     IPlannerDataDiagnostics
 {
@@ -61,6 +62,26 @@ public sealed class DalamudSubmarineCatalog :
             .Select(row => row.RowId)
             .OrderDescending()
             .ToArray();
+        RouteDestinations = this.explorationSheet
+            .Where(row => !row.StartingPoint && row.ExpReward != 0)
+            .Select(row =>
+            {
+                var name = PointName(row.RowId);
+                var mapId = FindVoyageStart(row.RowId);
+                var mapName = PointName(mapId);
+                return new RouteDestination(
+                    row.RowId,
+                    RouteDisplayFormatter.ExtractPointCode(row.RowId, name),
+                    name,
+                    mapId,
+                    string.IsNullOrWhiteSpace(mapName) || mapName == mapId.ToString()
+                        ? $"Map {Array.IndexOf(this.reversedMapStartSectors.Reverse().ToArray(), mapId) + 1}"
+                        : mapName,
+                    checked((int)row.RankReq));
+            })
+            .OrderBy(destination => destination.MapId)
+            .ThenBy(destination => destination.SectorId)
+            .ToArray();
         this.lastRank = this.rankSheet.Last(row => row.Capacity != 0).RowId;
         this.calculatedRoutes = LoadCalculatedRoutes(pluginDirectory);
         this.routeIndex = RouteCandidateIndex.Build(this.calculatedRoutes, this.sectorById);
@@ -71,6 +92,8 @@ public sealed class DalamudSubmarineCatalog :
     }
 
     public IReadOnlyList<UnlockRule> UnlockRules { get; }
+
+    public IReadOnlyList<RouteDestination> RouteDestinations { get; }
 
     public int MaximumRank => checked((int)this.lastRank);
 
@@ -486,6 +509,56 @@ public sealed class DalamudSubmarineCatalog :
 
     public int GetPointRequiredRank(uint point)
         => this.sectorById.TryGetValue(point, out var sector) ? (int)sector.RankReq : int.MaxValue;
+
+    public RouteSelectionValidation ValidateRoute(
+        IReadOnlyList<uint> route,
+        SubmarineBuild build,
+        IReadOnlySet<uint> unlockedPoints)
+    {
+        ArgumentNullException.ThrowIfNull(route);
+        ArgumentNullException.ThrowIfNull(build);
+        ArgumentNullException.ThrowIfNull(unlockedPoints);
+
+        var selected = route.ToArray();
+        var errors = new List<string>();
+        if (selected.Length == 0)
+            errors.Add("Select at least one destination.");
+        if (selected.Length > 5)
+            errors.Add("A voyage can visit at most five destinations.");
+        if (selected.Distinct().Count() != selected.Length)
+            errors.Add("A destination can only be selected once.");
+
+        var known = selected.Where(this.sectorById.ContainsKey).Select(point => this.sectorById[point]).ToArray();
+        var unknown = selected.Where(point => !this.sectorById.ContainsKey(point)).ToArray();
+        if (unknown.Length > 0)
+            errors.Add($"Unknown destinations: {string.Join(", ", unknown)}.");
+        var locked = known.Where(sector => !unlockedPoints.Contains(sector.RowId)).ToArray();
+        if (locked.Length > 0)
+            errors.Add($"Not unlocked: {string.Join(", ", locked.Select(sector => PointName(sector.RowId)))}.");
+        var aboveRank = known.Where(sector => sector.RankReq > build.Rank).ToArray();
+        if (aboveRank.Length > 0)
+            errors.Add($"Requires a higher rank: {string.Join(", ", aboveRank.Select(sector => PointName(sector.RowId)))}.");
+        if (known.Select(sector => FindVoyageStart(sector.RowId)).Distinct().Skip(1).Any())
+            errors.Add("Every destination must be on the same map.");
+
+        var structurallyValid = selected.Length is >= 1 and <= 5 &&
+                                known.Length == selected.Length &&
+                                known.Select(sector => FindVoyageStart(sector.RowId)).Distinct().Count() <= 1 &&
+                                selected.Distinct().Count() == selected.Length;
+        var exactRoute = structurallyValid ? this.routeIndex.FindExact(selected) : null;
+        if (structurallyValid && exactRoute is null)
+            errors.Add("This ordered route is not available in the current voyage data.");
+        else if (exactRoute is not null && exactRoute.Distance > build.Range)
+            errors.Add($"This route needs {exactRoute.Distance:N0} range; the current build has {build.Range:N0}.");
+
+        var fuel = structurallyValid ? CalculateFuel(selected) : null;
+        TimeSpan? duration = structurallyValid ? CalculateDuration(selected, build) : null;
+        return new RouteSelectionValidation(
+            selected,
+            errors.ToArray(),
+            fuel is { IsComplete: true } ? fuel.CeruleumTanks : null,
+            duration > TimeSpan.Zero ? duration : null);
+    }
 
     private CalculatedRouteData LoadCalculatedRoutes(string pluginDirectory)
     {
@@ -904,6 +977,7 @@ public sealed class DalamudSubmarineCatalog :
         private readonly RouteRecord[] routesById;
         private readonly Dictionary<int, RouteRecord[]> routesByMap;
         private readonly Dictionary<uint, RouteRecord[]> routesBySector;
+        private readonly Dictionary<string, RouteRecord> routesByOrderedSectors;
 
         private RouteCandidateIndex(RouteRecord[] routes)
         {
@@ -923,11 +997,19 @@ public sealed class DalamudSubmarineCatalog :
                 .ToDictionary(
                     group => group.Key,
                     group => group.Select(pair => pair.route).OrderBy(route => route.Distance).ToArray());
+            this.routesByOrderedSectors = stableRoutes
+                .GroupBy(route => RouteKey(route.Sectors), StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         }
 
         public int RouteCount { get; }
 
         public RouteRecord GetById(int routeId) => this.routesById[routeId];
+
+        public RouteRecord? FindExact(IReadOnlyList<uint> route)
+            => this.routesByOrderedSectors.GetValueOrDefault(RouteKey(route));
+
+        private static string RouteKey(IEnumerable<uint> route) => string.Join(',', route);
 
         public IEnumerable<RouteRecord> Enumerate(SectorMask mustInclude, int range)
         {

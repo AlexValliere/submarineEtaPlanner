@@ -17,26 +17,39 @@ public sealed partial class PlannerWindow
             _ => PlannerUi.Muted,
         };
 
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, PlannerUi.PanelBackground);
-        ImGui.PushStyleColor(ImGuiCol.Border, PlannerUi.Border);
-        ImGui.BeginChild($"fuel-runway-{projection.State.FcIdKey}", new Vector2(-1, 0), true);
-        ImGui.TextColored(PlannerUi.Teal, "Ceruleum runway");
+        BeginContentPanel($"fuel-runway-{projection.State.FcIdKey}");
+        ImGui.TextColored(PlannerUi.Teal, "Fuel forecast");
         ImGui.SameLine();
         PlannerUi.DrawStatusPill(forecast.Status.ToString(), statusColor);
         ImGui.TextColored(PlannerUi.Muted, "Read-only forecast from local stock and active farming schedules.");
         ImGui.Spacing();
 
+        var fuelLayout = CalculateResponsiveTableLayout(
+            ImGui.GetContentRegionAvail().X,
+            new ResponsiveTableColumn("Stock", [FormatFuelStock(forecast)], 150, 330, Flexible: true, FlexWeight: 1.35f),
+            new ResponsiveTableColumn("Safety stock", [$"{forecast.Reserve:N0} tanks"], 105, 155),
+            new ResponsiveTableColumn("Projected use", [$"{forecast.TanksPerDay:N1} tanks/day"], 110, 170),
+            new ResponsiveTableColumn("Fleet trips left", [forecast.Status == FuelRunwayStatus.Unavailable ? "Unavailable" : forecast.FullFleetSendsRemaining.ToString("N0")], 115, 165),
+            new ResponsiveTableColumn("Refill before", [FormatRefillDeadline(forecast, now)], 155, 310, Flexible: true, FlexWeight: 1.3f));
+        var fuelTableFlags = ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingFixedFit;
+        if (fuelLayout.RequiresHorizontalScroll)
+            fuelTableFlags |= ImGuiTableFlags.ScrollX;
         if (ImGui.BeginTable(
                 $"fuel-runway-values-{projection.State.FcIdKey}",
                 5,
-                ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp))
+                fuelTableFlags,
+                new Vector2(-1, fuelLayout.RequiresHorizontalScroll ? CalculateTableHeight(1, true) : 0f),
+                fuelLayout.RequiresHorizontalScroll ? fuelLayout.InnerWidth : 0f))
         {
-            ImGui.TableSetupColumn("Stock", ImGuiTableColumnFlags.WidthStretch, 1.35f);
-            ImGui.TableSetupColumn("Reserve", ImGuiTableColumnFlags.WidthStretch, 0.75f);
-            ImGui.TableSetupColumn("Projected use", ImGuiTableColumnFlags.WidthStretch, 0.9f);
-            ImGui.TableSetupColumn("Full fleet sends", ImGuiTableColumnFlags.WidthStretch, 0.9f);
-            ImGui.TableSetupColumn("Refill before", ImGuiTableColumnFlags.WidthStretch, 1.3f);
-            ImGui.TableHeadersRow();
+            SetupResponsiveTableColumns(fuelLayout);
+            ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+            ImGui.TableNextColumn(); ImGui.TextUnformatted("Stock");
+            ImGui.TableNextColumn(); ImGui.TextUnformatted("Safety stock");
+            PlannerUi.Tooltip("Tanks intentionally kept available. Automatic safety stock equals one complete resend of every active farming submarine.");
+            ImGui.TableNextColumn(); ImGui.TextUnformatted("Projected use");
+            ImGui.TableNextColumn(); ImGui.TextUnformatted("Fleet trips left");
+            PlannerUi.Tooltip("Complete fleet-wide farming trips available before the safety stock would be used.");
+            ImGui.TableNextColumn(); ImGui.TextUnformatted("Refill before");
             ImGui.TableNextRow();
             DrawTableText(FormatFuelStock(forecast));
             DrawTableText($"{forecast.Reserve:N0} tanks");
@@ -50,14 +63,13 @@ public sealed partial class PlannerWindow
 
         if (forecast.ApproximateRunway is { } runway && forecast.Status != FuelRunwayStatus.Unavailable)
         {
-            ImGui.TextColored(PlannerUi.Muted, $"Approximate runway above reserve: {FormatDuration(runway)}.");
+            ImGui.TextColored(PlannerUi.Muted, $"Approximate time above safety stock: {FormatDuration(runway)}.");
         }
 
         foreach (var warning in forecast.Warnings)
             ImGui.TextColored(PlannerUi.Amber, $"• {warning}");
 
-        ImGui.EndChild();
-        ImGui.PopStyleColor(2);
+        EndContentPanel();
     }
 
     private FuelRunwayForecast CreateFuelRunwayForecast(

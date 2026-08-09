@@ -24,42 +24,6 @@ public sealed partial class PlannerWindow
         FcHeaderColumn Salvage,
         FcHeaderColumn CurrentVoyage);
 
-    private sealed record FcSubmarineTableColumn(
-        string Label,
-        ImGuiTableColumnFlags Flags,
-        float WidthOrWeight);
-
-    private sealed record FcSubmarineTableSchema(
-        float MinimumWidth,
-        IReadOnlyList<FcSubmarineTableColumn> Columns);
-
-    private static readonly FcSubmarineTableSchema LevelingFcTableSchema = new(
-        1285f,
-        [
-            new("Submarine", ImGuiTableColumnFlags.WidthFixed, 190f),
-            new("Rank", ImGuiTableColumnFlags.WidthFixed, 95f),
-            new("ETA", ImGuiTableColumnFlags.WidthFixed, 92f),
-            new("Returns", ImGuiTableColumnFlags.WidthFixed, 130f),
-            new("Voyages left", ImGuiTableColumnFlags.WidthFixed, 127f),
-            new("Salvage gil", ImGuiTableColumnFlags.WidthFixed, 100f),
-            new("Build", ImGuiTableColumnFlags.WidthFixed, 72f),
-            new("Current route", ImGuiTableColumnFlags.WidthStretch, 0.75f),
-            new("Next after return", ImGuiTableColumnFlags.WidthStretch, 1f),
-            new("Status", ImGuiTableColumnFlags.WidthFixed, 116f),
-        ]);
-
-    private static readonly FcSubmarineTableSchema ReadyFcTableSchema = new(
-        880f,
-        [
-            new("Submarine", ImGuiTableColumnFlags.WidthFixed, 190f),
-            new("Rank", ImGuiTableColumnFlags.WidthFixed, 95f),
-            new("Returns", ImGuiTableColumnFlags.WidthFixed, 130f),
-            new("Salvage gil", ImGuiTableColumnFlags.WidthFixed, 100f),
-            new("Build", ImGuiTableColumnFlags.WidthFixed, 72f),
-            new("Current route", ImGuiTableColumnFlags.WidthStretch, 1f),
-            new("Status", ImGuiTableColumnFlags.WidthFixed, 116f),
-        ]);
-
     private void DrawDashboardPage()
     {
         var renderNow = DateTimeOffset.UtcNow;
@@ -657,11 +621,50 @@ public sealed partial class PlannerWindow
                 PlannerUi.Amber);
         }
 
-        var tableSchema = ready ? ReadyFcTableSchema : LevelingFcTableSchema;
-        var minimumTableWidth = tableSchema.MinimumWidth * ImGuiHelpers.GlobalScale;
-        var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
+        var orderedSubmarines = result.PerSubResults.OrderBy(sub => sub.SubmarineName).ToArray();
+        string CurrentVoyageLabel(PerSubEtaResult sub)
+        {
+            var state = submarineStatesById.GetValueOrDefault(sub.SubmarineId);
+            return state is null ? "—" : CurrentVoyageProgressFormatter.Create(state, this.catalog, renderNow).Countdown;
+        }
+        string NextRouteLabel(PerSubEtaResult sub)
+        {
+            var likely = sub.NextRouteOutcomes
+                .Where(outcome => outcome.Route.Count > 0)
+                .OrderByDescending(outcome => outcome.Probability)
+                .FirstOrDefault();
+            return FormatCompactRoute(likely?.Route ?? sub.NextRoute);
+        }
+        string StatusLabel(PerSubEtaResult sub)
+        {
+            var progress = VoyageProgressFormatter.Create(sub, result.TargetRank, renderNow);
+            if (!sub.IncludedInLevelingTarget) return "Passive";
+            if (progress.State == VoyageProgressState.ReadyToCollect) return "Ready to collect";
+            if (!sub.IsComplete || sub.Warnings.Count > 0) return "Warnings";
+            return sub.StartingRank >= result.TargetRank ? "Ready" : "Leveling";
+        }
+
+        var columns = new List<ResponsiveTableColumn>
+        {
+            new("Submarine", orderedSubmarines.Select(sub => sub.SubmarineName), 135, 240, Flexible: true),
+            new("Rank", orderedSubmarines.Select(sub => $"{sub.StartingRank} → {sub.FinalRank}"), 82, 120),
+        };
+        if (!ready)
+            columns.Add(new ResponsiveTableColumn("ETA", orderedSubmarines.Select(sub => !sub.IncludedInLevelingTarget ? "—" : sub.StartingRank >= result.TargetRank ? "now" : $"P50 {FormatRelative(sub.EtaAtUtc, renderNow)}"), 92, 150));
+        columns.Add(new ResponsiveTableColumn("Returns", orderedSubmarines.Select(CurrentVoyageLabel), 105, 165));
+        if (!ready)
+            columns.Add(new ResponsiveTableColumn("Voyages left", orderedSubmarines.Select(sub => VoyageProgressFormatter.Create(sub, result.TargetRank, renderNow).Label), 115, 175));
+        columns.Add(new ResponsiveTableColumn("Salvage gil", orderedSubmarines.Select(sub => ResultsViewState.FormatCompactGil((salvageBySubmarine.GetValueOrDefault(sub.SubmarineId) ?? SubmarineSalvageSummary.Empty).TotalGil)), 100, 145));
+        columns.Add(new ResponsiveTableColumn("Build", orderedSubmarines.Select(sub => sub.PlannedBuild), 72, 110));
+        columns.Add(new ResponsiveTableColumn("Current route", orderedSubmarines.Select(sub => FormatCompactRoute(sub.CurrentRoute)), 125, 300, Flexible: true));
+        if (!ready)
+            columns.Add(new ResponsiveTableColumn("Next after return", orderedSubmarines.Select(NextRouteLabel), 135, 330, Flexible: true, FlexWeight: 1.2f));
+        columns.Add(new ResponsiveTableColumn("Status", orderedSubmarines.Select(StatusLabel), 110, 155));
+
+        var layout = CalculateResponsiveTableLayout(ImGui.GetContentRegionAvail().X, columns.ToArray());
+        var needsHorizontalScroll = layout.RequiresHorizontalScroll;
         var tableFlags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.BordersOuter | ImGuiTableFlags.RowBg |
-                         ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
+                         ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit;
         if (needsHorizontalScroll)
             tableFlags |= ImGuiTableFlags.ScrollX;
 
@@ -672,23 +675,17 @@ public sealed partial class PlannerWindow
         var tableViewportWidth = ImGui.GetContentRegionAvail().X;
         if (!ImGui.BeginTable(
                 $"table-{fcKey}",
-                tableSchema.Columns.Count,
+                columns.Count,
                 tableFlags,
                 tableSize,
-                needsHorizontalScroll ? minimumTableWidth : 0f))
+                needsHorizontalScroll ? layout.InnerWidth : 0f))
             return;
 
-        foreach (var column in tableSchema.Columns)
-        {
-            var widthOrWeight = column.Flags.HasFlag(ImGuiTableColumnFlags.WidthFixed)
-                ? column.WidthOrWeight * ImGuiHelpers.GlobalScale
-                : column.WidthOrWeight;
-            ImGui.TableSetupColumn(column.Label, column.Flags, widthOrWeight);
-        }
+        SetupResponsiveTableColumns(layout);
         ImGui.TableSetupScrollFreeze(1, 1);
         ImGui.TableHeadersRow();
 
-        foreach (var sub in result.PerSubResults.OrderBy(sub => sub.SubmarineName))
+        foreach (var sub in orderedSubmarines)
         {
             var subKey = $"{fcKey}:{sub.SubmarineId}";
             var salvage = salvageBySubmarine.GetValueOrDefault(sub.SubmarineId) ?? SubmarineSalvageSummary.Empty;
@@ -786,7 +783,7 @@ public sealed partial class PlannerWindow
 
         ImGui.EndTable();
 
-        foreach (var sub in result.PerSubResults.OrderBy(sub => sub.SubmarineName))
+        foreach (var sub in orderedSubmarines)
         {
             var subKey = $"{fcKey}:{sub.SubmarineId}";
             if (!this.expandedSubmarines.Contains(subKey))
@@ -1013,11 +1010,31 @@ public sealed partial class PlannerWindow
         }
 
         var columnCount = showDiagnostics ? 10 : 8;
-        var minimumTableWidth = (showDiagnostics ? 1260f : 1000f) * ImGuiHelpers.GlobalScale;
-        var needsHorizontalScroll = ImGui.GetContentRegionAvail().X < minimumTableWidth;
+        var previewColumns = new List<ResponsiveTableColumn>
+        {
+            new("Step", Enumerable.Range(1, sub.VoyagePreview.Count).Select(index => index.ToString()), 42, 60),
+            new("Returns", sub.VoyagePreview.Select(plan => plan.ReturnAtUtc.LocalDateTime.ToString("g")), 125, 180),
+            new("Route", sub.VoyagePreview.Select(plan => FormatCompactRoute(plan.Route)), 130, 330, Flexible: true, FlexWeight: 1.1f),
+            new("Why this route", sub.VoyagePreview.Select(plan => VoyageRoutePurposePresentation.Create(plan, point => this.catalog.PointName(point)).Label), 135, 360, Flexible: true, FlexWeight: 1.25f),
+            new("EXP", sub.VoyagePreview.Select(plan => plan.ExpGain.ToString("N0")), 82, 120),
+            new("Rank", sub.VoyagePreview.Select(plan => $"{plan.RankBefore}→{plan.RankAfter}"), 78, 110),
+            new("Repeats", sub.VoyagePreview.Select(plan => plan.RepeatCount.ToString()), 65, 90),
+            new("Build", sub.VoyagePreview.Select(plan => plan.BuildCode), 64, 100),
+        };
+        if (showDiagnostics)
+        {
+            previewColumns.Add(new ResponsiveTableColumn(
+                "Per voyage",
+                sub.VoyagePreview.Select(plan => $"{FormatDuration(plan.PerVoyageDuration == TimeSpan.Zero ? plan.Duration : plan.PerVoyageDuration)} / {(plan.ExpPerVoyage == 0 ? plan.ExpGain : plan.ExpPerVoyage):N0} EXP"),
+                150,
+                220));
+            previewColumns.Add(new ResponsiveTableColumn("EXP/hour", sub.VoyagePreview.Select(plan => plan.ExpPerHour.ToString("N0")), 92, 125));
+        }
+        var layout = CalculateResponsiveTableLayout(ImGui.GetContentRegionAvail().X, previewColumns.ToArray());
+        var needsHorizontalScroll = layout.RequiresHorizontalScroll;
         var needsVerticalScroll = sub.VoyagePreview.Count > 8;
         var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable |
-                    ImGuiTableFlags.SizingStretchProp;
+                    ImGuiTableFlags.SizingFixedFit;
         if (needsHorizontalScroll)
             flags |= ImGuiTableFlags.ScrollX;
         if (needsVerticalScroll)
@@ -1030,22 +1047,10 @@ public sealed partial class PlannerWindow
                 columnCount,
                 flags,
                 tableSize,
-                needsHorizontalScroll ? minimumTableWidth : 0f))
+                needsHorizontalScroll ? layout.InnerWidth : 0f))
             return;
 
-        ImGui.TableSetupColumn("Step", ImGuiTableColumnFlags.WidthFixed, 42f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Returns", ImGuiTableColumnFlags.WidthFixed, 140f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Route", ImGuiTableColumnFlags.WidthStretch, 1.1f);
-        ImGui.TableSetupColumn("Why this route", ImGuiTableColumnFlags.WidthStretch, 1.25f);
-        ImGui.TableSetupColumn("EXP", ImGuiTableColumnFlags.WidthFixed, 86f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Rank", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Repeats", ImGuiTableColumnFlags.WidthFixed, 65f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("Build", ImGuiTableColumnFlags.WidthFixed, 64f * ImGuiHelpers.GlobalScale);
-        if (showDiagnostics)
-        {
-            ImGui.TableSetupColumn("Per voyage", ImGuiTableColumnFlags.WidthFixed, 165f * ImGuiHelpers.GlobalScale);
-            ImGui.TableSetupColumn("EXP/hour", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
-        }
+        SetupResponsiveTableColumns(layout);
         ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableHeadersRow();
 
