@@ -93,6 +93,8 @@ public sealed record FcState(
 
     public string FcIdKey => Convert.ToHexString(FcId);
 
+    public ulong? GameFreeCompanyId { get; init; }
+
     public bool UnlockDataKnown { get; init; } = true;
 
     public FcDataFingerprint DataFingerprint { get; init; }

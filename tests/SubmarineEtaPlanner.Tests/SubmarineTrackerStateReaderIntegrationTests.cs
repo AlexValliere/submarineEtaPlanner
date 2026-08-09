@@ -8,6 +8,8 @@ namespace SubmarineEtaPlanner.Tests;
 
 public sealed class SubmarineTrackerStateReaderIntegrationTests
 {
+    private const ulong GameFreeCompanyId = 9_876_543_210;
+
     [Fact]
     public void ReadsCurrentSubmarineTrackerSchemaFromSqlite()
     {
@@ -26,6 +28,10 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
 
             Assert.True(freeCompanies.Count == 1, string.Join(Environment.NewLine, warnings));
             var fc = freeCompanies[0];
+            var expectedRawFcId = MessagePackSerializer.Serialize(GameFreeCompanyId);
+            Assert.Equal(expectedRawFcId, fc.FcId);
+            Assert.Equal(Convert.ToHexString(expectedRawFcId), fc.FcIdKey);
+            Assert.Equal(GameFreeCompanyId, fc.GameFreeCompanyId);
             Assert.Equal("TEST - Cerberus", fc.DisplayName);
             Assert.Equal(new HashSet<uint> { 1, 3 }, fc.UnlockedPoints);
             Assert.Equal(new HashSet<uint> { 1 }, fc.ExploredPoints);
@@ -105,7 +111,36 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
         }
     }
 
-    private static void CreateDatabase(string path)
+    [Fact]
+    public void InvalidFreeCompanyIdDoesNotPreventReadingTheFreeCompanyAndSubmarine()
+    {
+        var directory = Directory.CreateTempSubdirectory("seta-tracker-invalid-fc-id-");
+        try
+        {
+            var databasePath = Path.Combine(directory.FullName, "submarine-sqlite.db");
+            var invalidFcId = new byte[] { 0xc1 };
+            CreateDatabase(databasePath, invalidFcId);
+            var settings = EtaSettings.CreateDefault() with
+            {
+                SubmarineTrackerDatabasePathOverride = databasePath,
+            };
+            var warnings = new List<string>();
+
+            var fc = Assert.Single(new SubmarineTrackerStateReader().Read(settings, warnings));
+
+            Assert.Equal(invalidFcId, fc.FcId);
+            Assert.Equal(Convert.ToHexString(invalidFcId), fc.FcIdKey);
+            Assert.Null(fc.GameFreeCompanyId);
+            Assert.Single(fc.Submarines);
+            Assert.Empty(warnings);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private static void CreateDatabase(string path, byte[]? freeCompanyId = null)
     {
         SQLiteConnection.CreateFile(path);
         using var connection = new SQLiteConnection($"Data Source={path}");
@@ -148,7 +183,7 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             command.ExecuteNonQuery();
         }
 
-        var fcId = new byte[] { 0x10, 0x20 };
+        var fcId = freeCompanyId ?? MessagePackSerializer.Serialize(GameFreeCompanyId);
         using (var command = connection.CreateCommand())
         {
             command.CommandText = """

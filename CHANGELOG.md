@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.9.0
+
+- Exposed decoded numeric game Free Company IDs while preserving existing tracker BLOBs and hexadecimal settings keys.
+
 ## 0.5.8.0
 
 - Split fleet UI pages, shared components, and custom headers into focused partial files without changing planner behavior.

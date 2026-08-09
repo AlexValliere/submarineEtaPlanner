@@ -91,6 +91,7 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
                 explored,
                 [])
             {
+                GameFreeCompanyId = FreeCompanyIdDecoder.TryDecode(fcId),
                 UnlockDataKnown = unlockDataKnown,
             });
         }

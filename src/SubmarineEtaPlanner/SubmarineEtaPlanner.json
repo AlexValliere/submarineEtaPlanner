@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Splits fleet UI pages and shared components into focused partial files without changing planner behavior.",
+  "Changelog": "Exposes decoded numeric game Free Company IDs while preserving existing tracker BLOB settings keys.",
   "Tags": [
     "Submarine",
     "ETA",
