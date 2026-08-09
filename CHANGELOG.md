@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.23.0
+
+- Added a framework-thread-only, read-only reader for the logged-in character's ceruleum tank inventory, identity, home world, and free company ID.
+
 ## 0.5.22.0
 
 - Added read-only fuel-stock observations and deterministic manual, selected-character, and automatic resolution without summing inventories across characters.

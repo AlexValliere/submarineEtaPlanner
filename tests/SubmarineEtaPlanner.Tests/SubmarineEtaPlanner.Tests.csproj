@@ -17,4 +17,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SubmarineEtaPlanner.Core\SubmarineEtaPlanner.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Fuel\ICurrentCharacterFuelReader.cs"
+             Link="Runtime\Fuel\ICurrentCharacterFuelReader.cs" />
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Fuel\CurrentCharacterFuelReader.cs"
+             Link="Runtime\Fuel\CurrentCharacterFuelReader.cs" />
+  </ItemGroup>
 </Project>

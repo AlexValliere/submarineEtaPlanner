@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Adds read-only fuel-stock models and deterministic manual, selected-character, and automatic resolution rules.",
+  "Changelog": "Adds a framework-thread-only, read-only live ceruleum tank reader for the logged-in character.",
   "Tags": [
     "Submarine",
     "ETA",
