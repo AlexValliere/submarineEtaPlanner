@@ -110,20 +110,11 @@ public sealed class Configuration : IPluginConfiguration
                 preferences.TargetRankOverride = 1;
                 changed = true;
             }
+            changed |= FcPreferencesMigration.Normalize(preferences);
         }
 
         return changed;
     }
-}
-
-[Serializable]
-public sealed class FcPreferences
-{
-    public bool Favorite { get; set; }
-
-    public int? TargetRankOverride { get; set; }
-
-    public FcStrategyPreset? StrategyOverride { get; set; }
 }
 
 public enum OperationsView { ReturningSoon = 0, AllFleets = 1, Leveling = 2, Farming = 3 }

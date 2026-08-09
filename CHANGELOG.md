@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.10.0
+
+- Added versioned farming configuration storage for submarine assignments, pinned routes, fuel holders, manual tank inventory, reserves, and per-submarine collection delays without changing planner behavior or UI.
+
 ## 0.5.9.0
 
 - Exposed decoded numeric game Free Company IDs while preserving existing tracker BLOBs and hexadecimal settings keys.

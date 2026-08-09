@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Exposes decoded numeric game Free Company IDs while preserving existing tracker BLOB settings keys.",
+  "Changelog": "Adds versioned farming configuration storage for submarine assignments, routes, fuel, inventory, reserves, and collection delays.",
   "Tags": [
     "Submarine",
     "ETA",

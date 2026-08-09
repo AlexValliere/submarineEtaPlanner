@@ -2,7 +2,7 @@ namespace SubmarineEtaPlanner.Planner;
 
 public static class EtaSettingsMigration
 {
-    public const int CurrentVersion = 11;
+    public const int CurrentVersion = 12;
 
     public static bool Migrate(EtaSettings settings, ref int version)
     {
