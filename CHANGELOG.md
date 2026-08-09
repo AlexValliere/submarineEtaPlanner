@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.20.0
+
+- Corrected farming fuel configuration by adding an explicit stock-source mode and a forward migration from configuration version 12 to 13.
+
 ## 0.5.19.0
 
 - Separated historical recorded income averages from observed submarine run rates, corrected FC and global aggregation for staggered tracking start dates, and added explicit UI labels and sorting for both metrics.

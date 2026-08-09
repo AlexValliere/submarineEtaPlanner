@@ -2,6 +2,13 @@ using SubmarineEtaPlanner.Planner;
 
 namespace SubmarineEtaPlanner;
 
+public enum FuelStockMode
+{
+    Automatic = 0,
+    Character = 1,
+    Manual = 2,
+}
+
 public enum SubmarineAssignment
 {
     Auto = 0,
@@ -29,9 +36,23 @@ public sealed class FcPreferences
 
     public FcStrategyPreset? StrategyOverride { get; set; }
 
+    /// <summary>
+    /// The sole authority for selecting the fuel-stock source. Automatic ignores both saved values, resolves
+    /// dynamically, and never persists a selected character. Character uses only the saved holder without
+    /// fallback; Manual uses only the saved tank count. Changing modes preserves both inactive saved values.
+    /// </summary>
+    public FuelStockMode FuelStockMode { get; set; } = FuelStockMode.Automatic;
+
+    /// <summary>
+    /// The explicitly selected holder used only in Character mode. Automatic and Manual modes ignore it.
+    /// </summary>
     public ulong? FuelHolderCharacterId { get; set; }
 
-    public int? ManualCeruleumTanks { get; set; }
+    /// <summary>
+    /// The saved tank count used only in Manual mode. This remains nullable for version-12 JSON compatibility;
+    /// consumers should use <c>GetValueOrDefault()</c> after normalization.
+    /// </summary>
+    public int? ManualCeruleumTanks { get; set; } = 0;
 
     public int? CeruleumReserve { get; set; }
 
@@ -44,9 +65,21 @@ internal static class FcPreferencesMigration
     {
         var changed = false;
 
-        if (preferences.ManualCeruleumTanks is < 0)
+        if (!Enum.IsDefined(preferences.FuelStockMode))
+        {
+            preferences.FuelStockMode = FuelStockMode.Automatic;
+            changed = true;
+        }
+
+        if (preferences.ManualCeruleumTanks is null or < 0)
         {
             preferences.ManualCeruleumTanks = 0;
+            changed = true;
+        }
+
+        if (preferences.FuelHolderCharacterId == 0)
+        {
+            preferences.FuelHolderCharacterId = null;
             changed = true;
         }
 
@@ -59,7 +92,7 @@ internal static class FcPreferencesMigration
         if (preferences.Submarines is null)
         {
             preferences.Submarines = [];
-            return true;
+            changed = true;
         }
 
         foreach (var contentId in preferences.Submarines.Keys.ToArray())
