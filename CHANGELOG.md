@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.26.0
+
+- Added recurring farming dispatch-cycle projections with per-submarine collection-delay overrides, next-departure timing, and explicit tracking of already-paid current voyages.
+
 ## 0.5.25.0
 
 - Resolved each farming-role submarine's effective repeated route from its pinned route or current ordered SubmarineTracker route, with explicit build, sector, fuel, and duration validation warnings.
