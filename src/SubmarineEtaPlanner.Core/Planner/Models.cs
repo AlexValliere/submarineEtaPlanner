@@ -179,6 +179,40 @@ public sealed record VoyageObservation(
     public long GrossNpcGil => Items.Sum(item => item.TotalGil);
 }
 
+/// <summary>
+/// Identifies an unordered historical set of voyage sectors.
+/// The historical sector sequence is unknown and is not encoded in this signature.
+/// </summary>
+public readonly record struct SectorSetSignature(string Value)
+{
+    /// <summary>
+    /// Creates a deterministic signature from the sorted, distinct sector IDs.
+    /// The historical sector sequence is unknown, so input order is intentionally discarded.
+    /// </summary>
+    public static SectorSetSignature Create(IEnumerable<uint> sectorIds)
+    {
+        ArgumentNullException.ThrowIfNull(sectorIds);
+        return new SectorSetSignature(string.Join(
+            "-",
+            sectorIds
+                .Distinct()
+                .Order()
+                .Select(sectorId => sectorId.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+    }
+
+    public override string ToString() => Value;
+}
+
+/// <summary>
+/// Resource metrics for one historical voyage observation.
+/// Historical rows describe an unordered sector set; the historical sector sequence is unknown.
+/// </summary>
+public sealed record RecordedVoyageMetrics(
+    VoyageObservation Observation,
+    SectorSetSignature SectorSignature,
+    int? CeruleumTanks,
+    bool FuelKnown);
+
 public sealed record SalvageItemTotal(
     uint ItemId,
     string Name,

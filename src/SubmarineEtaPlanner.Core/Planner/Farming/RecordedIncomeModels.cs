@@ -35,6 +35,15 @@ public sealed record IncomeSubmarineMetrics(
     public double GilPerDay => ObservedRunRateGilPerDay;
     public int Rank { get; init; }
     public CurrentBuildPresentation CurrentBuild { get; init; } = CurrentBuildPresentation.Unavailable;
+    public IReadOnlyList<RecordedVoyageMetrics> RecordedVoyages { get; init; } = [];
+    public int KnownFuelVoyageCount { get; init; }
+    public int UnknownFuelVoyageCount { get; init; }
+    public int TotalRecordedTanks { get; init; }
+    public double? AverageTanksPerVoyage { get; init; }
+    public double? GrossGilPerTank { get; init; }
+    public IReadOnlyDictionary<SectorSetSignature, long> GrossGilByRouteSignature { get; init; }
+        = new System.Collections.ObjectModel.ReadOnlyDictionary<SectorSetSignature, long>(
+            new Dictionary<SectorSetSignature, long>());
 }
 
 public sealed record IncomeFcMetrics(
@@ -52,6 +61,14 @@ public sealed record IncomeFcMetrics(
 {
     public int ValidVoyages => VoyageCount;
     public double GilPerDay => ObservedRunRateGilPerDay;
+    public int KnownFuelVoyageCount { get; init; }
+    public int UnknownFuelVoyageCount { get; init; }
+    public int TotalRecordedTanks { get; init; }
+    public double? AverageTanksPerVoyage { get; init; }
+    public double? GrossGilPerTank { get; init; }
+    public IReadOnlyDictionary<SectorSetSignature, long> GrossGilByRouteSignature { get; init; }
+        = new System.Collections.ObjectModel.ReadOnlyDictionary<SectorSetSignature, long>(
+            new Dictionary<SectorSetSignature, long>());
 }
 
 public sealed record IncomeSummaryMetrics(

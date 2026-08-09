@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.21.0
+
+- Added historical ceruleum tank totals, tanks per voyage, gross gil per tank, and gross gil aggregation by deterministic route signature.
+
 ## 0.5.20.0
 
 - Corrected farming fuel configuration by adding an explicit stock-source mode and a forward migration from configuration version 12 to 13.

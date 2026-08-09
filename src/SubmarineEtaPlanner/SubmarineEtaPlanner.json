@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Corrects farming fuel configuration with an explicit stock-source mode and a version 12-to-13 migration.",
+  "Changelog": "Adds historical ceruleum usage and recorded fuel-efficiency metrics by submarine, free company, and route signature.",
   "Tags": [
     "Submarine",
     "ETA",
