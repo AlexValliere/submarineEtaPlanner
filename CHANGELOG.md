@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.8.0
+
+- Split fleet UI pages, shared components, and custom headers into focused partial files without changing planner behavior.
+
 ## 0.5.7.0
 
 - Refactored core fleet presentation into focused Operations and Farming modules without changing planner behavior.

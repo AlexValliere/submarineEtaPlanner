@@ -1055,13 +1055,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.5.7.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.5.8.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("Refactors core fleet presentation into focused modules", repoJson);
+        Assert.Contains("Splits fleet UI pages and shared components into focused partial files", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -1096,13 +1096,13 @@ public sealed class EtaSimulatorTests
     public void IncomeUiUsesPlainMetricNames()
     {
         var repositoryRoot = Path.GetDirectoryName(FindRepoJson())!;
-        var fleetScreens = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SubmarineEtaPlanner", "Ui", "PlannerWindow.FleetScreens.cs"));
+        var incomePage = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SubmarineEtaPlanner", "Ui", "PlannerWindow.Income.cs"));
 
-        Assert.DoesNotContain("covered day", fleetScreens, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("valid voyage", fleetScreens, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("\"Gil / day\"", fleetScreens);
-        Assert.Contains("\"Gil / voyage\"", fleetScreens);
-        Assert.Contains("DrawIncomePeriodButton(\"1 year\", IncomePeriod.Days365)", fleetScreens);
+        Assert.DoesNotContain("covered day", incomePage, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("valid voyage", incomePage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"Gil / day\"", incomePage);
+        Assert.Contains("\"Gil / voyage\"", incomePage);
+        Assert.Contains("DrawIncomePeriodButton(\"1 year\", IncomePeriod.Days365)", incomePage);
     }
 
     [Fact]

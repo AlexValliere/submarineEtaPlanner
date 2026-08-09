@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Refactors core fleet presentation into focused modules without changing planner behavior.",
+  "Changelog": "Splits fleet UI pages and shared components into focused partial files without changing planner behavior.",
   "Tags": [
     "Submarine",
     "ETA",
