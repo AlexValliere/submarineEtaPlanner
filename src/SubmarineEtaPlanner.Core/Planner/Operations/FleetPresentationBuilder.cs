@@ -7,7 +7,8 @@ public static class FleetPresentationBuilder
         EtaResult? result,
         EtaSettings effectiveSettings,
         ISubmarineCatalog catalog,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        IReadOnlyDictionary<long, SubmarineAssignment>? submarineAssignments = null)
     {
         var resultBySubmarine = result?.PerSubResults.ToDictionary(item => item.SubmarineId) ?? [];
         var projections = fc.Submarines
@@ -16,11 +17,16 @@ public static class FleetPresentationBuilder
                 resultBySubmarine.GetValueOrDefault(submarine.SubmarineId),
                 effectiveSettings,
                 catalog,
-                now))
+                now,
+                submarineAssignments?.GetValueOrDefault(submarine.SubmarineId) ?? SubmarineAssignment.Auto))
             .OrderBy(submarine => submarine.NeedsImmediateAction ? 0 : 1)
             .ThenBy(submarine => submarine.NextActionAtUtc ?? DateTimeOffset.MaxValue)
             .ThenBy(submarine => submarine.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var roleSummary = new FcRoleSummary(
+            projections.Count(submarine => submarine.EffectiveRole == EffectiveSubmarineRole.Leveling),
+            projections.Count(submarine => submarine.EffectiveRole == EffectiveSubmarineRole.Farming),
+            projections.Count(submarine => submarine.EffectiveRole == EffectiveSubmarineRole.Paused));
         var farming = fc.Submarines.Count > 0 && fc.Submarines.All(submarine => submarine.Rank >= effectiveSettings.TargetRank);
         var forecast = result?.CompletionForecast;
         return new FcOperationalProjection(
@@ -31,7 +37,10 @@ public static class FleetPresentationBuilder
             projections,
             forecast?.P50AtUtc ?? result?.FcCompletionAtUtc,
             forecast?.P10AtUtc,
-            forecast?.P90AtUtc);
+            forecast?.P90AtUtc)
+        {
+            RoleSummary = roleSummary,
+        };
     }
 
     private static SubmarineOperationalProjection CreateSubmarine(
@@ -39,7 +48,8 @@ public static class FleetPresentationBuilder
         PerSubEtaResult? result,
         EtaSettings settings,
         ISubmarineCatalog catalog,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        SubmarineAssignment assignment)
     {
         var progress = CurrentVoyageProgressFormatter.Create(submarine, catalog, now);
         var trackedBuild = catalog.ResolveBuild(submarine.BuildParts, submarine.Rank);
@@ -133,6 +143,7 @@ public static class FleetPresentationBuilder
             result?.NextRouteOutcomes ?? [])
         {
             CurrentBuild = currentBuild,
+            EffectiveRole = SubmarineRoleResolver.Resolve(assignment, submarine.Rank, settings.TargetRank),
         };
     }
 

@@ -23,7 +23,7 @@ public sealed partial class PlannerWindow
 
         var now = DateTimeOffset.UtcNow;
         var projections = CreateProjections(currentSnapshot, now)
-            .Where(projection => projection.Mode == FleetMode.Leveling)
+            .Where(projection => projection.RoleSummary.HasLeveling)
             .Where(projection => MatchesSearch(projection.State))
             .Where(projection => this.configuration.LevelingFilter switch
             {

@@ -203,7 +203,7 @@ public sealed class FleetReworkTests
 
         Assert.Equal("★ TEST", header.FreeCompany);
         Assert.Equal("Cerberus", header.World);
-        Assert.Equal("Farming", header.Mode);
+        Assert.Equal("4 farming", header.Mode);
         Assert.Equal("In 2h 0m", header.Attention);
         Assert.Equal("Ready", header.FarmReady);
         Assert.Equal("R142 · R143 · R141 · R140", header.Ranks);
@@ -431,7 +431,7 @@ public sealed class FleetReworkTests
         Assert.Equal(before.WidgetId, after.WidgetId);
         Assert.Equal("★ INCOME", before.FreeCompany);
         Assert.Equal("Cerberus", before.World);
-        Assert.Equal("Leveling", before.Mode);
+        Assert.Equal("1 leveling", before.Mode);
         Assert.Equal(10_000.ToString("N0"), before.GrossGil);
         Assert.Equal("4", before.Voyages);
         Assert.NotEqual(before.GilPerDay, after.GilPerDay);

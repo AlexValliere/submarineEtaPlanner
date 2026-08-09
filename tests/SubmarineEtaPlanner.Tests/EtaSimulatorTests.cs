@@ -1055,13 +1055,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.5.10.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.5.11.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("Adds versioned farming configuration storage", repoJson);
+        Assert.Contains("Adds effective per-submarine leveling, farming, and paused roles", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 

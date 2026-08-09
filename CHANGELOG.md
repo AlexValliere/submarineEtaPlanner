@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.11.0
+
+- Added explicit per-submarine leveling, farming, and paused roles with mixed-role FC summaries and filtering.
+
 ## 0.5.10.0
 
 - Added versioned farming configuration storage for submarine assignments, pinned routes, fuel holders, manual tank inventory, reserves, and per-submarine collection delays without changing planner behavior or UI.

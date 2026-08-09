@@ -37,12 +37,12 @@ internal sealed record IncomeFcHeaderPresentation(
             $"income-{metric.FcIdKey}",
             $"{(favorite ? "★ " : string.Empty)}{projection.State.FreeCompanyTag}",
             string.IsNullOrWhiteSpace(projection.State.World) ? "—" : projection.State.World,
-            projection.Mode.ToString(),
+            FcRoleSummaryFormatter.Format(projection.RoleSummary),
             $"{metric.GrossGil:N0}",
             $"{metric.GilPerDay:N0}",
             $"{metric.GilPerVoyage:N0}",
             metric.ValidVoyages.ToString("N0"),
-            projection.Mode == FleetMode.Farming)
+            projection.RoleSummary is { HasFarming: true, HasLeveling: false, HasPaused: false })
         {
             BuildsAndRanks = metric.Submarines.Count == 0
                 ? "—"

@@ -45,7 +45,16 @@ public sealed partial class PlannerWindow
                 this.configuration.Settings,
                 new FcSimulationOverride(preferences.TargetRankOverride, preferences.StrategyOverride),
                 this.catalog.MaximumRank);
-            return FleetPresentationBuilder.Create(fc, results.GetValueOrDefault(fc.FcIdKey), effective, this.catalog, now);
+            var assignments = preferences.Submarines.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value.Assignment);
+            return FleetPresentationBuilder.Create(
+                fc,
+                results.GetValueOrDefault(fc.FcIdKey),
+                effective,
+                this.catalog,
+                now,
+                assignments);
         }).ToArray();
     }
 

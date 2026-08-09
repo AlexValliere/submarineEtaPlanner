@@ -18,7 +18,7 @@ public sealed partial class PlannerWindow
             "income-definition",
             FontAwesomeIcon.InfoCircle,
             "Recorded gross NPC salvage value",
-            "The fleet filter uses each FC's current mode. Values include all recorded tracker returns in the selected period, so a Farming FC may include voyages from before it reached its target rank.",
+            "The fleet filter uses each FC's current effective submarine roles. Values include all recorded tracker returns in the selected period, so a farming selection may include voyages from before a submarine reached its target rank.",
             PlannerUi.Teal);
         ImGui.Spacing();
         DrawIncomeViewButton("All fleets", IncomeView.AllFleets);
@@ -51,9 +51,9 @@ public sealed partial class PlannerWindow
         ImGui.Spacing();
         var modeLabel = this.configuration.IncomeView switch
         {
-            IncomeView.Leveling => "currently leveling",
-            IncomeView.Farming => "currently farming",
-            _ => "all modes",
+            IncomeView.Leveling => "with leveling submarines",
+            IncomeView.Farming => "with farming submarines",
+            _ => "all roles",
         };
         ImGui.TextColored(
             PlannerUi.Muted,
@@ -65,7 +65,7 @@ public sealed partial class PlannerWindow
                 "income-empty-filter",
                 FontAwesomeIcon.InfoCircle,
                 "No free companies match this filter",
-                "Choose another fleet mode to include tracked income data.",
+                "Choose another role filter to include tracked income data.",
                 PlannerUi.Muted);
             return;
         }

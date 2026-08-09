@@ -61,6 +61,10 @@ public sealed record SubmarineOperationalProjection(
     IReadOnlyList<RouteOutcome> AlternativeRoutes)
 {
     public CurrentBuildPresentation CurrentBuild { get; init; } = CurrentBuildPresentation.Unavailable;
+
+    public EffectiveSubmarineRole EffectiveRole { get; init; }
+
+    public bool IsTargetComplete => Rank >= EffectiveTargetRank;
 }
 
 public sealed record FcOperationalProjection(
@@ -73,6 +77,8 @@ public sealed record FcOperationalProjection(
     DateTimeOffset? CompletionP10AtUtc,
     DateTimeOffset? CompletionP90AtUtc)
 {
+    public FcRoleSummary RoleSummary { get; init; } = new(0, 0, 0);
+
     public int ReadyCount => Submarines.Count(submarine => submarine.Rank >= EffectiveTargetRank);
     public int ImmediateActionCount => Submarines.Count(submarine => submarine.NeedsImmediateAction);
     public DateTimeOffset? EarliestFutureReturnAtUtc => Submarines

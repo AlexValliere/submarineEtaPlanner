@@ -28,14 +28,14 @@ internal sealed record OperationsFcHeaderPresentation(
         return new OperationsFcHeaderPresentation(
             $"{(favorite ? "★ " : string.Empty)}{projection.State.FreeCompanyTag}",
             string.IsNullOrWhiteSpace(projection.State.World) ? "—" : projection.State.World,
-            projection.Mode.ToString(),
+            FcRoleSummaryFormatter.Format(projection.RoleSummary),
             attention,
             farmReady,
             projection.Submarines.Count == 0
                 ? "—"
                 : string.Join(" · ", projection.Submarines.Select(submarine => $"R{submarine.Rank}")),
             projection.ImmediateActionCount > 0,
-            projection.Mode == FleetMode.Farming);
+            projection.RoleSummary is { HasFarming: true, HasLeveling: false, HasPaused: false });
     }
 
     private static string FormatFarmReady(TimeSpan remaining)
