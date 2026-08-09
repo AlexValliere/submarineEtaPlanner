@@ -32,16 +32,22 @@ public sealed record ResolvedFuelStock(
 public static class FuelStockResolver
 {
     private const string SelectedCharacterUnavailableReason =
-        "The selected fuel-holder character has not been observed in this FC.";
+        "The selected fuel-holder character is no longer associated with this FC.";
+
+    private const string NoSelectedCharacterUnavailableReason =
+        "Choose the character that carries the workshop fuel.";
 
     private const string NoObservationUnavailableReason =
-        "No character has been observed in this FC.";
+        "No character inventory has been observed for this FC.";
 
     private const string MultipleCharactersUnavailableReason =
-        "Multiple characters have been observed in this FC. Select the character that carries the workshop fuel.";
+        "Multiple characters have been observed in this FC. Choose the character that carries the workshop fuel.";
+
+    private const string MissingFreeCompanyIdUnavailableReason =
+        "The tracker’s numeric FC ID could not be decoded, so character inventory cannot be matched automatically. Manual count remains available.";
 
     public static ResolvedFuelStock Resolve(
-        ulong freeCompanyId,
+        ulong? freeCompanyId,
         FuelStockMode mode,
         ulong? selectedCharacterId,
         int manualCeruleumTanks,
@@ -49,14 +55,19 @@ public static class FuelStockResolver
     {
         ArgumentNullException.ThrowIfNull(observations);
 
+        if (mode == FuelStockMode.Manual)
+            return AvailableManual(Math.Max(0, manualCeruleumTanks));
+
+        if (freeCompanyId is null)
+            return Unavailable(MissingFreeCompanyIdUnavailableReason);
+
         return mode switch
         {
-            FuelStockMode.Manual => AvailableManual(manualCeruleumTanks),
             FuelStockMode.Character => ResolveSelectedCharacter(
-                freeCompanyId,
+                freeCompanyId.Value,
                 selectedCharacterId,
                 observations),
-            FuelStockMode.Automatic => ResolveAutomatically(freeCompanyId, observations),
+            FuelStockMode.Automatic => ResolveAutomatically(freeCompanyId.Value, observations),
             _ => Unavailable("The configured fuel-stock mode is not supported."),
         };
     }
@@ -66,6 +77,9 @@ public static class FuelStockResolver
         ulong? selectedCharacterId,
         IReadOnlyList<CharacterFuelObservation> observations)
     {
+        if (selectedCharacterId is null)
+            return Unavailable(NoSelectedCharacterUnavailableReason);
+
         var observation = observations
             .Where(candidate =>
                 candidate.FreeCompanyId == freeCompanyId &&

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.28.0
+
+- Added staged FC ceruleum source and reserve controls with FC-scoped live and timestamped local observations, immediate stale-safe runway previews, and confirmed local snapshot removal.
+
 ## 0.5.27.0
 
 - Forecasted ceruleum runway from live, manual, or schedule-compatible last-observed stock, with grouped departure simulation, reserve-aware refill deadlines, and explicit stale-stock warnings.

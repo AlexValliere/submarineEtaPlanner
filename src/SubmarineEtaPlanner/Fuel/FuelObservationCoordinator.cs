@@ -57,6 +57,22 @@ internal sealed class FuelObservationCoordinator : IDisposable
 
     public IReadOnlyList<CharacterFuelObservation> Observations => this.observations;
 
+    public bool ForgetObservation(ulong characterId)
+    {
+        if (this.disposed || characterId == 0 || this.observations.All(item => item.CharacterId != characterId))
+            return false;
+
+        this.observations = this.observations
+            .Where(observation => observation.CharacterId != characterId)
+            .ToArray();
+        if (this.LiveObservation?.CharacterId == characterId)
+            this.LiveObservation = null;
+        this.persistedTimestamps.Remove(characterId);
+        this.hasPendingChanges = true;
+        SavePending();
+        return true;
+    }
+
     public void Tick(DateTimeOffset now)
     {
         if (this.disposed)

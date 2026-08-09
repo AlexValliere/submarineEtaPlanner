@@ -18,6 +18,7 @@ public sealed class FuelRunwayCalculatorTests
 
         Assert.Equal(FuelStockUsability.Current, forecast.StockUsability);
         Assert.Equal(40, forecast.Reserve);
+        Assert.Equal(40, forecast.TanksPerFullResend);
         Assert.Equal(40, forecast.TanksPerDay, 8);
         Assert.Equal(1, forecast.FullFleetSendsRemaining);
         Assert.Equal(Now.AddDays(2), forecast.RefillBeforeUtc);
@@ -68,7 +69,8 @@ public sealed class FuelRunwayCalculatorTests
         Assert.Equal(FuelStockUsability.StaleAfterKnownDeparture, forecast.StockUsability);
         Assert.Equal(FuelRunwayStatus.Unavailable, forecast.Status);
         Assert.Null(forecast.RefillBeforeUtc);
-        Assert.Contains(forecast.Warnings, warning => warning.Contains("Log into the fuel-holder character", StringComparison.Ordinal));
+        Assert.Contains("A tracked submarine departed after this stock count was observed.", forecast.Warnings);
+        Assert.Contains("Log into Holder@World or enter a manual count to refresh it.", forecast.Warnings);
     }
 
     [Fact]
@@ -209,6 +211,7 @@ public sealed class FuelRunwayCalculatorTests
         Assert.Equal(FuelStockUsability.Current, forecast.StockUsability);
         Assert.Equal(FuelRunwayStatus.Unavailable, forecast.Status);
         Assert.Null(forecast.RefillBeforeUtc);
+        Assert.Null(forecast.TanksPerFullResend);
         Assert.Contains(forecast.Warnings, warning => warning.Contains("complete route", StringComparison.Ordinal));
     }
 

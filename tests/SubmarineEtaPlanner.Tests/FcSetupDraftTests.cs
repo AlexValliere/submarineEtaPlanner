@@ -53,6 +53,10 @@ public sealed class FcSetupDraftTests
         var preferences = new FcPreferences
         {
             TargetRankOverride = 120,
+            FuelStockMode = FuelStockMode.Character,
+            FuelHolderCharacterId = 123,
+            ManualCeruleumTanks = 450,
+            CeruleumReserve = 90,
             Submarines = new Dictionary<long, SubmarinePreferences>
             {
                 [10] = new()
@@ -69,6 +73,10 @@ public sealed class FcSetupDraftTests
 
         Assert.NotNull(restored);
         Assert.Equal(120, restored.TargetRankOverride);
+        Assert.Equal(FuelStockMode.Character, restored.FuelStockMode);
+        Assert.Equal(123UL, restored.FuelHolderCharacterId);
+        Assert.Equal(450, restored.ManualCeruleumTanks);
+        Assert.Equal(90, restored.CeruleumReserve);
         Assert.Equal(SubmarineAssignment.Farming, restored.Submarines[10].Assignment);
         Assert.Equal([8u, 3u, 5u], restored.Submarines[10].PinnedFarmingRoute);
         Assert.Equal(SubmarineAssignment.Auto, restored.Submarines[20].Assignment);
@@ -115,11 +123,71 @@ public sealed class FcSetupDraftTests
         var result = reverted.ApplyTo(preferences);
 
         Assert.False(result.FcSettingsChanged);
+        Assert.False(result.FuelSettingsChanged);
         Assert.False(result.AssignmentChanged);
         Assert.False(result.PinnedRouteChanged);
         Assert.False(result.EtaRefreshRequired);
         Assert.Equal(SubmarineAssignment.Farming, preferences.Submarines[10].Assignment);
         Assert.Equal([4u, 2u], preferences.Submarines[10].PinnedFarmingRoute);
+    }
+
+    [Fact]
+    public void FuelChangesStayInDraftAndSaveWithoutEtaRefresh()
+    {
+        var preferences = new FcPreferences
+        {
+            FuelStockMode = FuelStockMode.Automatic,
+            FuelHolderCharacterId = 10,
+            ManualCeruleumTanks = 2_400,
+            CeruleumReserve = null,
+        };
+        var captured = FcSetupDraft.Capture(preferences, []);
+        var edited = captured with
+        {
+            FuelStockMode = FuelStockMode.Manual,
+            FuelHolderCharacterId = 20,
+            ManualCeruleumTanks = 1_800,
+            CeruleumReserve = 500,
+        };
+
+        Assert.Equal(FuelStockMode.Automatic, preferences.FuelStockMode);
+        Assert.Null(preferences.CeruleumReserve);
+
+        var result = edited.ApplyTo(preferences);
+
+        Assert.True(result.FuelSettingsChanged);
+        Assert.False(result.FcSettingsChanged);
+        Assert.False(result.AssignmentChanged);
+        Assert.False(result.EtaRefreshRequired);
+        Assert.Equal(FuelStockMode.Manual, preferences.FuelStockMode);
+        Assert.Equal(20UL, preferences.FuelHolderCharacterId);
+        Assert.Equal(1_800, preferences.ManualCeruleumTanks);
+        Assert.Equal(500, preferences.CeruleumReserve);
+    }
+
+    [Fact]
+    public void RevertRestoresFuelDraftIncludingInactiveManualValue()
+    {
+        var preferences = new FcPreferences
+        {
+            FuelStockMode = FuelStockMode.Character,
+            FuelHolderCharacterId = 10,
+            ManualCeruleumTanks = 2_400,
+            CeruleumReserve = null,
+        };
+        var edited = FcSetupDraft.Capture(preferences, []) with
+        {
+            FuelStockMode = FuelStockMode.Manual,
+            ManualCeruleumTanks = 1,
+            CeruleumReserve = 500,
+        };
+
+        var reverted = FcSetupDraft.Capture(preferences, edited.Submarines.Keys);
+
+        Assert.Equal(FuelStockMode.Character, reverted.FuelStockMode);
+        Assert.Equal(10UL, reverted.FuelHolderCharacterId);
+        Assert.Equal(2_400, reverted.ManualCeruleumTanks);
+        Assert.Null(reverted.CeruleumReserve);
     }
 
     [Fact]

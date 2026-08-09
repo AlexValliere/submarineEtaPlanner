@@ -32,6 +32,7 @@ public sealed partial class PlannerWindow : Window
     private readonly ISubmarineCatalog catalog;
     private readonly IRouteOperationalCatalog operationalCatalog;
     private readonly Func<IReadOnlyList<CharacterFuelObservation>> getFuelObservations;
+    private readonly Action<ulong> forgetFuelObservation;
     private readonly Func<SubmarineTrackerDependencyState> getSubmarineTrackerState;
     private readonly Action<bool> openSubmarineTrackerInstaller;
     private readonly ResultsViewState viewState = new();
@@ -62,6 +63,7 @@ public sealed partial class PlannerWindow : Window
         EtaPlannerService plannerService,
         ISubmarineCatalog catalog,
         Func<IReadOnlyList<CharacterFuelObservation>> getFuelObservations,
+        Action<ulong> forgetFuelObservation,
         Func<SubmarineTrackerDependencyState> getSubmarineTrackerState,
         Action<bool> openSubmarineTrackerInstaller)
         : base("Submarine ETA Planner###SubmarineEtaPlanner", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
@@ -73,6 +75,7 @@ public sealed partial class PlannerWindow : Window
         this.operationalCatalog = catalog as IRouteOperationalCatalog ??
             throw new ArgumentException("The submarine catalog must provide route operational data.", nameof(catalog));
         this.getFuelObservations = getFuelObservations ?? throw new ArgumentNullException(nameof(getFuelObservations));
+        this.forgetFuelObservation = forgetFuelObservation ?? throw new ArgumentNullException(nameof(forgetFuelObservation));
         this.getSubmarineTrackerState = getSubmarineTrackerState;
         this.openSubmarineTrackerInstaller = openSubmarineTrackerInstaller;
         this.draftSettings = CloneSettings(configuration.Settings);

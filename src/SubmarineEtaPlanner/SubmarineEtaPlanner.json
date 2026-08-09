@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Forecasts ceruleum runway from local stock with reserve-aware refill deadlines and stale-observation safety checks.",
+  "Changelog": "Adds staged FC ceruleum source and reserve controls with timestamped local observations, immediate runway previews, and local snapshot management.",
   "Tags": [
     "Submarine",
     "ETA",

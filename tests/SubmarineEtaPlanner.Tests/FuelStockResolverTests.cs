@@ -94,7 +94,7 @@ public sealed class FuelStockResolverTests
         Assert.Null(result.CeruleumTanks);
         Assert.Null(result.Source);
         Assert.Equal(
-            "Multiple characters have been observed in this FC. Select the character that carries the workshop fuel.",
+            "Multiple characters have been observed in this FC. Choose the character that carries the workshop fuel.",
             result.UnavailableReason);
     }
 
@@ -111,8 +111,49 @@ public sealed class FuelStockResolverTests
         Assert.False(result.IsAvailable);
         Assert.Null(result.CeruleumTanks);
         Assert.Equal(
-            "The selected fuel-holder character has not been observed in this FC.",
+            "The selected fuel-holder character is no longer associated with this FC.",
             result.UnavailableReason);
+    }
+
+    [Fact]
+    public void CharacterModeWithoutASelectionRequestsAHolder()
+    {
+        var result = FuelStockResolver.Resolve(
+            100,
+            FuelStockMode.Character,
+            selectedCharacterId: null,
+            manualCeruleumTanks: 0,
+            [Observation(1, 100, 25)]);
+
+        Assert.False(result.IsAvailable);
+        Assert.Equal("Choose the character that carries the workshop fuel.", result.UnavailableReason);
+    }
+
+    [Fact]
+    public void MissingNumericFreeCompanyIdBlocksObservedSourcesButNotManualSource()
+    {
+        var automatic = FuelStockResolver.Resolve(
+            null,
+            FuelStockMode.Automatic,
+            null,
+            0,
+            [Observation(1, 100, 25, isLive: true)]);
+        var manual = FuelStockResolver.Resolve(null, FuelStockMode.Manual, null, 25, []);
+
+        Assert.False(automatic.IsAvailable);
+        Assert.Contains("numeric FC ID could not be decoded", automatic.UnavailableReason);
+        Assert.True(manual.IsAvailable);
+        Assert.Equal(25, manual.CeruleumTanks);
+        Assert.Equal(FuelStockSourceKind.Manual, manual.Source);
+    }
+
+    [Fact]
+    public void NegativeManualCountIsClampedToZero()
+    {
+        var result = FuelStockResolver.Resolve(null, FuelStockMode.Manual, null, -5, []);
+
+        Assert.True(result.IsAvailable);
+        Assert.Equal(0, result.CeruleumTanks);
     }
 
     [Fact]
@@ -143,7 +184,7 @@ public sealed class FuelStockResolverTests
         Assert.Null(result.CeruleumTanks);
         Assert.Null(result.Source);
         Assert.False(result.IsLive);
-        Assert.False(string.IsNullOrWhiteSpace(result.UnavailableReason));
+        Assert.Equal("No character inventory has been observed for this FC.", result.UnavailableReason);
     }
 
     [Fact]

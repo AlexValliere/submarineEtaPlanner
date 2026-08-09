@@ -14,6 +14,12 @@ public sealed partial class PlannerWindow
     private bool setupUseGlobalTarget = true;
     private int setupTargetRank;
     private FcStrategyPreset? setupStrategy;
+    private FuelStockMode setupFuelStockMode;
+    private ulong? setupFuelHolderCharacterId;
+    private int setupManualCeruleumTanks;
+    private bool setupAutomaticReserve = true;
+    private int setupFixedReserve;
+    private ulong? pendingForgottenFuelCharacterId;
     private readonly Dictionary<long, SubmarineSetupDraft> setupSubmarineDrafts = [];
     private readonly HashSet<long> setupRouteEditors = [];
     private readonly Dictionary<long, string> setupRouteInputs = [];
@@ -87,6 +93,9 @@ public sealed partial class PlannerWindow
         DrawSubmarineSetupTable(selected);
         EndSettingsCard();
 
+        ImGui.Spacing();
+        DrawCeruleumStockCard(selected);
+
         var routesValid = SetupRoutesAreValid();
         if (!routesValid)
             PlannerUi.DrawStatusPill("Fix invalid pinned routes", PlannerUi.Amber);
@@ -113,6 +122,316 @@ public sealed partial class PlannerWindow
             SelectSetupFc(selected.FcIdKey);
 
         DrawUnsavedSetupModal();
+        DrawForgetFuelObservationModal();
+    }
+
+    private void DrawCeruleumStockCard(FcState selected)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var previewPreferences = CreateSetupFuelPreferences(selected);
+        var stock = ResolveFuelStock(selected, previewPreferences);
+        var effectiveTargetRank = this.setupUseGlobalTarget
+            ? this.configuration.Settings.TargetRank
+            : Math.Clamp(this.setupTargetRank, 1, this.catalog.MaximumRank);
+        var forecast = CalculateFuelRunway(
+            selected,
+            effectiveTargetRank,
+            previewPreferences,
+            stock,
+            now);
+
+        BeginSettingsCard(
+            "fc-ceruleum-stock-card",
+            "Ceruleum stock",
+            "Choose the local stock observation used for this FC and preview its read-only fuel runway.");
+
+        SettingLabel("Source", "Automatic selects a single matching local observation, or the current live character when it belongs to this FC.");
+        var sourceLabels = new Dictionary<FuelStockMode, string>
+        {
+            [FuelStockMode.Automatic] = "Automatic",
+            [FuelStockMode.Character] = "Observed character",
+            [FuelStockMode.Manual] = "Manual count",
+        };
+        ImGui.SetNextItemWidth(Math.Min(300f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
+        if (ImGui.BeginCombo("##setup-fuel-source", sourceLabels[this.setupFuelStockMode]))
+        {
+            foreach (var mode in Enum.GetValues<FuelStockMode>())
+            {
+                if (ImGui.Selectable($"{sourceLabels[mode]}##setup-fuel-source-{mode}", this.setupFuelStockMode == mode))
+                {
+                    this.setupFuelStockMode = mode;
+                    this.setupDraftDirty = true;
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        var candidates = FuelStockPresentation.CandidatesForFreeCompany(
+            selected.GameFreeCompanyId,
+            this.getFuelObservations());
+        switch (this.setupFuelStockMode)
+        {
+            case FuelStockMode.Automatic:
+                DrawAutomaticFuelSource(selected, stock, candidates, now);
+                break;
+            case FuelStockMode.Character:
+                DrawObservedCharacterSource(selected, candidates, now);
+                break;
+            case FuelStockMode.Manual:
+                DrawManualFuelSource();
+                break;
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        SettingLabel("Reserve", "Automatic reserve keeps enough tanks for one complete resend of every farming submarine.");
+        var automaticReserve = this.setupAutomaticReserve;
+        if (ImGui.Checkbox("Automatic reserve##setup-automatic-reserve", ref automaticReserve))
+        {
+            this.setupAutomaticReserve = automaticReserve;
+            this.setupDraftDirty = true;
+        }
+        if (this.setupAutomaticReserve)
+        {
+            ImGui.TextColored(
+                PlannerUi.Muted,
+                forecast.TanksPerFullResend is { } tanksPerFullResend
+                    ? $"One complete resend of all farming submarines: {tanksPerFullResend:N0} tanks"
+                    : "One complete resend of all farming submarines: unavailable");
+        }
+        else
+        {
+            var reserve = this.setupFixedReserve;
+            ImGui.SetNextItemWidth(Math.Min(180f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
+            if (ImGui.InputInt("Fixed reserve##setup-fixed-reserve", ref reserve))
+            {
+                this.setupFixedReserve = Math.Max(0, reserve);
+                this.setupDraftDirty = true;
+            }
+            ImGui.SameLine();
+            ImGui.TextUnformatted("tanks");
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        DrawSetupRunwayPreview(stock, forecast, now, selected.FcIdKey);
+
+        ImGui.Spacing();
+        ImGui.TextWrapped(
+            "Submarine ETA Planner only reads the inventory of the character you are currently playing. " +
+            "It remembers the last observed value locally; it does not log into characters, move them, collect submarines, resend voyages, or purchase fuel.");
+        ImGui.PushStyleColor(ImGuiCol.Text, PlannerUi.Muted);
+        ImGui.TextWrapped(
+            "The automatic count covers the selected character’s readable inventory. Tanks stored elsewhere are not included; use Manual count when necessary.");
+        ImGui.PopStyleColor();
+        EndSettingsCard();
+    }
+
+    private void DrawAutomaticFuelSource(
+        FcState selected,
+        ResolvedFuelStock stock,
+        IReadOnlyList<CharacterFuelObservation> candidates,
+        DateTimeOffset now)
+    {
+        if (selected.GameFreeCompanyId is null)
+        {
+            ImGui.TextColored(PlannerUi.Amber, "The tracker’s numeric FC ID could not be decoded, so character inventory cannot be matched automatically. Manual count remains available.");
+            return;
+        }
+
+        if (candidates.Count == 0)
+        {
+            DrawNoFuelObservationsState();
+            return;
+        }
+
+        if (!stock.IsAvailable)
+        {
+            ImGui.TextColored(PlannerUi.Amber, "Multiple characters have been observed in this FC.");
+            ImGui.TextColored(PlannerUi.Amber, "Choose the character that carries the workshop fuel.");
+            return;
+        }
+
+        DrawResolvedFuelSource(stock, now);
+        if (stock.CharacterId is { } characterId)
+        {
+            var observation = candidates.FirstOrDefault(candidate => candidate.CharacterId == characterId);
+            if (observation is { IsLive: false })
+                DrawForgetFuelObservationControl(observation);
+        }
+    }
+
+    private void DrawObservedCharacterSource(
+        FcState selected,
+        IReadOnlyList<CharacterFuelObservation> candidates,
+        DateTimeOffset now)
+    {
+        if (selected.GameFreeCompanyId is null)
+        {
+            ImGui.TextColored(PlannerUi.Amber, "The tracker’s numeric FC ID could not be decoded, so character inventory cannot be matched automatically. Manual count remains available.");
+            return;
+        }
+
+        var selectedObservation = candidates.FirstOrDefault(
+            candidate => candidate.CharacterId == this.setupFuelHolderCharacterId);
+        var preview = selectedObservation is null
+            ? "Choose observed character"
+            : FuelStockPresentation.FormatCandidate(selectedObservation, now);
+        ImGui.SetNextItemWidth(Math.Min(560f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
+        if (ImGui.BeginCombo("Fuel-holder character##setup-fuel-holder", preview))
+        {
+            foreach (var candidate in candidates)
+            {
+                if (ImGui.Selectable(
+                        $"{FuelStockPresentation.FormatCandidate(candidate, now)}##setup-holder-{candidate.CharacterId}",
+                        candidate.CharacterId == this.setupFuelHolderCharacterId))
+                {
+                    this.setupFuelHolderCharacterId = candidate.CharacterId;
+                    this.setupDraftDirty = true;
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        if (candidates.Count == 0 && this.setupFuelHolderCharacterId is null)
+        {
+            DrawNoFuelObservationsState();
+            return;
+        }
+
+        if (selectedObservation is null)
+        {
+            if (this.setupFuelHolderCharacterId is not null)
+                ImGui.TextColored(PlannerUi.Amber, "The selected fuel-holder character is no longer associated with this FC.");
+            return;
+        }
+
+        var selectedStock = FuelStockResolver.Resolve(
+            selected.GameFreeCompanyId,
+            FuelStockMode.Character,
+            selectedObservation.CharacterId,
+            0,
+            candidates);
+        DrawResolvedFuelSource(selectedStock, now);
+        if (!selectedObservation.IsLive)
+            DrawForgetFuelObservationControl(selectedObservation);
+    }
+
+    private void DrawManualFuelSource()
+    {
+        var tanks = this.setupManualCeruleumTanks;
+        ImGui.SetNextItemWidth(Math.Min(220f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
+        if (ImGui.InputInt("Manual ceruleum tank count##setup-manual-tanks", ref tanks))
+        {
+            this.setupManualCeruleumTanks = Math.Max(0, tanks);
+            this.setupDraftDirty = true;
+        }
+    }
+
+    private static void DrawNoFuelObservationsState()
+    {
+        ImGui.TextColored(PlannerUi.Amber, "No character inventory has been observed for this FC.");
+        ImGui.TextWrapped("Log into the character that carries this FC’s ceruleum tanks once, or choose Manual count.");
+    }
+
+    private static void DrawResolvedFuelSource(ResolvedFuelStock stock, DateTimeOffset now)
+    {
+        var presentation = FuelStockPresentation.Describe(stock, now);
+        ImGui.TextWrapped(presentation.ResultLine);
+        if (presentation.DetailLine is { } detail)
+            ImGui.TextColored(PlannerUi.Muted, detail);
+    }
+
+    private void DrawForgetFuelObservationControl(CharacterFuelObservation observation)
+    {
+        if (!ImGui.SmallButton($"Forget stored observation##forget-fuel-{observation.CharacterId}"))
+            return;
+
+        this.pendingForgottenFuelCharacterId = observation.CharacterId;
+        ImGui.OpenPopup("Forget stored observation?###forget-fuel-observation");
+    }
+
+    private FcPreferences CreateSetupFuelPreferences(FcState selected)
+    {
+        var savedPreferences = this.configuration.GetFcPreferences(selected.FcIdKey);
+        var submarines = selected.Submarines.ToDictionary(
+            submarine => submarine.SubmarineId,
+            submarine =>
+            {
+                var saved = savedPreferences.Submarines.GetValueOrDefault(submarine.SubmarineId);
+                var draft = this.setupSubmarineDrafts.GetValueOrDefault(
+                    submarine.SubmarineId,
+                    SubmarineSetupDraft.Automatic);
+                return new SubmarinePreferences
+                {
+                    Assignment = draft.Assignment,
+                    PinnedFarmingRoute = draft.PinnedFarmingRoute?.ToList(),
+                    CollectionDelayMinutes = saved?.CollectionDelayMinutes,
+                };
+            });
+        return new FcPreferences
+        {
+            FuelStockMode = this.setupFuelStockMode,
+            FuelHolderCharacterId = this.setupFuelHolderCharacterId,
+            ManualCeruleumTanks = Math.Max(0, this.setupManualCeruleumTanks),
+            CeruleumReserve = this.setupAutomaticReserve ? null : Math.Max(0, this.setupFixedReserve),
+            Submarines = submarines,
+        };
+    }
+
+    private static void DrawSetupRunwayPreview(
+        ResolvedFuelStock stock,
+        FuelRunwayForecast forecast,
+        DateTimeOffset now,
+        string fcIdKey)
+    {
+        ImGui.TextColored(PlannerUi.Teal, "Runway preview");
+        var source = FuelStockPresentation.Describe(stock, now);
+        if (ImGui.BeginTable(
+                $"setup-fuel-runway-{fcIdKey}",
+                2,
+                ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+        {
+            ImGui.TableSetupColumn("Measure", ImGuiTableColumnFlags.WidthStretch, 1f);
+            ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthStretch, 1.7f);
+            DrawSetupRunwayRow("Stock basis", forecast.StockBasis is { } stockBasis ? $"{stockBasis:N0} tanks" : "Unavailable");
+            DrawSetupRunwayRow("Stock source", source.SourceLine);
+            DrawSetupRunwayRow(
+                "Tanks per full resend",
+                forecast.TanksPerFullResend is { } tanksPerFullResend
+                    ? tanksPerFullResend.ToString("N0")
+                    : "Unavailable");
+            DrawSetupRunwayRow("Estimated tanks/day", forecast.TanksPerDay.ToString("N1"));
+            DrawSetupRunwayRow(
+                "Full fleet sends remaining",
+                forecast.Status == FuelRunwayStatus.Unavailable ? "Unavailable" : forecast.FullFleetSendsRemaining.ToString("N0"));
+            DrawSetupRunwayRow(
+                "Refill before",
+                forecast.Status == FuelRunwayStatus.Unavailable
+                    ? "Unavailable"
+                    : forecast.RefillBeforeUtc is { } refillBefore
+                        ? refillBefore.LocalDateTime.ToString("MMMM d 'at' HH:mm")
+                        : forecast.TanksPerDay <= 0 ? "Not required" : "Beyond forecast horizon");
+            ImGui.EndTable();
+        }
+
+        if (forecast.Status == FuelRunwayStatus.Unavailable)
+        {
+            ImGui.TextColored(PlannerUi.Amber, "Runway unavailable");
+            foreach (var warning in forecast.Warnings)
+                ImGui.TextWrapped(warning);
+        }
+    }
+
+    private static void DrawSetupRunwayRow(string label, string value)
+    {
+        ImGui.TableNextRow();
+        ImGui.TableNextColumn();
+        ImGui.TextColored(PlannerUi.Muted, label);
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(value);
     }
 
     private bool DrawStrategyCombo(ref FcStrategyPreset? strategy)
@@ -397,6 +716,11 @@ public sealed partial class PlannerWindow
         this.setupUseGlobalTarget = preferences.TargetRankOverride is null;
         this.setupTargetRank = preferences.TargetRankOverride ?? this.configuration.Settings.TargetRank;
         this.setupStrategy = preferences.StrategyOverride;
+        this.setupFuelStockMode = preferences.FuelStockMode;
+        this.setupFuelHolderCharacterId = preferences.FuelHolderCharacterId;
+        this.setupManualCeruleumTanks = Math.Max(0, preferences.ManualCeruleumTanks.GetValueOrDefault());
+        this.setupAutomaticReserve = preferences.CeruleumReserve is null;
+        this.setupFixedReserve = Math.Max(0, preferences.CeruleumReserve.GetValueOrDefault());
         this.setupSubmarineDrafts.Clear();
         var fleet = this.snapshot?.FreeCompanies.FirstOrDefault(fc => fc.FcIdKey == fcIdKey);
         var draft = FcSetupDraft.Capture(
@@ -423,6 +747,10 @@ public sealed partial class PlannerWindow
                 ? null
                 : Math.Clamp(this.setupTargetRank, 1, this.catalog.MaximumRank),
             StrategyOverride = this.setupStrategy,
+            FuelStockMode = this.setupFuelStockMode,
+            FuelHolderCharacterId = this.setupFuelHolderCharacterId,
+            ManualCeruleumTanks = Math.Max(0, this.setupManualCeruleumTanks),
+            CeruleumReserve = this.setupAutomaticReserve ? null : Math.Max(0, this.setupFixedReserve),
         };
         foreach (var (submarineId, submarineDraft) in this.setupSubmarineDrafts)
             draft = draft.WithSubmarine(submarineId, submarineDraft);
@@ -471,6 +799,38 @@ public sealed partial class PlannerWindow
         if (PlannerUi.IconButtonWithText("stay-on-fc", FontAwesomeIcon.Times, "Stay"))
         {
             this.pendingSetupFcId = null;
+            ImGui.CloseCurrentPopup();
+        }
+        ImGui.EndPopup();
+    }
+
+    private void DrawForgetFuelObservationModal()
+    {
+        if (!ImGui.BeginPopupModal(
+                "Forget stored observation?###forget-fuel-observation",
+                ImGuiWindowFlags.AlwaysAutoResize))
+            return;
+
+        var observation = this.pendingForgottenFuelCharacterId is { } characterId
+            ? this.getFuelObservations().FirstOrDefault(item => item.CharacterId == characterId)
+            : null;
+        var character = observation is null
+            ? "this character"
+            : FuelStockPresentation.CharacterLabel(observation);
+        ImGui.TextWrapped($"Forget the locally stored ceruleum observation for {character}?");
+        ImGui.TextColored(PlannerUi.Muted, "This deletes only Submarine ETA Planner’s local snapshot and performs no game action.");
+        ImGui.Spacing();
+        if (PlannerUi.IconButtonWithText("confirm-forget-fuel", FontAwesomeIcon.Trash, "Forget"))
+        {
+            if (this.pendingForgottenFuelCharacterId is { } pending)
+                this.forgetFuelObservation(pending);
+            this.pendingForgottenFuelCharacterId = null;
+            ImGui.CloseCurrentPopup();
+        }
+        ImGui.SameLine();
+        if (PlannerUi.IconButtonWithText("cancel-forget-fuel", FontAwesomeIcon.Times, "Cancel"))
+        {
+            this.pendingForgottenFuelCharacterId = null;
             ImGui.CloseCurrentPopup();
         }
         ImGui.EndPopup();

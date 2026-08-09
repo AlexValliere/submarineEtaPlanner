@@ -22,6 +22,7 @@ public sealed record FuelRunwayForecast(
     FuelStockSourceKind? StockSource,
     FuelStockUsability StockUsability,
     int Reserve,
+    int? TanksPerFullResend,
     double TanksPerDay,
     int FullFleetSendsRemaining,
     DateTimeOffset? RefillBeforeUtc,
@@ -35,10 +36,6 @@ public static class FuelRunwayCalculator
     public static readonly TimeSpan DefensiveSimulationHorizon = TimeSpan.FromDays(3650);
 
     private const int MaximumDepartureGroups = 100_000;
-    private const string StaleObservationWarning =
-        "This tank count was observed before a currently tracked voyage departed. " +
-        "Log into the fuel-holder character or enter a manual count to refresh it.";
-
     public static FuelRunwayForecast Calculate(
         ResolvedFuelStock stock,
         IReadOnlyList<FarmingCyclePlan> farmingCycles,
@@ -79,6 +76,7 @@ public static class FuelRunwayCalculator
             cycle.TanksPerVoyage / cycle.FullCycleDuration.TotalDays);
         var fullDispatchTanks = usableCycles.Sum(cycle => checked((long)cycle.TanksPerVoyage));
         var automaticReserve = checked((int)fullDispatchTanks);
+        int? tanksPerFullResend = cyclesAreComplete ? automaticReserve : null;
         var reserve = fixedReserve ?? automaticReserve;
 
         if (activeFarmingSubmarineCount == 0)
@@ -95,6 +93,7 @@ public static class FuelRunwayCalculator
                 stock,
                 stockUsability,
                 reserve,
+                tanksPerFullResend,
                 tanksPerDay,
                 warnings);
         }
@@ -114,6 +113,7 @@ public static class FuelRunwayCalculator
                 stock.Source,
                 stockUsability,
                 reserve,
+                tanksPerFullResend,
                 tanksPerDay,
                 fullFleetSendsRemaining,
                 nowUtc,
@@ -136,6 +136,7 @@ public static class FuelRunwayCalculator
             stock.Source,
             stockUsability,
             reserve,
+            tanksPerFullResend,
             tanksPerDay,
             fullFleetSendsRemaining,
             simulation.RefillBeforeUtc,
@@ -178,7 +179,11 @@ public static class FuelRunwayCalculator
                 cycle.CurrentVoyageDepartureAtUtc is { } departure &&
                 departure.ToUniversalTime() > observedAtUtc))
         {
-            warnings.Add(StaleObservationWarning);
+            warnings.Add("A tracked submarine departed after this stock count was observed.");
+            var character = string.IsNullOrWhiteSpace(stock.CharacterName) || string.IsNullOrWhiteSpace(stock.World)
+                ? "the fuel-holder character"
+                : $"{stock.CharacterName}@{stock.World}";
+            warnings.Add($"Log into {character} or enter a manual count to refresh it.");
             return FuelStockUsability.StaleAfterKnownDeparture;
         }
 
@@ -189,6 +194,7 @@ public static class FuelRunwayCalculator
         ResolvedFuelStock stock,
         FuelStockUsability stockUsability,
         int reserve,
+        int? tanksPerFullResend,
         double tanksPerDay,
         IReadOnlyList<string> warnings)
         => new(
@@ -197,6 +203,7 @@ public static class FuelRunwayCalculator
             stock.Source,
             stockUsability,
             reserve,
+            tanksPerFullResend,
             tanksPerDay,
             FullFleetSendsRemaining: 0,
             RefillBeforeUtc: null,

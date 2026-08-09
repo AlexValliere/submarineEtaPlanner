@@ -65,34 +65,42 @@ public sealed partial class PlannerWindow
         DateTimeOffset now)
     {
         var preferences = this.configuration.GetFcPreferences(projection.State.FcIdKey);
-        var routePlans = FarmingRoutePlanResolver.Resolve(
+        var stock = ResolveFuelStock(projection.State, preferences);
+        return CalculateFuelRunway(
             projection.State,
-            preferences,
             projection.EffectiveTargetRank,
+            preferences,
+            stock,
+            now);
+    }
+
+    private ResolvedFuelStock ResolveFuelStock(FcState freeCompany, FcPreferences preferences)
+        => FuelStockResolver.Resolve(
+            freeCompany.GameFreeCompanyId,
+            preferences.FuelStockMode,
+            preferences.FuelHolderCharacterId,
+            preferences.ManualCeruleumTanks.GetValueOrDefault(),
+            this.getFuelObservations());
+
+    private FuelRunwayForecast CalculateFuelRunway(
+        FcState freeCompany,
+        int effectiveTargetRank,
+        FcPreferences preferences,
+        ResolvedFuelStock stock,
+        DateTimeOffset now)
+    {
+        var routePlans = FarmingRoutePlanResolver.Resolve(
+            freeCompany,
+            preferences,
+            effectiveTargetRank,
             this.catalog,
             this.operationalCatalog);
         var cycles = FarmingCyclePlanBuilder.Build(
-            projection.State,
+            freeCompany,
             routePlans,
             preferences,
             this.configuration.Settings,
             now);
-        var stock = projection.State.GameFreeCompanyId is { } freeCompanyId
-            ? FuelStockResolver.Resolve(
-                freeCompanyId,
-                preferences.FuelStockMode,
-                preferences.FuelHolderCharacterId,
-                preferences.ManualCeruleumTanks.GetValueOrDefault(),
-                this.getFuelObservations())
-            : new ResolvedFuelStock(
-                CeruleumTanks: null,
-                Source: null,
-                CharacterId: null,
-                CharacterName: null,
-                World: null,
-                ObservedAtUtc: null,
-                IsLive: false,
-                UnavailableReason: "The free company ID is unavailable, so locally observed fuel stock cannot be matched safely.");
 
         return FuelRunwayCalculator.Calculate(
             stock,
@@ -110,7 +118,7 @@ public sealed partial class PlannerWindow
         return forecast.StockSource switch
         {
             FuelStockSourceKind.LiveCharacter => $"Current · {stock:N0} tanks",
-            FuelStockSourceKind.Manual => $"Current (manual) · {stock:N0} tanks",
+            FuelStockSourceKind.Manual => $"Manual · {stock:N0} tanks",
             FuelStockSourceKind.LastObservedCharacter when forecast.StockObservedAtUtc is { } observedAt =>
                 $"Last observed · {stock:N0} · {observedAt.LocalDateTime:g}",
             FuelStockSourceKind.LastObservedCharacter => $"Last observed · {stock:N0} tanks",

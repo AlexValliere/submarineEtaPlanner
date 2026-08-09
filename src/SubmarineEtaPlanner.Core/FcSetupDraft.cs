@@ -84,6 +84,10 @@ public sealed record SubmarineSetupDraft(
 public sealed record FcSetupDraft(
     int? TargetRankOverride,
     FcStrategyPreset? StrategyOverride,
+    FuelStockMode FuelStockMode,
+    ulong? FuelHolderCharacterId,
+    int ManualCeruleumTanks,
+    int? CeruleumReserve,
     IReadOnlyDictionary<long, SubmarineSetupDraft> Submarines)
 {
     public static FcSetupDraft Capture(
@@ -107,6 +111,10 @@ public sealed record FcSetupDraft(
         return new FcSetupDraft(
             preferences.TargetRankOverride,
             preferences.StrategyOverride,
+            preferences.FuelStockMode,
+            preferences.FuelHolderCharacterId,
+            Math.Max(0, preferences.ManualCeruleumTanks.GetValueOrDefault()),
+            preferences.CeruleumReserve,
             new ReadOnlyDictionary<long, SubmarineSetupDraft>(submarines));
     }
 
@@ -131,8 +139,18 @@ public sealed record FcSetupDraft(
 
         var fcSettingsChanged = preferences.TargetRankOverride != TargetRankOverride ||
                                 preferences.StrategyOverride != StrategyOverride;
+        var normalizedManualTanks = Math.Max(0, ManualCeruleumTanks);
+        int? normalizedReserve = CeruleumReserve is null ? null : Math.Max(0, CeruleumReserve.Value);
+        var fuelSettingsChanged = preferences.FuelStockMode != FuelStockMode ||
+                                  preferences.FuelHolderCharacterId != FuelHolderCharacterId ||
+                                  preferences.ManualCeruleumTanks.GetValueOrDefault() != normalizedManualTanks ||
+                                  preferences.CeruleumReserve != normalizedReserve;
         preferences.TargetRankOverride = TargetRankOverride;
         preferences.StrategyOverride = StrategyOverride;
+        preferences.FuelStockMode = Enum.IsDefined(FuelStockMode) ? FuelStockMode : FuelStockMode.Automatic;
+        preferences.FuelHolderCharacterId = FuelHolderCharacterId is null or 0 ? null : FuelHolderCharacterId;
+        preferences.ManualCeruleumTanks = normalizedManualTanks;
+        preferences.CeruleumReserve = normalizedReserve;
 
         var assignmentChanged = false;
         var pinnedRouteChanged = false;
@@ -166,6 +184,7 @@ public sealed record FcSetupDraft(
 
         return new FcSetupDraftApplyResult(
             fcSettingsChanged,
+            fuelSettingsChanged,
             assignmentChanged,
             pinnedRouteChanged);
     }
@@ -176,6 +195,7 @@ public sealed record FcSetupDraft(
 
 public sealed record FcSetupDraftApplyResult(
     bool FcSettingsChanged,
+    bool FuelSettingsChanged,
     bool AssignmentChanged,
     bool PinnedRouteChanged)
 {

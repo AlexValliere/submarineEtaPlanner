@@ -153,6 +153,36 @@ public sealed class FuelObservationCoordinatorTests
         Assert.Equal(Utc(1), Assert.Single(store.Saves[1]).ObservedAtUtc);
     }
 
+    [Fact]
+    public void ForgettingAnObservationDeletesOnlyThatLocalSnapshotAndSavesImmediately()
+    {
+        var stored = new[]
+        {
+            Observation(1, 10, 100, Utc(0)) with { IsLive = false },
+            Observation(2, 10, 200, Utc(1)) with { IsLive = false },
+        };
+        var store = new RecordingStore(stored);
+        using var coordinator = CreateCoordinator(new FakeReader(null), store);
+
+        var forgotten = coordinator.ForgetObservation(1);
+
+        Assert.True(forgotten);
+        var remaining = Assert.Single(coordinator.Observations);
+        Assert.Equal(2UL, remaining.CharacterId);
+        var saved = Assert.Single(store.Saves);
+        Assert.Equal(2UL, Assert.Single(saved).CharacterId);
+    }
+
+    [Fact]
+    public void ForgettingUnknownObservationDoesNotRewriteStore()
+    {
+        var store = new RecordingStore([Observation(1, 10, 100, Utc(0))]);
+        using var coordinator = CreateCoordinator(new FakeReader(null), store);
+
+        Assert.False(coordinator.ForgetObservation(99));
+        Assert.Empty(store.Saves);
+    }
+
     private static FuelObservationCoordinator CreateCoordinator(
         ICurrentCharacterFuelReader reader,
         IFuelObservationStore store) =>
