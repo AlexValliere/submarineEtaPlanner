@@ -36,13 +36,16 @@ public static class IncomeMetricsCalculator
             var coveredStart = first is null ? (DateTimeOffset?)null : windowStart is null ? first : Max(first.Value, windowStart.Value);
             var coveredDays = coveredStart is null ? 0d : Math.Max((now - coveredStart.Value).TotalDays, 1d / 24d);
             var gil = voyages.Sum(voyage => voyage.GrossNpcGil);
+            var recordedAverageGilPerDay = coveredDays <= 0 ? 0 : gil / coveredDays;
             return new IncomeSubmarineMetrics(
                 submarine.SubmarineId,
                 submarine.Name,
                 gil,
                 voyages.Length,
-                coveredDays <= 0 ? 0 : gil / coveredDays,
                 voyages.Length == 0 ? 0 : gil / (double)voyages.Length,
+                coveredDays,
+                recordedAverageGilPerDay,
+                recordedAverageGilPerDay,
                 first,
                 last)
             {
@@ -55,15 +58,16 @@ public static class IncomeMetricsCalculator
         var fcCoveredStart = fcFirst is null ? (DateTimeOffset?)null : windowStart is null ? fcFirst : Max(fcFirst.Value, windowStart.Value);
         var fcCoveredDays = fcCoveredStart is null ? 0d : Math.Max((now - fcCoveredStart.Value).TotalDays, 1d / 24d);
         var gross = submarines.Sum(item => item.GrossGil);
-        var voyageCount = submarines.Sum(item => item.ValidVoyages);
+        var voyageCount = submarines.Sum(item => item.VoyageCount);
         return new IncomeFcMetrics(
             fc.FcIdKey,
             fc.DisplayName,
             gross,
             voyageCount,
-            fcCoveredDays <= 0 ? 0 : gross / fcCoveredDays,
             voyageCount == 0 ? 0 : gross / (double)voyageCount,
             fcCoveredDays,
+            fcCoveredDays <= 0 ? 0 : gross / fcCoveredDays,
+            submarines.Sum(item => item.ObservedRunRateGilPerDay),
             fcFirst,
             fcLast,
             submarines);
@@ -77,7 +81,7 @@ public static class IncomeMetricsCalculator
         TimeSpan? period)
     {
         var gross = metrics.Sum(item => item.GrossGil);
-        var voyages = metrics.Sum(item => item.ValidVoyages);
+        var voyages = metrics.Sum(item => item.VoyageCount);
         var first = metrics
             .Where(item => item.FirstReturnAtUtc is not null)
             .Select(item => item.FirstReturnAtUtc)
@@ -91,9 +95,10 @@ public static class IncomeMetricsCalculator
         return new IncomeSummaryMetrics(
             gross,
             voyages,
+            voyages == 0 ? 0 : gross / (double)voyages,
             days,
             days == 0 ? 0 : gross / days,
-            voyages == 0 ? 0 : gross / (double)voyages,
+            metrics.Sum(item => item.ObservedRunRateGilPerDay),
             metrics.Count);
     }
 }

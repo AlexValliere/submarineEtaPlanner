@@ -36,7 +36,8 @@ public sealed partial class PlannerWindow
         IncomeHeaderColumn Mode,
         IncomeHeaderColumn BuildsAndRanks,
         IncomeHeaderColumn GrossGil,
-        IncomeHeaderColumn GilPerDay,
+        IncomeHeaderColumn RecordedAverageGilPerDay,
+        IncomeHeaderColumn ObservedRunRateGilPerDay,
         IncomeHeaderColumn GilPerVoyage,
         IncomeHeaderColumn Voyages);
 
@@ -235,13 +236,14 @@ public sealed partial class PlannerWindow
         var modeWidth = MeasureHeaderColumn(values.Select(value => value.Mode), "Mode", 78f, 105f);
         var buildsWidth = MeasureHeaderColumn(values.Select(value => value.BuildsAndRanks), "Builds / ranks", 150f, 360f);
         var grossWidth = MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 95f, 145f);
-        var dayWidth = MeasureHeaderColumn(values.Select(value => value.GilPerDay), "Gil / day", 88f, 125f);
+        var recordedAverageWidth = MeasureHeaderColumn(values.Select(value => value.RecordedAverageGilPerDay), "Recorded avg / day", 105f, 145f);
+        var runRateWidth = MeasureHeaderColumn(values.Select(value => value.ObservedRunRateGilPerDay), "Observed run rate", 105f, 145f);
         var voyageWidth = MeasureHeaderColumn(values.Select(value => value.GilPerVoyage), "Gil / voyage", 100f, 140f);
         var countWidth = MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 72f, 100f);
         var widths = FitIncomeHeaderWidths(
-            [fcWidth, worldWidth, modeWidth, buildsWidth, grossWidth, dayWidth, voyageWidth, countWidth],
-            [72f * scale, 66f * scale, 60f * scale, 120f * scale, 80f * scale, 68f * scale, 78f * scale, 48f * scale],
-            Math.Max(1f, availableWidth - gutter - (gap * 7f)));
+            [fcWidth, worldWidth, modeWidth, buildsWidth, grossWidth, recordedAverageWidth, runRateWidth, voyageWidth, countWidth],
+            [72f * scale, 66f * scale, 60f * scale, 120f * scale, 80f * scale, 86f * scale, 86f * scale, 78f * scale, 48f * scale],
+            Math.Max(1f, availableWidth - gutter - (gap * 8f)));
         var offset = gutter;
         IncomeHeaderColumn NextColumn(int index)
         {
@@ -260,7 +262,8 @@ public sealed partial class PlannerWindow
             NextColumn(4),
             NextColumn(5),
             NextColumn(6),
-            NextColumn(7));
+            NextColumn(7),
+            NextColumn(8));
     }
 
     private static float[] FitIncomeHeaderWidths(
@@ -297,7 +300,8 @@ public sealed partial class PlannerWindow
                 "World",
                 "Mode",
                 "Gross gil",
-                "Gil / day",
+                "Recorded avg / day",
+                "Observed run rate",
                 "Gil / voyage",
                 "Voyages",
                 false)
@@ -322,7 +326,8 @@ public sealed partial class PlannerWindow
         DrawIncomeHeaderCell(origin, layout, layout.BuildsAndRanks, presentation.BuildsAndRanks, normal);
         DrawIncomeHeaderCell(origin, layout, layout.GrossGil, presentation.GrossGil,
             legend ? PlannerUi.Muted : PlannerUi.Green);
-        DrawIncomeHeaderCell(origin, layout, layout.GilPerDay, presentation.GilPerDay, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.RecordedAverageGilPerDay, presentation.RecordedAverageGilPerDay, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.ObservedRunRateGilPerDay, presentation.ObservedRunRateGilPerDay, normal);
         DrawIncomeHeaderCell(origin, layout, layout.GilPerVoyage, presentation.GilPerVoyage, normal);
         DrawIncomeHeaderCell(origin, layout, layout.Voyages, presentation.Voyages, normal);
     }
@@ -364,10 +369,11 @@ public sealed partial class PlannerWindow
 
         ImGui.BeginTooltip();
         ImGui.TextColored(PlannerUi.Teal, $"{projection.State.FreeCompanyTag} — {projection.State.World}");
-        ImGui.TextUnformatted($"{projection.Mode} · {metric.ValidVoyages:N0} tracked voyage{(metric.ValidVoyages == 1 ? string.Empty : "s")}");
+        ImGui.TextUnformatted($"{projection.Mode} · {metric.VoyageCount:N0} tracked voyage{(metric.VoyageCount == 1 ? string.Empty : "s")}");
         ImGui.Separator();
         ImGui.TextColored(PlannerUi.Green, $"Gross NPC salvage value: {metric.GrossGil:N0} gil");
-        ImGui.TextUnformatted($"Gil per day: {metric.GilPerDay:N0}");
+        ImGui.TextUnformatted($"Recorded average per day: {metric.RecordedAverageGilPerDay:N0} gil");
+        ImGui.TextUnformatted($"Observed run rate per day: {metric.ObservedRunRateGilPerDay:N0} gil");
         ImGui.TextUnformatted($"Gil per voyage: {metric.GilPerVoyage:N0}");
         ImGui.TextColored(PlannerUi.Muted, $"Coverage: {FormatIncomeDate(metric.FirstReturnAtUtc)} – {FormatIncomeDate(metric.LastReturnAtUtc)}");
         ImGui.Separator();

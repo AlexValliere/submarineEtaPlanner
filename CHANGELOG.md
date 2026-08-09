@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.19.0
+
+- Separated historical recorded income averages from observed submarine run rates, corrected FC and global aggregation for staggered tracking start dates, and added explicit UI labels and sorting for both metrics.
+
 ## 0.5.18.0
 
 - Read canonical voyage history from SubmarineTracker and derived the existing recorded-salvage summaries from those observations without changing operational ETA cache fingerprints.

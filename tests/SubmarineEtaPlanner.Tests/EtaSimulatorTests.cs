@@ -1250,13 +1250,13 @@ public sealed class EtaSimulatorTests
         Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
         Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
         Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.5.18.0\"", repoJson);
+        Assert.Contains("\"AssemblyVersion\": \"0.5.19.0\"", repoJson);
         Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
         Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
         Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
         Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("Reads canonical voyage history from SubmarineTracker", repoJson);
+        Assert.Contains("Separates historical recorded income averages", repoJson);
         Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
     }
 
@@ -1295,7 +1295,9 @@ public sealed class EtaSimulatorTests
 
         Assert.DoesNotContain("covered day", incomePage, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("valid voyage", incomePage, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("\"Gil / day\"", incomePage);
+        Assert.Contains("\"Recorded avg / day\"", incomePage);
+        Assert.Contains("\"Observed run rate\"", incomePage);
+        Assert.Contains("not guaranteed income", incomePage);
         Assert.Contains("\"Gil / voyage\"", incomePage);
         Assert.Contains("DrawIncomePeriodButton(\"1 year\", IncomePeriod.Days365)", incomePage);
     }

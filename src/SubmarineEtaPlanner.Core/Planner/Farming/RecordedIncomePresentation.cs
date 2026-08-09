@@ -22,7 +22,8 @@ internal sealed record IncomeFcHeaderPresentation(
     string World,
     string Mode,
     string GrossGil,
-    string GilPerDay,
+    string RecordedAverageGilPerDay,
+    string ObservedRunRateGilPerDay,
     string GilPerVoyage,
     string Voyages,
     bool IsFarming)
@@ -39,9 +40,10 @@ internal sealed record IncomeFcHeaderPresentation(
             string.IsNullOrWhiteSpace(projection.State.World) ? "—" : projection.State.World,
             FcRoleSummaryFormatter.Format(projection.RoleSummary),
             $"{metric.GrossGil:N0}",
-            $"{metric.GilPerDay:N0}",
+            $"{metric.RecordedAverageGilPerDay:N0}",
+            $"{metric.ObservedRunRateGilPerDay:N0}",
             $"{metric.GilPerVoyage:N0}",
-            metric.ValidVoyages.ToString("N0"),
+            metric.VoyageCount.ToString("N0"),
             projection.RoleSummary is { HasFarming: true, HasLeveling: false, HasPaused: false })
         {
             BuildsAndRanks = metric.Submarines.Count == 0

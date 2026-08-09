@@ -335,7 +335,7 @@ public sealed class FleetReworkTests
         var metrics = IncomeMetricsCalculator.Calculate(fc, now, TimeSpan.FromDays(30));
 
         Assert.Equal(1_000, metrics.GrossGil);
-        Assert.Equal(2, metrics.ValidVoyages);
+        Assert.Equal(2, metrics.VoyageCount);
         Assert.Equal(500, metrics.GilPerVoyage);
         Assert.Equal(now.AddDays(-2), metrics.FirstReturnAtUtc);
     }
@@ -454,7 +454,7 @@ public sealed class FleetReworkTests
             new StubCatalog(),
             now);
         IncomeFcMetrics Metrics(double gilPerDay) => new(
-            fc.FcIdKey, fc.DisplayName, 10_000, 4, gilPerDay, 2_500, 10,
+            fc.FcIdKey, fc.DisplayName, 10_000, 4, 2_500, 10, 1_000, gilPerDay,
             now.AddDays(-10), now, []);
 
         var before = IncomeFcHeaderPresentation.Create(projection, Metrics(1_000), favorite: true);
@@ -466,7 +466,7 @@ public sealed class FleetReworkTests
         Assert.Equal("1 leveling", before.Mode);
         Assert.Equal(10_000.ToString("N0"), before.GrossGil);
         Assert.Equal("4", before.Voyages);
-        Assert.NotEqual(before.GilPerDay, after.GilPerDay);
+        Assert.NotEqual(before.ObservedRunRateGilPerDay, after.ObservedRunRateGilPerDay);
     }
 
     [Fact]
@@ -500,9 +500,10 @@ public sealed class FleetReworkTests
             0,
             0,
             0,
+            0,
             null,
             null,
-            ranks.Select((rank, index) => new IncomeSubmarineMetrics(index + 1, $"Sub {index + 1}", 0, 0, 0, 0, null, null)
+            ranks.Select((rank, index) => new IncomeSubmarineMetrics(index + 1, $"Sub {index + 1}", 0, 0, 0, 0, 0, 0, null, null)
             {
                 Rank = rank,
                 CurrentBuild = CurrentBuildPresentation.Create(new SubmarineBuild(builds[index], rank, 0, 0, 0, 0, 0)),
@@ -533,15 +534,16 @@ public sealed class FleetReworkTests
             0,
             0,
             0,
+            0,
             null,
             null,
             [
-                new IncomeSubmarineMetrics(1, "One", 0, 0, 0, 0, null, null)
+                new IncomeSubmarineMetrics(1, "One", 0, 0, 0, 0, 0, 0, null, null)
                 {
                     Rank = 115,
                     CurrentBuild = new CurrentBuildPresentation("WSCC", null),
                 },
-                new IncomeSubmarineMetrics(2, "Two", 0, 0, 0, 0, null, null)
+                new IncomeSubmarineMetrics(2, "Two", 0, 0, 0, 0, 0, 0, null, null)
                 {
                     Rank = 116,
                     CurrentBuild = new CurrentBuildPresentation("WSCC", null),
@@ -638,9 +640,10 @@ public sealed class FleetReworkTests
             id,
             gil,
             voyages,
-            gil / (double)firstReturnDaysAgo,
             gil / (double)voyages,
             firstReturnDaysAgo,
+            gil / (double)firstReturnDaysAgo,
+            gil / (double)firstReturnDaysAgo,
             now.AddDays(-firstReturnDaysAgo),
             now,
             []);
@@ -653,7 +656,7 @@ public sealed class FleetReworkTests
         Assert.Equal(10_000, farmingSummary.GrossGil);
         Assert.Equal(4, farmingSummary.VoyageCount);
         Assert.Equal(1, farmingSummary.FcCount);
-        Assert.Equal(1_000, farmingSummary.GilPerDay);
+        Assert.Equal(1_000, farmingSummary.ObservedRunRateGilPerDay);
         Assert.Equal(2_500, farmingSummary.GilPerVoyage);
         Assert.Equal(100_000, allSummary.GrossGil);
         Assert.Equal(2, allSummary.FcCount);
@@ -674,7 +677,7 @@ public sealed class FleetReworkTests
     public void IncomeOrderingKeepsFavoritesFirstWithinFilteredMetrics()
     {
         IncomeFcMetrics Metrics(string id, long gil) => new(
-            id, id, gil, 1, gil, gil, 1, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, []);
+            id, id, gil, 1, gil, 1, gil, gil, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, []);
         var favoriteLow = Metrics("Favorite", 1);
         var regularHigh = Metrics("Regular", 10_000);
 
@@ -708,7 +711,7 @@ public sealed class FleetReworkTests
         var metrics = IncomeMetricsCalculator.Calculate(fc, now, TimeSpan.FromDays(365));
 
         Assert.Equal(1_000, metrics.GrossGil);
-        Assert.Equal(2, metrics.ValidVoyages);
+        Assert.Equal(2, metrics.VoyageCount);
         Assert.Equal(now.AddDays(-365), metrics.FirstReturnAtUtc);
     }
 

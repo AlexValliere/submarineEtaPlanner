@@ -10,7 +10,8 @@ public static class IncomeMetricsOrdering
             .OrderByDescending(isFavorite)
             .ThenByDescending(metric => sort switch
             {
-                IncomeSort.GilPerDay => metric.GilPerDay,
+                IncomeSort.ObservedRunRateGilPerDay => metric.ObservedRunRateGilPerDay,
+                IncomeSort.RecordedAverageGilPerDay => metric.RecordedAverageGilPerDay,
                 IncomeSort.GilPerVoyage => metric.GilPerVoyage,
                 IncomeSort.FcName => 0,
                 _ => metric.GrossGil,
