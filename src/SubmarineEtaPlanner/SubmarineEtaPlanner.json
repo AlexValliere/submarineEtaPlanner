@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Persists locally observed character ceruleum inventories with throttled, atomic writes and corrupt-file recovery.",
+  "Changelog": "Resolves effective repeated routes for farming submarines with explicit build, fuel, sector, and duration validation.",
   "Tags": [
     "Submarine",
     "ETA",

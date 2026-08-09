@@ -24,7 +24,7 @@ public interface ISubmarineCatalog
 }
 
 public sealed record RouteFuelProfile(
-    int CeruleumTanks,
+    int? CeruleumTanks,
     bool IsComplete,
     IReadOnlyList<uint> UnknownSectors);
 

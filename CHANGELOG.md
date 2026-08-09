@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.25.0
+
+- Resolved each farming-role submarine's effective repeated route from its pinned route or current ordered SubmarineTracker route, with explicit build, sector, fuel, and duration validation warnings.
+
 ## 0.5.24.0
 
 - Persisted manually observed character ceruleum inventories locally with throttled atomic writes, character and FC identity updates, timestamp refreshes, and corrupt-file recovery.
