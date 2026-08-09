@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.7.0
+
+- Refactored core fleet presentation into focused Operations and Farming modules without changing planner behavior.
+
 ## 0.5.6.0
 
 - Compactly display fully upgraded tracker builds using community notation (for example, `S+C+U+S+` becomes `SCUS++`) throughout Operations, Leveling, and Income.
