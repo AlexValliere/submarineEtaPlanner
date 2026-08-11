@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.30.0
+
+- Added FC-specific sector unlock maps with live unlocked, explored, discoverable, locked, and active-attempt states, complete unlock paths, and cross-map connections.
+
 ## 0.5.29.0
 
 - Added player-friendly fuel forecasting, responsive content-aware table columns, compact FC route displays with full-name tooltips, a validated farming-route picker, and persistent FC Setup actions.

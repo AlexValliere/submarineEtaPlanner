@@ -14,6 +14,7 @@ The plugin reads local SubmarineTracker data, simulates future voyages, and pres
 - Coordinate shared unlock progression and voyage timing across each FC fleet.
 - Model sector-discovery RNG with median ETAs and P10-P90 likely ranges.
 - Show concurrent FC unlock attempts and conditional routes without presenting locked sectors as guaranteed.
+- Inspect every FC's unlocked, explored, discoverable, and remaining destinations on schematic sector maps with complete unlock connections.
 - Use Recommended leveling for expected-EXP-per-hour routing and main leveling-route unlocks.
 - Use Custom strategy for advanced EXP, route-goal, duration, and build-profile controls.
 - Search and filter FCs, review readiness and warnings, and expand complete voyage forecasts.

@@ -25,7 +25,10 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog, IRouteSelectionC
             $"{sector.MapCode}{sector.Point}",
             sector.MapId,
             sector.MapCode,
-            sector.RequiredRank))
+            sector.RequiredRank)
+        {
+            MapPosition = CreateMapPosition(sector.Point, sector.MapId),
+        })
         .OrderBy(destination => destination.MapId)
         .ThenBy(destination => destination.SectorId)
         .ToArray();
@@ -296,6 +299,12 @@ public sealed class CompatSubmarineCatalog : ISubmarineCatalog, IRouteSelectionC
         var exp = (uint)(850 + point * 95 + Math.Pow(point, 1.35));
         var distance = 45u + point * 3u + (uint)(mapIndex * 20);
         return new SectorInfo(point, $"M{mapIndex + 1}", mapIndex + 1, requiredRank, exp, distance);
+    }
+
+    private static RouteMapPosition CreateMapPosition(uint point, uint mapId)
+    {
+        var indexWithinMap = checked((int)(point - 1 - ((mapId - 1) * 30)));
+        return new RouteMapPosition(indexWithinMap % 6, indexWithinMap / 6);
     }
 
     private sealed record PartStats(int Surveillance, int Retrieval, int Favor, int Range, int Speed);

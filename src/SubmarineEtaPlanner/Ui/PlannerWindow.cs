@@ -180,9 +180,9 @@ public sealed partial class PlannerWindow : Window
                 GetPageSubtitle(),
                 this.configuration.Settings.TargetRank,
                 EtaModelLabels[(int)this.configuration.Settings.EtaModel],
-                this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Income,
+                this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Unlocks or PlannerPage.Income,
                 refreshing,
-                this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Income,
+                this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Unlocks or PlannerPage.Income,
                 this.configuration.FreeCompanyPreferences.Values.Count(value => value.TargetRankOverride is not null || value.StrategyOverride is not null)))
         {
             if (refreshing)
@@ -226,6 +226,7 @@ public sealed partial class PlannerWindow : Window
                 {
                     case PlannerPage.Operations: DrawOperationsPage(); break;
                     case PlannerPage.Leveling: DrawLevelingPage(); break;
+                    case PlannerPage.Unlocks: DrawUnlocksPage(); break;
                     case PlannerPage.Income: DrawIncomePage(); break;
                 }
             }
@@ -244,6 +245,7 @@ public sealed partial class PlannerWindow : Window
 
         DrawNavigationItem(PlannerPage.Operations, FontAwesomeIcon.Tasks, "Operations", compact);
         DrawNavigationItem(PlannerPage.Leveling, FontAwesomeIcon.ChartLine, "Leveling", compact);
+        DrawNavigationItem(PlannerPage.Unlocks, FontAwesomeIcon.Map, "Unlocks", compact);
         DrawNavigationItem(PlannerPage.Income, FontAwesomeIcon.Coins, "Income", compact);
         DrawNavigationItem(PlannerPage.FcSetup, FontAwesomeIcon.Building, "FC Setup", compact);
         ImGui.Spacing();
@@ -281,6 +283,7 @@ public sealed partial class PlannerWindow : Window
     {
         PlannerPage.Operations => "Fleet operations",
         PlannerPage.Leveling => "Leveling fleets",
+        PlannerPage.Unlocks => "Sector unlocks",
         PlannerPage.Income => "Recorded income",
         PlannerPage.FcSetup => "Free company setup",
         PlannerPage.Settings => "Settings",
@@ -291,6 +294,7 @@ public sealed partial class PlannerWindow : Window
     {
         PlannerPage.Operations => "Actions first, then every known return across the fleet.",
         PlannerPage.Leveling => "Every leveling FC and submarine in one progression view.",
+        PlannerPage.Unlocks => "FC-wide destination progress and sector discovery paths.",
         PlannerPage.Income => "Gross NPC salvage value from recorded SubmarineTracker returns.",
         PlannerPage.FcSetup => "Favorites, targets, strategies, submarine roles, and pinned farming routes.",
         PlannerPage.Settings => "Global simulation, route, data, build, and display preferences.",
@@ -617,6 +621,7 @@ public sealed partial class PlannerWindow : Window
     {
         Operations,
         Leveling,
+        Unlocks,
         Income,
         FcSetup,
         Settings,

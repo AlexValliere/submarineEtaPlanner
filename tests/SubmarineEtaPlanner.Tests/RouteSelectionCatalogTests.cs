@@ -66,6 +66,7 @@ public sealed class RouteSelectionCatalogTests
         Assert.NotEmpty(destinations);
         Assert.True(destinations.Select(destination => destination.MapId).Distinct().Count() > 1);
         Assert.All(destinations, destination => Assert.False(string.IsNullOrWhiteSpace(destination.Code)));
+        Assert.All(destinations, destination => Assert.NotNull(destination.MapPosition));
         Assert.Contains(destinations, destination => destination.RequiredRank <= 5);
     }
 }

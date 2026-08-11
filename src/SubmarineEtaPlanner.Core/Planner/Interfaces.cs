@@ -49,7 +49,12 @@ public sealed record RouteDestination(
     string Name,
     uint MapId,
     string MapName,
-    int RequiredRank);
+    int RequiredRank)
+{
+    public RouteMapPosition? MapPosition { get; init; }
+}
+
+public readonly record struct RouteMapPosition(float X, float Z);
 
 public sealed record RouteSelectionValidation(
     IReadOnlyList<uint> Route,

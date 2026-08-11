@@ -77,7 +77,10 @@ public sealed class DalamudSubmarineCatalog :
                     string.IsNullOrWhiteSpace(mapName) || mapName == mapId.ToString()
                         ? $"Map {Array.IndexOf(this.reversedMapStartSectors.Reverse().ToArray(), mapId) + 1}"
                         : mapName,
-                    checked((int)row.RankReq));
+                    checked((int)row.RankReq))
+                {
+                    MapPosition = new RouteMapPosition(row.X, row.Z),
+                };
             })
             .OrderBy(destination => destination.MapId)
             .ThenBy(destination => destination.SectorId)
