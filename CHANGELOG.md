@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.34.0
+
+- Improved sector unlock tooltips and tables with concise FC-relative remaining paths beginning at the latest accessible prerequisite.
+
 ## 0.5.33.0
 
 - Improved sector unlock maps with deterministic graph-aware positioning that keeps nodes readable while retaining approximate geographic orientation.

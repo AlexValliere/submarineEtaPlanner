@@ -339,7 +339,7 @@ public sealed partial class PlannerWindow
         BeginSettingsCard(
             $"unlock-remaining-{map.MapId}",
             "Remaining to unlock",
-            $"Locked destinations and their required discovery path on {map.MapName}.");
+            $"Locked destinations and their remaining discovery path on {map.MapName}.");
         if (!presentation.UnlockDataKnown)
         {
             ImGui.TextColored(PlannerUi.Muted, "Remaining destinations cannot be determined until SubmarineTracker provides this FC's unlock state.");
@@ -366,7 +366,7 @@ public sealed partial class PlannerWindow
             ImGui.TableSetupColumn("State", ImGuiTableColumnFlags.WidthFixed, 155f * ImGuiHelpers.GlobalScale);
             ImGui.TableSetupColumn("Unlock from", ImGuiTableColumnFlags.WidthFixed, 150f * ImGuiHelpers.GlobalScale);
             ImGui.TableSetupColumn("Required rank", ImGuiTableColumnFlags.WidthFixed, 105f * ImGuiHelpers.GlobalScale);
-            ImGui.TableSetupColumn("Prerequisite path", ImGuiTableColumnFlags.WidthStretch, 250f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("Remaining path", ImGuiTableColumnFlags.WidthStretch, 250f * ImGuiHelpers.GlobalScale);
             ImGui.TableSetupColumn("Special / attempt", ImGuiTableColumnFlags.WidthFixed, 180f * ImGuiHelpers.GlobalScale);
             ImGui.TableSetupScrollFreeze(1, 1);
             ImGui.TableHeadersRow();
@@ -380,7 +380,7 @@ public sealed partial class PlannerWindow
                     ? $"{source.Code} — {source.Name}"
                     : "Initial destination");
                 DrawTableText($"R{destination.Destination.RequiredRank}");
-                DrawTableText(FormatUnlockPath(destination.PrerequisitePath, metadata));
+                DrawTableText(FormatUnlockPath(destination.RemainingUnlockPath, metadata));
                 DrawTableText(FormatUnlockSpecial(destination));
             }
             ImGui.EndTable();
@@ -401,11 +401,22 @@ public sealed partial class PlannerWindow
         {
             var source = metadata.GetValueOrDefault(rule.SourcePoint);
             ImGui.TextUnformatted($"Unlock from: {source?.Name ?? this.catalog.PointName(rule.SourcePoint)}");
-            ImGui.TextWrapped($"Path: {FormatUnlockPath(destination.PrerequisitePath, metadata)}");
         }
         else
         {
             ImGui.TextColored(PlannerUi.Muted, "Initial destination; no discovery source is recorded.");
+        }
+
+        if (destination.State is UnlockDestinationState.Discoverable or UnlockDestinationState.Locked &&
+            destination.RemainingUnlockPath.Count > 0)
+        {
+            ImGui.TextWrapped($"Remaining path: {FormatUnlockPath(destination.RemainingUnlockPath, metadata)}");
+        }
+        else if (destination.State == UnlockDestinationState.Unlocked)
+        {
+            ImGui.TextColored(
+                PlannerUi.Teal,
+                $"Next step: Explore {destination.Destination.Code} — {destination.Destination.Name}.");
         }
 
         var blocked = FormatUnlockBlockReason(destination, metadata);
@@ -444,7 +455,21 @@ public sealed partial class PlannerWindow
     private static string FormatUnlockPath(
         IReadOnlyList<uint> path,
         IReadOnlyDictionary<uint, RouteDestination> metadata)
-        => string.Join(" → ", path.Select(point => metadata.TryGetValue(point, out var destination) ? destination.Code : point.ToString()));
+    {
+        var mapCount = path
+            .Select(point => metadata.GetValueOrDefault(point)?.MapId)
+            .Where(mapId => mapId is not null)
+            .Distinct()
+            .Count();
+        return string.Join(" → ", path.Select(point =>
+        {
+            if (!metadata.TryGetValue(point, out var destination))
+                return point.ToString();
+            return mapCount > 1
+                ? $"{destination.MapName}:{destination.Code}"
+                : destination.Code;
+        }));
+    }
 
     private static string FormatUnlockSpecial(UnlockMapDestinationPresentation destination)
     {

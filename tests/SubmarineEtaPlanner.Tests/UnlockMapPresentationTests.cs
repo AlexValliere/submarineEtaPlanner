@@ -31,14 +31,17 @@ public sealed class UnlockMapPresentationTests
         Assert.Equal(3, result.RemainingDestinations);
         Assert.Equal(UnlockDestinationState.Explored, Find(result, 1).State);
         Assert.Equal(UnlockDestinationState.Unlocked, Find(result, 2).State);
+        Assert.Empty(Find(result, 1).RemainingUnlockPath);
+        Assert.Empty(Find(result, 2).RemainingUnlockPath);
         Assert.Equal(UnlockDestinationState.Discoverable, Find(result, 3).State);
+        Assert.Equal([2u, 3u], Find(result, 3).RemainingUnlockPath);
         Assert.Equal(UnlockDestinationState.Locked, Find(result, 4).State);
         Assert.Equal(UnlockDestinationBlockReason.EarlierSibling, Find(result, 4).BlockReason);
         Assert.Equal(3u, Find(result, 4).BlockingPoint);
-        Assert.Equal([1u, 2u, 3u, 4u], Find(result, 4).PrerequisitePath);
+        Assert.Equal([2u, 3u, 4u], Find(result, 4).RemainingUnlockPath);
         Assert.Equal(UnlockDestinationState.Locked, Find(result, 5).State);
         Assert.Equal(UnlockDestinationBlockReason.SourceLocked, Find(result, 5).BlockReason);
-        Assert.Equal([1u, 2u, 3u, 5u], Find(result, 5).PrerequisitePath);
+        Assert.Equal([2u, 3u, 5u], Find(result, 5).RemainingUnlockPath);
         Assert.True(Find(result, 5).IncomingRule!.UnlocksSubSlot);
         Assert.True(Find(result, 5).IncomingRule!.UnlocksMap);
     }
@@ -94,6 +97,30 @@ public sealed class UnlockMapPresentationTests
         Assert.All(result.Maps, map => Assert.Null(map.RemainingDestinations));
         Assert.All(result.Maps.SelectMany(map => map.Destinations), destination =>
             Assert.Equal(UnlockDestinationState.Unknown, destination.State));
+        Assert.All(result.Maps.SelectMany(map => map.Destinations), destination =>
+            Assert.Empty(destination.RemainingUnlockPath));
+    }
+
+    [Fact]
+    public void RemainingPathTreatsExploredPointsAsAccessible()
+    {
+        var fc = CreateFc([1, 2], [1, 3], CreateSub(1, "Sub", 10));
+        UnlockRule[] rules = [new(1, 2, 1, 1), new(2, 3, 1, 1), new(3, 5, 1, 1)];
+
+        var result = UnlockMapPresentationBuilder.Build(fc, Destinations(), rules, Now);
+
+        Assert.Equal([3u, 5u], Find(result, 5).RemainingUnlockPath);
+    }
+
+    [Fact]
+    public void RemainingPathFallsBackToCompleteStructuralPathWithoutAccessiblePoint()
+    {
+        var fc = CreateFc([], [], CreateSub(1, "Sub", 10));
+        UnlockRule[] rules = [new(1, 2, 1, 1), new(2, 3, 1, 1)];
+
+        var result = UnlockMapPresentationBuilder.Build(fc, Destinations(), rules, Now);
+
+        Assert.Equal([1u, 2u, 3u], Find(result, 3).RemainingUnlockPath);
     }
 
     [Fact]
@@ -109,6 +136,7 @@ public sealed class UnlockMapPresentationTests
         var second = result.Maps[1];
         Assert.Contains(first.Connections, connection => connection is { SourcePoint: 3, TargetPoint: 5, CrossesMaps: true });
         Assert.Contains(second.Connections, connection => connection is { SourcePoint: 3, TargetPoint: 5, CrossesMaps: true });
+        Assert.Equal([3u, 5u], Find(result, 5).RemainingUnlockPath);
     }
 
     [Fact]

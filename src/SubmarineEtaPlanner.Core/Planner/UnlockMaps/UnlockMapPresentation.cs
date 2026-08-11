@@ -29,7 +29,7 @@ public sealed record UnlockMapDestinationPresentation(
     RouteDestination Destination,
     UnlockDestinationState State,
     UnlockRule? IncomingRule,
-    IReadOnlyList<uint> PrerequisitePath,
+    IReadOnlyList<uint> RemainingUnlockPath,
     IReadOnlyList<UnlockMapActiveAttempt> ActiveAttempts,
     UnlockDestinationBlockReason BlockReason = UnlockDestinationBlockReason.None,
     uint? BlockingPoint = null)
@@ -108,7 +108,12 @@ public static class UnlockMapPresentationBuilder
                     destination,
                     classification.State,
                     incomingRule,
-                    BuildPrerequisitePath(destination.SectorId, incomingRules, rulesBySource),
+                    BuildRemainingUnlockPath(
+                        freeCompany,
+                        destination.SectorId,
+                        classification.State,
+                        incomingRules,
+                        rulesBySource),
                     attempts ?? [],
                     classification.BlockReason,
                     classification.BlockingPoint);
@@ -246,7 +251,28 @@ public static class UnlockMapPresentationBuilder
             ? rules.FirstOrDefault(rule => rule.SourceRequiredRank <= rank && !unlockedPoints.Contains(rule.UnlocksPoint))
             : null;
 
-    private static IReadOnlyList<uint> BuildPrerequisitePath(
+    private static IReadOnlyList<uint> BuildRemainingUnlockPath(
+        FcState freeCompany,
+        uint targetPoint,
+        UnlockDestinationState state,
+        IReadOnlyDictionary<uint, UnlockRule> incomingRules,
+        IReadOnlyDictionary<uint, UnlockRule[]> rulesBySource)
+    {
+        if (!freeCompany.UnlockDataKnown || state is not (UnlockDestinationState.Discoverable or UnlockDestinationState.Locked))
+            return [];
+
+        var fullPath = BuildStructuralPath(targetPoint, incomingRules, rulesBySource);
+        for (var index = fullPath.Count - 1; index >= 0; index--)
+        {
+            var point = fullPath[index];
+            if (freeCompany.UnlockedPoints.Contains(point) || freeCompany.ExploredPoints.Contains(point))
+                return fullPath.Skip(index).ToArray();
+        }
+
+        return fullPath;
+    }
+
+    private static IReadOnlyList<uint> BuildStructuralPath(
         uint targetPoint,
         IReadOnlyDictionary<uint, UnlockRule> incomingRules,
         IReadOnlyDictionary<uint, UnlockRule[]> rulesBySource)
