@@ -53,24 +53,16 @@ internal sealed record OperationsFcHeaderPresentation(
 
 internal sealed record CompactOperationalStatePresentation(string Label, string Tooltip)
 {
-    public static CompactOperationalStatePresentation Create(SubmarineOperationalProjection submarine)
-        => Create(submarine, null);
-
     public static CompactOperationalStatePresentation Create(
         SubmarineOperationalProjection submarine,
         DateTimeOffset now)
-        => Create(submarine, (DateTimeOffset?)now);
-
-    private static CompactOperationalStatePresentation Create(
-        SubmarineOperationalProjection submarine,
-        DateTimeOffset? now)
     {
         var label = submarine.State switch
         {
-            OperationalState.Syncing when now is { } timestamp && submarine.NextActionAtUtc is { } next =>
-                $"Syncing · {CurrentVoyageProgressFormatter.FormatCountdown(next - timestamp)}",
-            OperationalState.Underway when now is { } timestamp && submarine.NextActionAtUtc is { } next =>
-                $"Underway · {CurrentVoyageProgressFormatter.FormatCountdown(next - timestamp)}",
+            OperationalState.Syncing when submarine.NextActionAtUtc is { } next =>
+                $"Syncing · {CurrentVoyageProgressFormatter.FormatCountdown(next - now)}",
+            OperationalState.Underway when submarine.NextActionAtUtc is { } next =>
+                $"Underway · {CurrentVoyageProgressFormatter.FormatCountdown(next - now)}",
             OperationalState.Syncing => "Syncing",
             OperationalState.ReadyToCollect => "To collect",
             OperationalState.Underway => "Underway",
