@@ -112,7 +112,32 @@ public sealed class UnlockMapPresentationTests
     }
 
     [Fact]
-    public void NormalizesCoordinatesPreservesAspectAndInvertsZ()
+    public void LayoutIsDeterministicRegardlessOfInputOrder()
+    {
+        RouteDestination[] destinations =
+        [
+            Destination(1, 1, 0, 0),
+            Destination(2, 1, 1, 0.2f),
+            Destination(3, 1, 2, 0.6f),
+            Destination(4, 1, 8, 7),
+            Destination(5, 1, 9, 9),
+        ];
+        UnlockMapConnection[] connections =
+        [
+            Connection(1, 2),
+            Connection(2, 3),
+            Connection(3, 4),
+            Connection(4, 5),
+        ];
+
+        var first = UnlockMapLayoutCalculator.Calculate(destinations, connections, 700, 420, 35, 18);
+        var second = UnlockMapLayoutCalculator.Calculate(destinations.Reverse().ToArray(), connections.Reverse().ToArray(), 700, 420, 35, 18);
+
+        Assert.Equal(first.OrderBy(pair => pair.Key), second.OrderBy(pair => pair.Key));
+    }
+
+    [Fact]
+    public void UsesIndependentAxesAndInvertsZ()
     {
         RouteDestination[] destinations =
         [
@@ -120,14 +145,38 @@ public sealed class UnlockMapPresentationTests
             Destination(2, 1, 10, 20),
         ];
 
-        var result = UnlockMapLayoutCalculator.Calculate(destinations, 120, 220, 10);
+        var result = UnlockMapLayoutCalculator.Calculate(destinations, [], 300, 150, 20, 5);
 
-        Assert.Equal(new UnlockMapCanvasPoint(10, 210), result[1]);
-        Assert.Equal(new UnlockMapCanvasPoint(110, 10), result[2]);
+        Assert.True(result[1].X < result[2].X);
+        Assert.True(result[1].Y > result[2].Y);
+        Assert.True(result.Values.Max(point => point.X) - result.Values.Min(point => point.X) > 240);
+        Assert.True(result.Values.Max(point => point.Y) - result.Values.Min(point => point.Y) > 90);
     }
 
     [Fact]
-    public void CentersCoordinateContentWhenCanvasAspectDiffers()
+    public void CrowdedMapMaintainsMinimumAchievableSpacingAndBounds()
+    {
+        var destinations = Enumerable.Range(1, 20)
+            .Select(index => index == 20
+                ? Destination((uint)index, 1, 100, 100)
+                : Destination((uint)index, 1, (index % 5) * 0.3f, (index / 5) * 0.3f))
+            .ToArray();
+        var connections = Enumerable.Range(1, 19)
+            .Select(index => Connection((uint)index, (uint)(index + 1)))
+            .ToArray();
+
+        var result = UnlockMapLayoutCalculator.Calculate(destinations, connections, 900, 520, 40, 18);
+
+        Assert.All(result.Values, point =>
+        {
+            Assert.InRange(point.X, 58, 842);
+            Assert.InRange(point.Y, 58, 462);
+        });
+        Assert.True(MinimumDistance(result.Values) >= 47f, $"Minimum distance was {MinimumDistance(result.Values):N2}px.");
+    }
+
+    [Fact]
+    public void ConnectedNodesArePulledCloserThanUnconnectedNodes()
     {
         RouteDestination[] destinations =
         [
@@ -135,10 +184,51 @@ public sealed class UnlockMapPresentationTests
             Destination(2, 1, 10, 10),
         ];
 
-        var result = UnlockMapLayoutCalculator.Calculate(destinations, 200, 100, 10);
+        var disconnected = UnlockMapLayoutCalculator.Calculate(destinations, [], 700, 420, 35, 18);
+        var connected = UnlockMapLayoutCalculator.Calculate(destinations, [Connection(1, 2)], 700, 420, 35, 18);
 
-        Assert.Equal(new UnlockMapCanvasPoint(60, 90), result[1]);
-        Assert.Equal(new UnlockMapCanvasPoint(140, 10), result[2]);
+        Assert.True(Distance(connected[1], connected[2]) < Distance(disconnected[1], disconnected[2]) * 0.5f);
+        Assert.True(Distance(connected[1], connected[2]) < 180f);
+    }
+
+    [Fact]
+    public void CrossMapConnectionsDoNotInfluenceLayout()
+    {
+        RouteDestination[] destinations =
+        [
+            Destination(1, 1, 0, 0),
+            Destination(2, 1, 10, 10),
+        ];
+
+        var withoutConnection = UnlockMapLayoutCalculator.Calculate(destinations, [], 700, 420, 35, 18);
+        var withCrossMapConnection = UnlockMapLayoutCalculator.Calculate(
+            destinations,
+            [new UnlockMapConnection(1, 2, 1, 2)],
+            700,
+            420,
+            35,
+            18);
+
+        Assert.Equal(withoutConnection.OrderBy(pair => pair.Key), withCrossMapConnection.OrderBy(pair => pair.Key));
+    }
+
+    [Fact]
+    public void UndersizedCanvasStillReturnsFiniteBoundedPoints()
+    {
+        var destinations = Enumerable.Range(1, 25)
+            .Select(index => Destination((uint)index, 1, 1, 1))
+            .ToArray();
+
+        var result = UnlockMapLayoutCalculator.Calculate(destinations, [], 120, 80, 5, 12);
+
+        Assert.Equal(destinations.Length, result.Count);
+        Assert.All(result.Values, point =>
+        {
+            Assert.True(float.IsFinite(point.X));
+            Assert.True(float.IsFinite(point.Y));
+            Assert.InRange(point.X, 17, 103);
+            Assert.InRange(point.Y, 17, 63);
+        });
     }
 
     [Fact]
@@ -147,19 +237,37 @@ public sealed class UnlockMapPresentationTests
         var missing = new RouteDestination(1, "A", "A", 1, "Map", 1);
         var positioned = Destination(2, 1, 5, 5);
 
-        var first = UnlockMapLayoutCalculator.Calculate([missing, positioned], 100, 100, 10);
-        var second = UnlockMapLayoutCalculator.Calculate([positioned, missing], 100, 100, 10);
-        var single = UnlockMapLayoutCalculator.Calculate([positioned], 100, 100, 10);
+        var first = UnlockMapLayoutCalculator.Calculate([missing, positioned], [], 100, 100, 10, 5);
+        var second = UnlockMapLayoutCalculator.Calculate([positioned, missing], [], 100, 100, 10, 5);
+        var single = UnlockMapLayoutCalculator.Calculate([positioned], [], 100, 100, 10, 5);
 
         Assert.Equal(first[1], second[1]);
         Assert.Equal(first[2], second[2]);
         Assert.Equal(new UnlockMapCanvasPoint(50, 50), single[2]);
         Assert.All(first.Values, point =>
         {
-            Assert.InRange(point.X, 10, 90);
-            Assert.InRange(point.Y, 10, 90);
+            Assert.InRange(point.X, 15, 85);
+            Assert.InRange(point.Y, 15, 85);
         });
     }
+
+    private static UnlockMapConnection Connection(uint sourcePoint, uint targetPoint)
+        => new(sourcePoint, targetPoint, 1, 1);
+
+    private static float MinimumDistance(IEnumerable<UnlockMapCanvasPoint> points)
+    {
+        var values = points.ToArray();
+        var minimum = float.MaxValue;
+        for (var first = 0; first < values.Length; first++)
+        {
+            for (var second = first + 1; second < values.Length; second++)
+                minimum = Math.Min(minimum, Distance(values[first], values[second]));
+        }
+        return minimum;
+    }
+
+    private static float Distance(UnlockMapCanvasPoint first, UnlockMapCanvasPoint second)
+        => MathF.Sqrt(MathF.Pow(second.X - first.X, 2) + MathF.Pow(second.Y - first.Y, 2));
 
     private static UnlockMapDestinationPresentation Find(FcUnlockMapsPresentation presentation, uint sectorId)
         => presentation.Maps.SelectMany(map => map.Destinations).Single(destination => destination.Destination.SectorId == sectorId);

@@ -10,6 +10,7 @@ public sealed partial class PlannerWindow
 {
     private string? selectedUnlockFcId;
     private uint? selectedUnlockMapId;
+    private readonly Dictionary<uint, UnlockMapLayoutCacheEntry> unlockMapLayoutCache = [];
 
     private void DrawUnlocksPage()
     {
@@ -163,11 +164,12 @@ public sealed partial class PlannerWindow
         drawList.AddRect(origin, end, ImGui.ColorConvertFloat4ToU32(PlannerUi.Border), 7f * scale, ImDrawFlags.None, 1.2f * scale);
 
         var nodeRadius = 18f * scale;
-        var positions = UnlockMapLayoutCalculator.Calculate(
-            map.Destinations.Select(destination => destination.Destination).ToArray(),
+        var positions = GetUnlockMapPositions(
+            map,
             canvasSize.X,
             canvasSize.Y,
-            50f * scale);
+            50f * scale,
+            nodeRadius);
         var allDestinations = presentation.Maps
             .SelectMany(candidate => candidate.Destinations)
             .ToDictionary(destination => destination.Destination.SectorId);
@@ -264,6 +266,72 @@ public sealed partial class PlannerWindow
             .FirstOrDefault();
         if (hovered is not null)
             DrawUnlockDestinationTooltip(hovered, allMetadata);
+    }
+
+    private IReadOnlyDictionary<uint, UnlockMapCanvasPoint> GetUnlockMapPositions(
+        UnlockMapPresentation map,
+        float width,
+        float height,
+        float padding,
+        float nodeRadius)
+    {
+        var destinations = map.Destinations.Select(destination => destination.Destination).ToArray();
+        var fingerprint = CalculateUnlockMapLayoutFingerprint(destinations, map.Connections);
+        if (this.unlockMapLayoutCache.TryGetValue(map.MapId, out var cached) &&
+            Math.Abs(cached.Width - width) < 0.5f &&
+            Math.Abs(cached.Height - height) < 0.5f &&
+            Math.Abs(cached.Padding - padding) < 0.5f &&
+            Math.Abs(cached.NodeRadius - nodeRadius) < 0.1f &&
+            cached.Fingerprint == fingerprint)
+        {
+            return cached.Positions;
+        }
+
+        var positions = UnlockMapLayoutCalculator.Calculate(
+            destinations,
+            map.Connections,
+            width,
+            height,
+            padding,
+            nodeRadius);
+        this.unlockMapLayoutCache[map.MapId] = new UnlockMapLayoutCacheEntry(
+            width,
+            height,
+            padding,
+            nodeRadius,
+            fingerprint,
+            positions);
+        return positions;
+    }
+
+    private static ulong CalculateUnlockMapLayoutFingerprint(
+        IReadOnlyList<RouteDestination> destinations,
+        IReadOnlyList<UnlockMapConnection> connections)
+    {
+        const ulong offset = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
+        var value = offset;
+        void Add(uint part)
+        {
+            value ^= part;
+            value *= prime;
+        }
+
+        foreach (var destination in destinations.OrderBy(destination => destination.SectorId))
+        {
+            Add(destination.SectorId);
+            Add(destination.MapPosition is { } position ? BitConverter.SingleToUInt32Bits(position.X) : uint.MaxValue);
+            Add(destination.MapPosition is { } mapPosition ? BitConverter.SingleToUInt32Bits(mapPosition.Z) : uint.MaxValue);
+        }
+        foreach (var connection in connections
+                     .Where(connection => !connection.CrossesMaps)
+                     .OrderBy(connection => connection.SourcePoint)
+                     .ThenBy(connection => connection.TargetPoint))
+        {
+            Add(connection.SourcePoint);
+            Add(connection.TargetPoint);
+        }
+        return value;
     }
 
     private void DrawRemainingUnlocks(FcUnlockMapsPresentation presentation, UnlockMapPresentation map)
@@ -412,4 +480,12 @@ public sealed partial class PlannerWindow
             UnlockDestinationState.Locked => PlannerUi.Muted,
             _ => PlannerUi.Muted,
         };
+
+    private sealed record UnlockMapLayoutCacheEntry(
+        float Width,
+        float Height,
+        float Padding,
+        float NodeRadius,
+        ulong Fingerprint,
+        IReadOnlyDictionary<uint, UnlockMapCanvasPoint> Positions);
 }

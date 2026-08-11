@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace SubmarineEtaPlanner.Planner;
 
 public enum UnlockDestinationState
@@ -294,70 +296,189 @@ public readonly record struct UnlockMapCanvasPoint(float X, float Y);
 public static class UnlockMapLayoutCalculator
 {
     private const float CoordinateEpsilon = 0.001f;
+    private const int RelaxationIterations = 220;
+    private const int CollisionCleanupIterations = 80;
 
     public static IReadOnlyDictionary<uint, UnlockMapCanvasPoint> Calculate(
         IReadOnlyList<RouteDestination> destinations,
+        IReadOnlyList<UnlockMapConnection> connections,
         float width,
         float height,
-        float padding)
+        float padding,
+        float nodeRadius)
     {
         ArgumentNullException.ThrowIfNull(destinations);
+        ArgumentNullException.ThrowIfNull(connections);
         if (destinations.Count == 0)
             return new Dictionary<uint, UnlockMapCanvasPoint>();
 
+        var ordered = destinations.OrderBy(destination => destination.SectorId).ToArray();
         var safeWidth = Math.Max(1f, width);
         var safeHeight = Math.Max(1f, height);
         var safePadding = Math.Clamp(padding, 0f, Math.Min(safeWidth, safeHeight) / 2f);
-        var positions = destinations.Select(destination => destination.MapPosition).ToArray();
-        if (positions.Any(position => position is null || !float.IsFinite(position.Value.X) || !float.IsFinite(position.Value.Z)))
-            return Grid(destinations, safeWidth, safeHeight, safePadding);
+        var safeRadius = Math.Max(0f, nodeRadius);
+        var center = new Vector2(safeWidth / 2f, safeHeight / 2f);
+        var left = Math.Min(center.X, safePadding + safeRadius);
+        var right = Math.Max(center.X, safeWidth - safePadding - safeRadius);
+        var top = Math.Min(center.Y, safePadding + safeRadius);
+        var bottom = Math.Max(center.Y, safeHeight - safePadding - safeRadius);
+        var anchors = InitialPositions(ordered, left, right, top, bottom);
+        var positions = anchors.ToArray();
+        var indexBySector = ordered
+            .Select((destination, index) => (destination.SectorId, index))
+            .ToDictionary(item => item.SectorId, item => item.index);
+        var edges = connections
+            .Where(connection => !connection.CrossesMaps)
+            .Where(connection => indexBySector.ContainsKey(connection.SourcePoint) && indexBySector.ContainsKey(connection.TargetPoint))
+            .Select(connection => (
+                Source: indexBySector[connection.SourcePoint],
+                Target: indexBySector[connection.TargetPoint],
+                connection.SourcePoint,
+                connection.TargetPoint))
+            .Distinct()
+            .OrderBy(edge => edge.SourcePoint)
+            .ThenBy(edge => edge.TargetPoint)
+            .ToArray();
 
-        var minX = positions.Min(position => position!.Value.X);
-        var maxX = positions.Max(position => position!.Value.X);
-        var minZ = positions.Min(position => position!.Value.Z);
-        var maxZ = positions.Max(position => position!.Value.Z);
-        var rangeX = maxX - minX;
-        var rangeZ = maxZ - minZ;
-        if (rangeX < CoordinateEpsilon || rangeZ < CoordinateEpsilon)
-            return Grid(destinations, safeWidth, safeHeight, safePadding);
+        var minimumSpacing = Math.Max(1f, (safeRadius * 2f) + 12f);
+        var preferredEdgeLength = Math.Max(minimumSpacing * 1.25f, safeRadius * 5.5f);
+        var maximumUsefulEdgeLength = Math.Max(minimumSpacing * 1.25f, Math.Min(right - left, bottom - top) * 0.45f);
+        preferredEdgeLength = Math.Min(preferredEdgeLength, maximumUsefulEdgeLength);
+        var interactionDistance = preferredEdgeLength * 1.35f;
+        var forces = new Vector2[positions.Length];
 
-        var availableWidth = Math.Max(1f, safeWidth - (safePadding * 2f));
-        var availableHeight = Math.Max(1f, safeHeight - (safePadding * 2f));
-        var scale = Math.Min(availableWidth / rangeX, availableHeight / rangeZ);
-        var contentWidth = rangeX * scale;
-        var contentHeight = rangeZ * scale;
-        var originX = safePadding + ((availableWidth - contentWidth) / 2f);
-        var originY = safePadding + ((availableHeight - contentHeight) / 2f);
+        for (var iteration = 0; iteration < RelaxationIterations; iteration++)
+        {
+            Array.Clear(forces);
+            for (var first = 0; first < positions.Length; first++)
+            {
+                for (var second = first + 1; second < positions.Length; second++)
+                {
+                    var delta = positions[second] - positions[first];
+                    var distance = delta.Length();
+                    var direction = distance < CoordinateEpsilon
+                        ? DeterministicDirection(ordered[first].SectorId, ordered[second].SectorId)
+                        : delta / distance;
+                    if (distance >= interactionDistance)
+                        continue;
 
-        return destinations.ToDictionary(
-            destination => destination.SectorId,
-            destination => new UnlockMapCanvasPoint(
-                originX + ((destination.MapPosition!.Value.X - minX) * scale),
-                originY + ((maxZ - destination.MapPosition.Value.Z) * scale)));
-    }
+                    var proximity = (interactionDistance - distance) / interactionDistance;
+                    var magnitude = proximity * proximity * minimumSpacing * 0.12f;
+                    if (distance < minimumSpacing)
+                        magnitude += (minimumSpacing - distance) * 0.75f;
+                    var force = direction * magnitude;
+                    forces[first] -= force;
+                    forces[second] += force;
+                }
+            }
 
-    private static IReadOnlyDictionary<uint, UnlockMapCanvasPoint> Grid(
-        IReadOnlyList<RouteDestination> destinations,
-        float width,
-        float height,
-        float padding)
-    {
-        var ordered = destinations.OrderBy(destination => destination.SectorId).ToArray();
-        var aspect = Math.Clamp(width / Math.Max(1f, height), 0.5f, 2f);
-        var columns = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(ordered.Length * aspect)));
-        var rows = Math.Max(1, (int)Math.Ceiling((double)ordered.Length / columns));
-        var availableWidth = Math.Max(1f, width - (padding * 2f));
-        var availableHeight = Math.Max(1f, height - (padding * 2f));
-        var cellWidth = availableWidth / columns;
-        var cellHeight = availableHeight / rows;
+            foreach (var edge in edges)
+            {
+                var delta = positions[edge.Target] - positions[edge.Source];
+                var distance = delta.Length();
+                var direction = distance < CoordinateEpsilon
+                    ? DeterministicDirection(edge.SourcePoint, edge.TargetPoint)
+                    : delta / distance;
+                var force = direction * ((distance - preferredEdgeLength) * 0.035f);
+                forces[edge.Source] += force;
+                forces[edge.Target] -= force;
+            }
+
+            var progress = iteration / (float)(RelaxationIterations - 1);
+            var maximumStep = minimumSpacing * (0.32f - (progress * 0.28f));
+            for (var index = 0; index < positions.Length; index++)
+            {
+                forces[index] += (anchors[index] - positions[index]) * 0.006f;
+                var forceLength = forces[index].Length();
+                var step = forceLength > maximumStep
+                    ? forces[index] / forceLength * maximumStep
+                    : forces[index];
+                positions[index] = Clamp(positions[index] + step, left, right, top, bottom);
+            }
+        }
+
+        for (var iteration = 0; iteration < CollisionCleanupIterations; iteration++)
+        {
+            var collisionFound = false;
+            for (var first = 0; first < positions.Length; first++)
+            {
+                for (var second = first + 1; second < positions.Length; second++)
+                {
+                    var delta = positions[second] - positions[first];
+                    var distance = delta.Length();
+                    if (distance >= minimumSpacing - CoordinateEpsilon)
+                        continue;
+
+                    collisionFound = true;
+                    var direction = distance < CoordinateEpsilon
+                        ? DeterministicDirection(ordered[first].SectorId, ordered[second].SectorId)
+                        : delta / distance;
+                    var displacement = direction * (((minimumSpacing - distance) / 2f) + 0.01f);
+                    positions[first] = Clamp(positions[first] - displacement, left, right, top, bottom);
+                    positions[second] = Clamp(positions[second] + displacement, left, right, top, bottom);
+                }
+            }
+            if (!collisionFound)
+                break;
+        }
 
         return ordered.Select((destination, index) => new
             {
                 destination.SectorId,
-                Point = new UnlockMapCanvasPoint(
-                    padding + ((index % columns) + 0.5f) * cellWidth,
-                    padding + ((index / columns) + 0.5f) * cellHeight),
+                Point = new UnlockMapCanvasPoint(positions[index].X, positions[index].Y),
             })
             .ToDictionary(item => item.SectorId, item => item.Point);
     }
+
+    private static Vector2[] InitialPositions(
+        IReadOnlyList<RouteDestination> destinations,
+        float left,
+        float right,
+        float top,
+        float bottom)
+    {
+        var sourcePositions = destinations.Select(destination => destination.MapPosition).ToArray();
+        if (sourcePositions.Any(position => position is null || !float.IsFinite(position.Value.X) || !float.IsFinite(position.Value.Z)))
+            return Grid(destinations.Count, left, right, top, bottom);
+
+        var minimumX = sourcePositions.Min(position => position!.Value.X);
+        var maximumX = sourcePositions.Max(position => position!.Value.X);
+        var minimumZ = sourcePositions.Min(position => position!.Value.Z);
+        var maximumZ = sourcePositions.Max(position => position!.Value.Z);
+        var rangeX = maximumX - minimumX;
+        var rangeZ = maximumZ - minimumZ;
+        if (rangeX < CoordinateEpsilon || rangeZ < CoordinateEpsilon)
+            return Grid(destinations.Count, left, right, top, bottom);
+
+        return sourcePositions.Select(position => new Vector2(
+                left + (((position!.Value.X - minimumX) / rangeX) * (right - left)),
+                top + (((maximumZ - position.Value.Z) / rangeZ) * (bottom - top))))
+            .ToArray();
+    }
+
+    private static Vector2[] Grid(int count, float left, float right, float top, float bottom)
+    {
+        var width = Math.Max(1f, right - left);
+        var height = Math.Max(1f, bottom - top);
+        var aspect = Math.Clamp(width / height, 0.5f, 2f);
+        var columns = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(count * aspect)));
+        var rows = Math.Max(1, (int)Math.Ceiling((double)count / columns));
+        var cellWidth = (right - left) / columns;
+        var cellHeight = (bottom - top) / rows;
+        return Enumerable.Range(0, count)
+            .Select(index => new Vector2(
+                left + ((index % columns) + 0.5f) * cellWidth,
+                top + ((index / columns) + 0.5f) * cellHeight))
+            .ToArray();
+    }
+
+    private static Vector2 DeterministicDirection(uint firstSectorId, uint secondSectorId)
+    {
+        var angleIndex = (firstSectorId * 31u + secondSectorId * 17u) % 360u;
+        var angle = angleIndex * (MathF.PI / 180f);
+        return new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+    }
+
+    private static Vector2 Clamp(Vector2 point, float left, float right, float top, float bottom)
+        => new(Math.Clamp(point.X, left, right), Math.Clamp(point.Y, top, bottom));
 }

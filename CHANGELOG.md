@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.33.0
+
+- Improved sector unlock maps with deterministic graph-aware positioning that keeps nodes readable while retaining approximate geographic orientation.
+
 ## 0.5.32.0
 
 - Added FC-specific sector unlock maps with live unlocked, explored, discoverable, locked, and active-attempt states, complete unlock paths, and cross-map connections.
