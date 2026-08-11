@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SubmarineEtaPlanner.Planner;
 using SubmarineEtaPlanner.SubmarineTrackerCompat;
 using Xunit;
@@ -1241,23 +1242,35 @@ public sealed class EtaSimulatorTests
     }
 
     [Fact]
-    public void RepoJsonContainsExpectedDownloadLinks()
+    public void PublicPluginManifestsKeepPositioningAndIdentityInSync()
     {
         var repoJsonPath = FindRepoJson();
-        var repoJson = File.ReadAllText(repoJsonPath);
+        var repositoryRoot = Path.GetDirectoryName(repoJsonPath)!;
+        var sourceManifestPath = Path.Combine(repositoryRoot, "src", "SubmarineEtaPlanner", "SubmarineEtaPlanner.json");
+        using var repoDocument = JsonDocument.Parse(File.ReadAllText(repoJsonPath));
+        using var sourceDocument = JsonDocument.Parse(File.ReadAllText(sourceManifestPath));
+        var repoManifest = repoDocument.RootElement[0];
+        var sourceManifest = sourceDocument.RootElement;
+        const string expectedPunchline = "Plan and monitor your Free Company submarine fleets.";
+        const string expectedDescription = "Plan Free Company submarine operations from local SubmarineTracker data: prioritize returns and next actions, forecast leveling and sector unlocks, review recorded salvage income, configure farming routes, and estimate ceruleum fuel runway. Requires Submarine Tracker to be installed and enabled. Open it with /seta. The installer icon was created with AI assistance.";
 
-        Assert.Contains("SubmarineEtaPlanner", repoJson);
-        Assert.Contains("\"Author\": \"Alex Vallière\"", repoJson);
-        Assert.Contains("Estimate submarine ETAs to your chosen rank", repoJson);
-        Assert.Contains("Forecast submarine ETAs to a chosen rank", repoJson);
-        Assert.Contains("\"AssemblyVersion\": \"0.5.34.0\"", repoJson);
-        Assert.Contains("https://github.com/AlexValliere/submarineEtaPlanner", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoJson);
-        Assert.Contains("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoJson);
-        Assert.Contains("Requires Submarine Tracker to be installed and enabled", repoJson);
-        Assert.Contains("installer icon was created with AI assistance", repoJson);
-        Assert.Contains("Improves sector unlock tooltips and tables with concise FC-relative remaining paths", repoJson);
-        Assert.Contains("\"DalamudApiLevel\": 15", repoJson);
+        foreach (var propertyName in new[] { "Author", "Name", "Punchline", "Description", "InternalName", "ApplicableVersion", "RepoUrl", "IconUrl" })
+            Assert.Equal(sourceManifest.GetProperty(propertyName).GetString(), repoManifest.GetProperty(propertyName).GetString());
+
+        Assert.Equal(
+            sourceManifest.GetProperty("Tags").EnumerateArray().Select(tag => tag.GetString()),
+            repoManifest.GetProperty("Tags").EnumerateArray().Select(tag => tag.GetString()));
+        Assert.Equal("Submarine ETA Planner", repoManifest.GetProperty("Name").GetString());
+        Assert.Equal("SubmarineEtaPlanner", repoManifest.GetProperty("InternalName").GetString());
+        Assert.Equal(expectedPunchline, repoManifest.GetProperty("Punchline").GetString());
+        Assert.Equal(expectedDescription, repoManifest.GetProperty("Description").GetString());
+        Assert.Equal("0.5.35.0", repoManifest.GetProperty("AssemblyVersion").GetString());
+        Assert.Equal("https://github.com/AlexValliere/submarineEtaPlanner", repoManifest.GetProperty("RepoUrl").GetString());
+        Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkInstall").GetString());
+        Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkUpdate").GetString());
+        Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoManifest.GetProperty("IconUrl").GetString());
+        Assert.Contains("Repositions Submarine ETA Planner as a Free Company fleet-operations tool", repoManifest.GetProperty("Changelog").GetString());
+        Assert.Equal(15, repoManifest.GetProperty("DalamudApiLevel").GetInt32());
     }
 
     [Fact]

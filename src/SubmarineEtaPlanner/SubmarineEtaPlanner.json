@@ -1,13 +1,13 @@
 {
   "Author": "Alex Vallière",
   "Name": "Submarine ETA Planner",
-  "Punchline": "Estimate submarine ETAs to your chosen rank.",
-  "Description": "Forecast submarine ETAs to a chosen rank using SubmarineTracker voyage, build, EXP, and FC-wide probabilistic unlock data. Requires Submarine Tracker to be installed and enabled. Open it with /seta. The installer icon was created with AI assistance.",
+  "Punchline": "Plan and monitor your Free Company submarine fleets.",
+  "Description": "Plan Free Company submarine operations from local SubmarineTracker data: prioritize returns and next actions, forecast leveling and sector unlocks, review recorded salvage income, configure farming routes, and estimate ceruleum fuel runway. Requires Submarine Tracker to be installed and enabled. Open it with /seta. The installer icon was created with AI assistance.",
   "InternalName": "SubmarineEtaPlanner",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Adds player-friendly fuel forecasting, responsive table columns, compact FC route displays, a validated route picker, and persistent FC Setup actions.",
+  "Changelog": "Repositions Submarine ETA Planner as a Free Company fleet-operations tool across its README and installer metadata.",
   "Tags": [
     "Submarine",
     "ETA",

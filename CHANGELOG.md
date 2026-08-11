@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.35.0
+
+- Repositioned Submarine ETA Planner as a Free Company fleet-operations tool across its README and installer metadata.
+
 ## 0.5.34.0
 
 - Improved sector unlock tooltips and tables with concise FC-relative remaining paths beginning at the latest accessible prerequisite.
