@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.30.0
+## 0.5.32.0
 
 - Added FC-specific sector unlock maps with live unlocked, explored, discoverable, locked, and active-attempt states, complete unlock paths, and cross-map connections.
 
