@@ -203,7 +203,7 @@ public sealed partial class PlannerWindow
         foreach (var submarine in projection.Submarines)
         {
             ImGui.TextUnformatted(
-                $"{submarine.Name}: R{submarine.Rank} · {submarine.CurrentBuild.Code} · {CompactOperationalStatePresentation.Create(submarine).Label}");
+                $"{submarine.Name}: R{submarine.Rank} · {submarine.CurrentBuild.Code} · {CompactOperationalStatePresentation.Create(submarine, now).Label}");
             if (submarine.CurrentBuild.UnavailableReason is not null)
                 PlannerUi.Tooltip(submarine.CurrentBuild.UnavailableReason);
         }

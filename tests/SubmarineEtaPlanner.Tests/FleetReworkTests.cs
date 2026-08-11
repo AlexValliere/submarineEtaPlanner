@@ -45,9 +45,9 @@ public sealed class FleetReworkTests
     [Theory]
     [InlineData(50, true, true, RecommendedAction.CollectThenWaitForTracker, "To collect")]
     [InlineData(50, false, false, RecommendedAction.SendLevelingRouteNow, "Idle")]
-    [InlineData(50, false, true, RecommendedAction.SendLevelingRouteAfterCollection, "Underway")]
+    [InlineData(50, false, true, RecommendedAction.SendLevelingRouteAfterCollection, "Underway · 2h 0m")]
     [InlineData(100, true, true, RecommendedAction.CollectAndResendFarmingRouteNow, "To collect")]
-    [InlineData(100, false, true, RecommendedAction.ResendFarmingRouteAfterCollection, "Underway")]
+    [InlineData(100, false, true, RecommendedAction.ResendFarmingRouteAfterCollection, "Underway · 2h 0m")]
     public void ActionProjectionUsesRankAndVoyageState(
         int rank,
         bool returned,
@@ -64,7 +64,7 @@ public sealed class FleetReworkTests
 
         var submarine = Assert.Single(projection.Submarines);
         Assert.Equal(expectedAction, submarine.Action);
-        var compactState = CompactOperationalStatePresentation.Create(submarine);
+        var compactState = CompactOperationalStatePresentation.Create(submarine, now);
         Assert.Equal(expectedCompactState, compactState.Label);
         Assert.Contains(RecommendedActionFormatter.Format(expectedAction), compactState.Tooltip);
         Assert.Equal(rank >= 90 ? FleetMode.Farming : FleetMode.Leveling, projection.Mode);
@@ -85,9 +85,39 @@ public sealed class FleetReworkTests
 
         Assert.Equal(OperationalState.Syncing, submarine.State);
         Assert.Equal(RecommendedAction.WaitForTracker, submarine.Action);
-        var compactState = CompactOperationalStatePresentation.Create(submarine);
-        Assert.Equal("Syncing", compactState.Label);
+        var compactState = CompactOperationalStatePresentation.Create(submarine, now);
+        Assert.Equal("Syncing · 2h 0m", compactState.Label);
         Assert.Contains(RecommendedActionFormatter.Format(submarine.Action), compactState.Tooltip);
+    }
+
+    [Fact]
+    public void OperationsStateShowsEachSubmarineOwnReturnCountdown()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(1);
+        var original = CreateFc(50, now.AddHours(2), [1], currentKnown: true);
+        var prototype = original.Submarines[0];
+        var fc = original with
+        {
+            Submarines =
+            [
+                prototype with { SubmarineId = 1, Name = "Early", ReturnAtUtc = now.AddHours(2) },
+                prototype with { SubmarineId = 2, Name = "Late", ReturnAtUtc = now.AddHours(5).AddMinutes(30) },
+            ],
+        };
+
+        var projection = FleetPresentationBuilder.Create(
+            fc,
+            CreateResult(fc, 90, now),
+            EtaSettings.CreateDefault() with { TargetRank = 90 },
+            new StubCatalog(),
+            now);
+
+        var labels = projection.Submarines.ToDictionary(
+            submarine => submarine.Name,
+            submarine => CompactOperationalStatePresentation.Create(submarine, now).Label);
+
+        Assert.Equal("Underway · 2h 0m", labels["Early"]);
+        Assert.Equal("Underway · 5h 30m", labels["Late"]);
     }
 
     [Fact]
@@ -134,7 +164,7 @@ public sealed class FleetReworkTests
 
         Assert.Equal(RecommendedAction.ChooseFarmingRoute, submarine.Action);
         Assert.Empty(submarine.DisplayedRoute);
-        Assert.Equal("Idle", CompactOperationalStatePresentation.Create(submarine).Label);
+        Assert.Equal("Idle", CompactOperationalStatePresentation.Create(submarine, now).Label);
     }
 
     [Theory]

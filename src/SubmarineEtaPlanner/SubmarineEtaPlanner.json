@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Repositions Submarine ETA Planner as a Free Company fleet-operations tool across its README and installer metadata.",
+  "Changelog": "Shows each submarine's individual return countdown in expanded Operations fleet rows.",
   "Tags": [
     "Submarine",
     "ETA",

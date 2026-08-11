@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.36.0
+
+- Added individual return countdowns to submarine state cells in expanded Operations fleet rows.
+
 ## 0.5.35.0
 
 - Repositioned Submarine ETA Planner as a Free Company fleet-operations tool across its README and installer metadata.

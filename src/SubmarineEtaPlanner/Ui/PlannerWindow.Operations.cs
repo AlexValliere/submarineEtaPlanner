@@ -94,7 +94,7 @@ public sealed partial class PlannerWindow
             new ResponsiveTableColumn("Submarine", projection.Submarines.Select(submarine => submarine.Name), 115, 220),
             new ResponsiveTableColumn("Rank → after voyage", projection.Submarines.Select(submarine => OperationsRankPresentation.Create(submarine).Label), 125, 165),
             new ResponsiveTableColumn("Build", projection.Submarines.Select(submarine => submarine.CurrentBuild.Code), 72, 100),
-            new ResponsiveTableColumn("State", projection.Submarines.Select(submarine => CompactOperationalStatePresentation.Create(submarine).Label), 88, 145),
+            new ResponsiveTableColumn("State", projection.Submarines.Select(submarine => CompactOperationalStatePresentation.Create(submarine, now).Label), 115, 190),
             new ResponsiveTableColumn("Current / next route", projection.Submarines.Select(submarine => FormatCompactRoute(submarine.DisplayedRoute)), 170, 420, Flexible: true, FlexWeight: 1.5f),
             new ResponsiveTableColumn("Purpose", projection.Submarines.Select(submarine => submarine.RoutePurpose.ToString()), 82, 145),
             new ResponsiveTableColumn("Expected EXP", projection.Submarines.Select(submarine => submarine.ExpectedExp?.ToString("N0") ?? "Unavailable"), 105, 145),
@@ -126,7 +126,7 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             DrawCurrentBuild(submarine.CurrentBuild);
             ImGui.TableNextColumn();
-            var compactState = CompactOperationalStatePresentation.Create(submarine);
+            var compactState = CompactOperationalStatePresentation.Create(submarine, now);
             ImGui.TextUnformatted(compactState.Label);
             PlannerUi.Tooltip(compactState.Tooltip);
             ImGui.TableNextColumn();
