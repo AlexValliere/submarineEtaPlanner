@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.41.0
+
+- Moved Income build-and-rank details to four aligned Sub #1–4 columns at the end of each FC row.
+
 ## 0.5.40.0
 
 - Removed the unstable observed run rate from Income and kept one recorded daily average based on each selected FC set's shared history coverage.

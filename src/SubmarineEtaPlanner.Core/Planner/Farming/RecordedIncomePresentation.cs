@@ -41,15 +41,25 @@ internal sealed record IncomeFcHeaderPresentation(
     string RecordedAverageGilPerDay,
     string GilPerVoyage,
     string Voyages,
+    string Submarine1,
+    string Submarine2,
+    string Submarine3,
+    string Submarine4,
     bool IsFarming)
 {
-    public string BuildsAndRanks { get; init; } = "—";
-
     public static IncomeFcHeaderPresentation Create(
         FcOperationalProjection projection,
         IncomeFcMetrics metric,
         bool favorite)
-        => new(
+    {
+        var submarines = metric.Submarines
+            .Take(4)
+            .Select(submarine => $"{submarine.CurrentBuild.Code} · R{submarine.Rank}")
+            .Concat(Enumerable.Repeat("—", 4))
+            .Take(4)
+            .ToArray();
+
+        return new IncomeFcHeaderPresentation(
             $"income-{metric.FcIdKey}",
             $"{(favorite ? "★ " : string.Empty)}{projection.State.FreeCompanyTag}",
             string.IsNullOrWhiteSpace(projection.State.World) ? "—" : projection.State.World,
@@ -58,10 +68,10 @@ internal sealed record IncomeFcHeaderPresentation(
             $"{metric.RecordedAverageGilPerDay:N0}",
             $"{metric.GilPerVoyage:N0}",
             metric.VoyageCount.ToString("N0"),
-            projection.RoleSummary is { HasFarming: true, HasLeveling: false, HasPaused: false })
-        {
-            BuildsAndRanks = metric.Submarines.Count == 0
-                ? "—"
-                : $"[{string.Join(" | ", metric.Submarines.Select(submarine => $"{submarine.CurrentBuild.Code}:{submarine.Rank}"))}]",
-        };
+            submarines[0],
+            submarines[1],
+            submarines[2],
+            submarines[3],
+            projection.RoleSummary is { HasFarming: true, HasLeveling: false, HasPaused: false });
+    }
 }

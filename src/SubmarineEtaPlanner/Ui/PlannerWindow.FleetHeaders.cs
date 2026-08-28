@@ -34,11 +34,14 @@ public sealed partial class PlannerWindow
         IncomeHeaderColumn FreeCompany,
         IncomeHeaderColumn World,
         IncomeHeaderColumn Mode,
-        IncomeHeaderColumn BuildsAndRanks,
         IncomeHeaderColumn GrossGil,
         IncomeHeaderColumn RecordedAverageGilPerDay,
         IncomeHeaderColumn GilPerVoyage,
-        IncomeHeaderColumn Voyages);
+        IncomeHeaderColumn Voyages,
+        IncomeHeaderColumn Submarine1,
+        IncomeHeaderColumn Submarine2,
+        IncomeHeaderColumn Submarine3,
+        IncomeHeaderColumn Submarine4);
 
     private static OperationsHeaderLayout CalculateOperationsHeaderLayout(
         IEnumerable<OperationsFcHeaderPresentation> presentations,
@@ -233,15 +236,18 @@ public sealed partial class PlannerWindow
         var fcWidth = MeasureHeaderColumn(values.Select(value => value.FreeCompany), "FC", 90f, 155f);
         var worldWidth = MeasureHeaderColumn(values.Select(value => value.World), "World", 85f, 145f);
         var modeWidth = MeasureHeaderColumn(values.Select(value => value.Mode), "Mode", 78f, 105f);
-        var buildsWidth = MeasureHeaderColumn(values.Select(value => value.BuildsAndRanks), "Builds / ranks", 150f, 360f);
         var grossWidth = MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 95f, 145f);
         var recordedAverageWidth = MeasureHeaderColumn(values.Select(value => value.RecordedAverageGilPerDay), "Recorded avg / day", 105f, 145f);
         var voyageWidth = MeasureHeaderColumn(values.Select(value => value.GilPerVoyage), "Gil / voyage", 100f, 140f);
         var countWidth = MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 72f, 100f);
+        var submarine1Width = MeasureHeaderColumn(values.Select(value => value.Submarine1), "Sub #1", 95f, 135f);
+        var submarine2Width = MeasureHeaderColumn(values.Select(value => value.Submarine2), "Sub #2", 95f, 135f);
+        var submarine3Width = MeasureHeaderColumn(values.Select(value => value.Submarine3), "Sub #3", 95f, 135f);
+        var submarine4Width = MeasureHeaderColumn(values.Select(value => value.Submarine4), "Sub #4", 95f, 135f);
         var widths = FitIncomeHeaderWidths(
-            [fcWidth, worldWidth, modeWidth, buildsWidth, grossWidth, recordedAverageWidth, voyageWidth, countWidth],
-            [72f * scale, 66f * scale, 60f * scale, 120f * scale, 80f * scale, 86f * scale, 78f * scale, 48f * scale],
-            Math.Max(1f, availableWidth - gutter - (gap * 7f)));
+            [fcWidth, worldWidth, modeWidth, grossWidth, recordedAverageWidth, voyageWidth, countWidth, submarine1Width, submarine2Width, submarine3Width, submarine4Width],
+            [72f * scale, 66f * scale, 60f * scale, 80f * scale, 86f * scale, 78f * scale, 48f * scale, 76f * scale, 76f * scale, 76f * scale, 76f * scale],
+            Math.Max(1f, availableWidth - gutter - (gap * 10f)));
         var offset = gutter;
         IncomeHeaderColumn NextColumn(int index)
         {
@@ -260,7 +266,10 @@ public sealed partial class PlannerWindow
             NextColumn(4),
             NextColumn(5),
             NextColumn(6),
-            NextColumn(7));
+            NextColumn(7),
+            NextColumn(8),
+            NextColumn(9),
+            NextColumn(10));
     }
 
     private static float[] FitIncomeHeaderWidths(
@@ -300,10 +309,11 @@ public sealed partial class PlannerWindow
                 "Recorded avg / day",
                 "Gil / voyage",
                 "Voyages",
-                false)
-            {
-                BuildsAndRanks = "Builds / ranks",
-            },
+                "Sub #1",
+                "Sub #2",
+                "Sub #3",
+                "Sub #4",
+                false),
             legend: true);
         ImGui.Dummy(new Vector2(ImGui.GetContentRegionAvail().X, layout.LegendHeight));
     }
@@ -319,12 +329,15 @@ public sealed partial class PlannerWindow
         DrawIncomeHeaderCell(origin, layout, layout.World, presentation.World, normal);
         DrawIncomeHeaderCell(origin, layout, layout.Mode, presentation.Mode,
             legend ? PlannerUi.Muted : presentation.IsFarming ? PlannerUi.Green : PlannerUi.Teal);
-        DrawIncomeHeaderCell(origin, layout, layout.BuildsAndRanks, presentation.BuildsAndRanks, normal);
         DrawIncomeHeaderCell(origin, layout, layout.GrossGil, presentation.GrossGil,
             legend ? PlannerUi.Muted : PlannerUi.Green);
         DrawIncomeHeaderCell(origin, layout, layout.RecordedAverageGilPerDay, presentation.RecordedAverageGilPerDay, normal);
         DrawIncomeHeaderCell(origin, layout, layout.GilPerVoyage, presentation.GilPerVoyage, normal);
         DrawIncomeHeaderCell(origin, layout, layout.Voyages, presentation.Voyages, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.Submarine1, presentation.Submarine1, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.Submarine2, presentation.Submarine2, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.Submarine3, presentation.Submarine3, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.Submarine4, presentation.Submarine4, normal);
     }
 
     private static void DrawIncomeHeaderCell(

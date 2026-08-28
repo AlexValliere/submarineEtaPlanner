@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Removes the unstable observed run rate from Income and keeps one recorded daily average.",
+  "Changelog": "Moves Income build-and-rank details to four aligned submarine columns at the end of each FC row.",
   "Tags": [
     "Submarine",
     "ETA",

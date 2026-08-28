@@ -500,7 +500,7 @@ public sealed class FleetReworkTests
     }
 
     [Fact]
-    public void IncomeHeaderListsCurrentBuildsAndRanksInTrackedOrder()
+    public void IncomeHeaderSplitsCurrentBuildsAndRanksIntoFourTrackedColumns()
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(10);
         var original = CreateFc(115, now.AddHours(2), [1], currentKnown: true);
@@ -540,7 +540,10 @@ public sealed class FleetReworkTests
 
         var header = IncomeFcHeaderPresentation.Create(projection, metric, favorite: false);
 
-        Assert.Equal("[WSCC:115 | WCSS:115 | WCUS:116 | SCUS++:114]", header.BuildsAndRanks);
+        Assert.Equal("WSCC · R115", header.Submarine1);
+        Assert.Equal("WCSS · R115", header.Submarine2);
+        Assert.Equal("WCUS · R116", header.Submarine3);
+        Assert.Equal("SCUS++ · R114", header.Submarine4);
         Assert.Equal("R115 · R115 · R116 · R114", OperationsFcHeaderPresentation.Create(projection, false, now).Ranks);
     }
 
@@ -580,7 +583,10 @@ public sealed class FleetReworkTests
 
         var header = IncomeFcHeaderPresentation.Create(projection, metric, favorite: false);
 
-        Assert.Equal("[WSCC:115 | WSCC:116]", header.BuildsAndRanks);
+        Assert.Equal("WSCC · R115", header.Submarine1);
+        Assert.Equal("WSCC · R116", header.Submarine2);
+        Assert.Equal("—", header.Submarine3);
+        Assert.Equal("—", header.Submarine4);
     }
 
     [Fact]
