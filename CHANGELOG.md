@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.43.0
+
+- Filled trailing space in the Income and FC Setup tables while preserving their compact and scrollable layouts.
+
 ## 0.5.42.0
 
 - Tightened the Operations and Leveling submarine tables with a compact Rank header and a route column that fills spare width.

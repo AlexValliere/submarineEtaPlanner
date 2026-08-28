@@ -279,7 +279,14 @@ public sealed partial class PlannerWindow
     {
         var desiredTotal = desiredWidths.Sum();
         if (availableWidth >= desiredTotal)
-            return desiredWidths.ToArray();
+        {
+            var widths = desiredWidths.ToArray();
+            var submarineColumnCount = Math.Min(4, widths.Length);
+            var surplusPerSubmarine = (availableWidth - desiredTotal) / Math.Max(1, submarineColumnCount);
+            for (var index = widths.Length - submarineColumnCount; index < widths.Length; index++)
+                widths[index] += surplusPerSubmarine;
+            return widths;
+        }
 
         var minimumTotal = minimumWidths.Sum();
         if (availableWidth <= minimumTotal)

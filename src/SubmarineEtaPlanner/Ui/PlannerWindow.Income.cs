@@ -116,7 +116,7 @@ public sealed partial class PlannerWindow
     {
         var layout = CalculateResponsiveTableLayout(
             ImGui.GetContentRegionAvail().X,
-            new ResponsiveTableColumn("Submarine", metric.Submarines.Select(submarine => submarine.Name), 120, 220, Flexible: true),
+            new ResponsiveTableColumn("Submarine", metric.Submarines.Select(submarine => submarine.Name), 120, 220, Flexible: true, FillRemaining: true),
             new ResponsiveTableColumn("Rank", metric.Submarines.Select(submarine => $"R{submarine.Rank}"), 68, 90),
             new ResponsiveTableColumn("Build", metric.Submarines.Select(submarine => submarine.CurrentBuild.Code), 72, 100),
             new ResponsiveTableColumn("Gross gil", metric.Submarines.Select(submarine => $"{submarine.GrossGil:N0}"), 105, 175),

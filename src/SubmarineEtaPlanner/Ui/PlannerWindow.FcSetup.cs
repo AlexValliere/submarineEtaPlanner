@@ -495,7 +495,7 @@ public sealed partial class PlannerWindow
             ImGui.GetContentRegionAvail().X,
             new ResponsiveTableColumn("Submarine", selected.Submarines.Select(submarine => submarine.Name), 115, 220),
             new ResponsiveTableColumn("Rank", selected.Submarines.Select(submarine => submarine.Rank.ToString()), 58, 80),
-            new ResponsiveTableColumn("Tracked route", selected.Submarines.Select(submarine => FormatCompactRoute(submarine.CurrentRoute)), 135, 320, Flexible: true),
+            new ResponsiveTableColumn("Tracked route", selected.Submarines.Select(submarine => FormatCompactRoute(submarine.CurrentRoute)), 135, 320),
             new ResponsiveTableColumn(
                 "Assignment",
                 selected.Submarines.Select(submarine =>
@@ -515,7 +515,8 @@ public sealed partial class PlannerWindow
                 210,
                 420,
                 Flexible: true,
-                FlexWeight: 1.35f));
+                FlexWeight: 1.35f,
+                FillRemaining: true));
         var flags = ImGuiTableFlags.Borders |
                     ImGuiTableFlags.RowBg |
                     ImGuiTableFlags.Resizable |

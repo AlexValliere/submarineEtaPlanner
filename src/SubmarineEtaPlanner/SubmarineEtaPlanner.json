@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Tightens Operations and Leveling submarine tables with a compact Rank header and a route column that fills spare width.",
+  "Changelog": "Fills trailing space in Income and FC Setup tables while preserving compact and scrollable layouts.",
   "Tags": [
     "Submarine",
     "ETA",
