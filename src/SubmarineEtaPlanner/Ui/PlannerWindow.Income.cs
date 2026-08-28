@@ -120,7 +120,7 @@ public sealed partial class PlannerWindow
             new ResponsiveTableColumn("Rank", metric.Submarines.Select(submarine => $"R{submarine.Rank}"), 68, 90),
             new ResponsiveTableColumn("Build", metric.Submarines.Select(submarine => submarine.CurrentBuild.Code), 72, 100),
             new ResponsiveTableColumn("Gross gil", metric.Submarines.Select(submarine => $"{submarine.GrossGil:N0}"), 105, 175),
-            new ResponsiveTableColumn("Recorded avg / day", metric.Submarines.Select(submarine => $"{submarine.RecordedAverageGilPerDay:N0}"), 125, 175),
+            new ResponsiveTableColumn("Avg / day", metric.Submarines.Select(submarine => $"{submarine.RecordedAverageGilPerDay:N0}"), 125, 175),
             new ResponsiveTableColumn("Voyages", metric.Submarines.Select(submarine => submarine.VoyageCount.ToString("N0")), 82, 105),
             new ResponsiveTableColumn("Gil/voyage", metric.Submarines.Select(submarine => $"{submarine.GilPerVoyage:N0}"), 105, 155),
             new ResponsiveTableColumn("First return", metric.Submarines.Select(submarine => FormatIncomeDate(submarine.FirstReturnAtUtc)), 125, 170),
@@ -147,10 +147,10 @@ public sealed partial class PlannerWindow
             DrawTableText($"R{submarine.Rank}");
             ImGui.TableNextColumn();
             DrawCurrentBuild(submarine.CurrentBuild);
-            DrawTableText($"{submarine.GrossGil:N0}");
-            DrawTableText($"{submarine.RecordedAverageGilPerDay:N0}");
-            DrawTableText(submarine.VoyageCount.ToString("N0"));
-            DrawTableText($"{submarine.GilPerVoyage:N0}");
+            DrawTableText($"{submarine.GrossGil:N0}", rightAligned: true);
+            DrawTableText($"{submarine.RecordedAverageGilPerDay:N0}", rightAligned: true);
+            DrawTableText(submarine.VoyageCount.ToString("N0"), rightAligned: true);
+            DrawTableText($"{submarine.GilPerVoyage:N0}", rightAligned: true);
             DrawTableText(FormatIncomeDate(submarine.FirstReturnAtUtc));
             DrawTableText(FormatIncomeDate(submarine.LastReturnAtUtc));
         }

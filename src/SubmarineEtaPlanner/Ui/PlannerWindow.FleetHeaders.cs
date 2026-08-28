@@ -237,7 +237,7 @@ public sealed partial class PlannerWindow
         var worldWidth = MeasureHeaderColumn(values.Select(value => value.World), "World", 85f, 145f);
         var modeWidth = MeasureHeaderColumn(values.Select(value => value.Mode), "Mode", 78f, 105f);
         var grossWidth = MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 95f, 145f);
-        var recordedAverageWidth = MeasureHeaderColumn(values.Select(value => value.RecordedAverageGilPerDay), "Recorded avg / day", 105f, 145f);
+        var recordedAverageWidth = MeasureHeaderColumn(values.Select(value => value.RecordedAverageGilPerDay), "Avg / day", 105f, 145f);
         var voyageWidth = MeasureHeaderColumn(values.Select(value => value.GilPerVoyage), "Gil / voyage", 100f, 140f);
         var countWidth = MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 72f, 100f);
         var submarine1Width = MeasureHeaderColumn(values.Select(value => value.Submarine1), "Sub #1", 95f, 135f);
@@ -313,7 +313,7 @@ public sealed partial class PlannerWindow
                 "World",
                 "Mode",
                 "Gross gil",
-                "Recorded avg / day",
+                "Avg / day",
                 "Gil / voyage",
                 "Voyages",
                 "Sub #1",
@@ -336,11 +336,10 @@ public sealed partial class PlannerWindow
         DrawIncomeHeaderCell(origin, layout, layout.World, presentation.World, normal);
         DrawIncomeHeaderCell(origin, layout, layout.Mode, presentation.Mode,
             legend ? PlannerUi.Muted : presentation.IsFarming ? PlannerUi.Green : PlannerUi.Teal);
-        DrawIncomeHeaderCell(origin, layout, layout.GrossGil, presentation.GrossGil,
-            legend ? PlannerUi.Muted : PlannerUi.Green);
-        DrawIncomeHeaderCell(origin, layout, layout.RecordedAverageGilPerDay, presentation.RecordedAverageGilPerDay, normal);
-        DrawIncomeHeaderCell(origin, layout, layout.GilPerVoyage, presentation.GilPerVoyage, normal);
-        DrawIncomeHeaderCell(origin, layout, layout.Voyages, presentation.Voyages, normal);
+        DrawIncomeHeaderCell(origin, layout, layout.GrossGil, presentation.GrossGil, normal, rightAligned: !legend);
+        DrawIncomeHeaderCell(origin, layout, layout.RecordedAverageGilPerDay, presentation.RecordedAverageGilPerDay, normal, rightAligned: !legend);
+        DrawIncomeHeaderCell(origin, layout, layout.GilPerVoyage, presentation.GilPerVoyage, normal, rightAligned: !legend);
+        DrawIncomeHeaderCell(origin, layout, layout.Voyages, presentation.Voyages, normal, rightAligned: !legend);
         DrawIncomeHeaderCell(origin, layout, layout.Submarine1, presentation.Submarine1, normal);
         DrawIncomeHeaderCell(origin, layout, layout.Submarine2, presentation.Submarine2, normal);
         DrawIncomeHeaderCell(origin, layout, layout.Submarine3, presentation.Submarine3, normal);
@@ -352,7 +351,8 @@ public sealed partial class PlannerWindow
         IncomeHeaderLayout layout,
         IncomeHeaderColumn column,
         string text,
-        Vector4 color)
+        Vector4 color,
+        bool rightAligned = false)
     {
         if (column.Width <= 1f)
             return;
@@ -365,13 +365,16 @@ public sealed partial class PlannerWindow
         var y = firstLineY + (column.Line * (lineHeight + lineGap));
         var padding = 3f * scale;
         var fitted = FitHeaderText(text, Math.Max(1f, column.Width - (padding * 2f)));
+        var textX = rightAligned
+            ? origin.X + column.Offset + column.Width - padding - ImGui.CalcTextSize(fitted).X
+            : origin.X + column.Offset + padding;
         var drawList = ImGui.GetWindowDrawList();
         drawList.PushClipRect(
             new Vector2(origin.X + column.Offset, y),
             new Vector2(origin.X + column.Offset + column.Width, y + lineHeight),
             true);
         drawList.AddText(
-            new Vector2(origin.X + column.Offset + padding, y),
+            new Vector2(Math.Max(origin.X + column.Offset + padding, textX), y),
             ImGui.ColorConvertFloat4ToU32(color),
             fitted);
         drawList.PopClipRect();

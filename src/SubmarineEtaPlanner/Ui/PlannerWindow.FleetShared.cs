@@ -71,9 +71,15 @@ public sealed partial class PlannerWindow
     private bool IsFavorite(FcOperationalProjection projection)
         => this.configuration.GetFcPreferences(projection.State.FcIdKey).Favorite;
 
-    private static void DrawTableText(string text)
+    private static void DrawTableText(string text, bool rightAligned = false)
     {
         ImGui.TableNextColumn();
+        if (rightAligned)
+        {
+            var remainingWidth = ImGui.GetContentRegionAvail().X;
+            var textWidth = ImGui.CalcTextSize(text).X;
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + Math.Max(0f, remainingWidth - textWidth));
+        }
         ImGui.TextUnformatted(text);
     }
 

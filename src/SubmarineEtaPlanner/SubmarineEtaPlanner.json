@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Fills trailing space in Income and FC Setup tables while preserving compact and scrollable layouts.",
+  "Changelog": "Right-aligns Income gil and voyage values, uses neutral Gross gil text, and shortens the average column header.",
   "Tags": [
     "Submarine",
     "ETA",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.44.0
+
+- Right-aligned Income gil and voyage values, removed Gross gil highlighting, and shortened the average column header.
+
 ## 0.5.43.0
 
 - Filled trailing space in the Income and FC Setup tables while preserving their compact and scrollable layouts.
