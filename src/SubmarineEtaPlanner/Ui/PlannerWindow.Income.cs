@@ -18,7 +18,7 @@ public sealed partial class PlannerWindow
             "income-definition",
             FontAwesomeIcon.InfoCircle,
             "Recorded gross NPC salvage value",
-            "Recorded average spreads historical gross gil over the covered period. Observed run rate adds each submarine's own recorded daily rate, so newer tracking does not suppress it. Both describe past observations, not guaranteed income. The fleet filter uses each FC's current effective submarine roles.",
+            "Only voyages containing tracked salvaged accessories count toward voyages and history coverage. Recorded average spreads historical gross gil over that covered period. Observed run rate adds each submarine's own recorded daily rate, so newer tracking does not suppress it. Both describe past observations, not guaranteed income. The fleet filter uses each FC's current effective submarine roles.",
             PlannerUi.Teal);
         ImGui.Spacing();
         DrawIncomeViewButton("All fleets", IncomeView.AllFleets);

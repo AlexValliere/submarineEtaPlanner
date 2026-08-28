@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.38.0
+
+- Limited Income voyage counts, per-voyage averages, and history coverage to returns containing tracked salvaged accessories so earlier leveling voyages do not dilute farming income.
+
 ## 0.5.37.0
 
 - Added individual return countdowns to submarine state cells in expanded Leveling fleet rows.

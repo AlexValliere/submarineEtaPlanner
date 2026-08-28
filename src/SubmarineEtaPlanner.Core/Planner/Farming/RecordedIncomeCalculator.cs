@@ -60,7 +60,9 @@ public static class IncomeMetricsCalculator
                 ? CurrentBuildPresentation.NotResolved
                 : CurrentBuildPresentation.Create(catalog.ResolveBuild(submarine.BuildParts, submarine.Rank));
             var voyages = submarine.Salvage.Voyages
-                .Where(voyage => voyage.ReturnAtUtc <= now && (windowStart is null || voyage.ReturnAtUtc >= windowStart))
+                .Where(voyage => voyage.Items.Count > 0 &&
+                                 voyage.ReturnAtUtc <= now &&
+                                 (windowStart is null || voyage.ReturnAtUtc >= windowStart))
                 .OrderBy(voyage => voyage.ReturnAtUtc)
                 .ToArray();
             var recordedVoyages = submarine.VoyageHistory

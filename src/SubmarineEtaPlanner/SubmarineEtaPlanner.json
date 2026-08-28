@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Extends individual submarine return countdowns to expanded Leveling fleet rows.",
+  "Changelog": "Counts only voyages containing tracked salvaged accessories in Income metrics, excluding earlier leveling voyages.",
   "Tags": [
     "Submarine",
     "ETA",

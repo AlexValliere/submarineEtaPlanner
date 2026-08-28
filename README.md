@@ -61,7 +61,7 @@ When SubmarineTracker's database changes, the planner compares a semantic finger
 
 ## Recorded income
 
-The Income view reads valid primary and additional loot entries from SubmarineTracker's local history and attributes them by FC, submarine, route, and voyage return. It reports gross gil, recorded gil per day, observed run rate, gil per voyage, voyage count, and history coverage. It totals only the eight market-prohibited salvage accessories used for direct NPC gil farming:
+The Income view reads valid primary and additional loot entries from SubmarineTracker's local history and attributes them by FC, submarine, route, and voyage return. It reports gross gil, recorded gil per day, observed run rate, gil per voyage, voyage count, and history coverage. Voyage counts and coverage begin only with returns containing at least one of the tracked salvage items, so earlier leveling voyages do not dilute farming income. It totals only the eight market-prohibited salvage accessories used for direct NPC gil farming:
 
 | Item | NPC sale price |
 | --- | ---: |

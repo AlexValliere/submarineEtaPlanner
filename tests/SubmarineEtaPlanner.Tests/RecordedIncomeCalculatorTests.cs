@@ -43,7 +43,7 @@ public sealed class RecordedIncomeCalculatorTests
     }
 
     [Fact]
-    public void ZeroGilVoyagesCountTowardVoyagesAndCoverage()
+    public void VoyagesWithoutTrackedSalvageDoNotCountTowardIncomeMetrics()
     {
         var fc = CreateFc(
             1,
@@ -53,11 +53,11 @@ public sealed class RecordedIncomeCalculatorTests
         var submarine = Assert.Single(metrics.Submarines);
 
         Assert.Equal(1_000, submarine.GrossGil);
-        Assert.Equal(2, submarine.VoyageCount);
-        Assert.Equal(500, submarine.GilPerVoyage);
-        Assert.Equal(10, submarine.CoveredDays);
-        Assert.Equal(100, submarine.RecordedAverageGilPerDay);
-        Assert.Equal(100, submarine.ObservedRunRateGilPerDay);
+        Assert.Equal(1, submarine.VoyageCount);
+        Assert.Equal(1_000, submarine.GilPerVoyage);
+        Assert.Equal(1, submarine.CoveredDays);
+        Assert.Equal(1_000, submarine.RecordedAverageGilPerDay);
+        Assert.Equal(1_000, submarine.ObservedRunRateGilPerDay);
     }
 
     [Theory]
@@ -80,13 +80,13 @@ public sealed class RecordedIncomeCalculatorTests
         var metrics = IncomeMetricsCalculator.Calculate(fc, Now, TimeSpan.FromDays(periodDays));
 
         Assert.Equal(periodDays * 100L, metrics.GrossGil);
-        Assert.Equal(2, metrics.VoyageCount);
-        Assert.Equal(periodDays * 50d, metrics.GilPerVoyage);
+        Assert.Equal(1, metrics.VoyageCount);
+        Assert.Equal(periodDays * 100d, metrics.GilPerVoyage);
         Assert.Equal(periodDays, metrics.CoveredDays);
         Assert.Equal(100, metrics.RecordedAverageGilPerDay);
         Assert.Equal(100, metrics.ObservedRunRateGilPerDay);
         Assert.Equal(Now.AddDays(-periodDays), metrics.FirstReturnAtUtc);
-        Assert.Equal(Now.AddDays(-1), metrics.LastReturnAtUtc);
+        Assert.Equal(Now.AddDays(-periodDays), metrics.LastReturnAtUtc);
     }
 
     [Fact]
@@ -99,8 +99,8 @@ public sealed class RecordedIncomeCalculatorTests
         var metrics = IncomeMetricsCalculator.Calculate(fc, Now, period: null);
 
         Assert.Equal(40_000, metrics.GrossGil);
-        Assert.Equal(2, metrics.VoyageCount);
-        Assert.Equal(20_000, metrics.GilPerVoyage);
+        Assert.Equal(1, metrics.VoyageCount);
+        Assert.Equal(40_000, metrics.GilPerVoyage);
         Assert.Equal(400, metrics.CoveredDays);
         Assert.Equal(100, metrics.RecordedAverageGilPerDay);
         Assert.Equal(100, metrics.ObservedRunRateGilPerDay);

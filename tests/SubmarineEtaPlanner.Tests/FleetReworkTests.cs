@@ -344,7 +344,7 @@ public sealed class FleetReworkTests
     }
 
     [Fact]
-    public void IncomeIncludesZeroGilVoyagesInDenominatorAndHonorsWindow()
+    public void IncomeExcludesVoyagesWithoutTrackedSalvageAndHonorsWindow()
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(100);
         var fc = CreateFc(90, DateTimeOffset.MinValue, [], currentKnown: true);
@@ -365,8 +365,8 @@ public sealed class FleetReworkTests
         var metrics = IncomeMetricsCalculator.Calculate(fc, now, TimeSpan.FromDays(30));
 
         Assert.Equal(1_000, metrics.GrossGil);
-        Assert.Equal(2, metrics.VoyageCount);
-        Assert.Equal(500, metrics.GilPerVoyage);
+        Assert.Equal(1, metrics.VoyageCount);
+        Assert.Equal(1_000, metrics.GilPerVoyage);
         Assert.Equal(now.AddDays(-2), metrics.FirstReturnAtUtc);
     }
 
@@ -720,7 +720,7 @@ public sealed class FleetReworkTests
     }
 
     [Fact]
-    public void IncomeOneYearWindowIncludesExactBoundaryAndZeroGilVoyages()
+    public void IncomeOneYearWindowIncludesExactBoundaryAndExcludesVoyagesWithoutTrackedSalvage()
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(500);
         var fc = CreateFc(100, DateTimeOffset.MinValue, [], currentKnown: true);
@@ -741,7 +741,7 @@ public sealed class FleetReworkTests
         var metrics = IncomeMetricsCalculator.Calculate(fc, now, TimeSpan.FromDays(365));
 
         Assert.Equal(1_000, metrics.GrossGil);
-        Assert.Equal(2, metrics.VoyageCount);
+        Assert.Equal(1, metrics.VoyageCount);
         Assert.Equal(now.AddDays(-365), metrics.FirstReturnAtUtc);
     }
 
