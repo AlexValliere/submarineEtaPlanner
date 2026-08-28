@@ -100,10 +100,10 @@ public sealed partial class PlannerWindow
         var layout = CalculateResponsiveTableLayout(
             ImGui.GetContentRegionAvail().X,
             new ResponsiveTableColumn("Submarine", projection.Submarines.Select(submarine => submarine.Name), 125, 230),
-            new ResponsiveTableColumn("Rank → after voyage", projection.Submarines.Select(submarine => OperationsRankPresentation.Create(submarine).Label), 125, 165),
+            new ResponsiveTableColumn("Rank", projection.Submarines.Select(submarine => OperationsRankPresentation.Create(submarine).Label), 105, 165),
             new ResponsiveTableColumn("Build", projection.Submarines.Select(submarine => submarine.CurrentBuild.Code), 72, 100),
             new ResponsiveTableColumn("State", projection.Submarines.Select(submarine => CompactOperationalStatePresentation.Create(submarine, now).Label), 115, 190),
-            new ResponsiveTableColumn("Current / next route", projection.Submarines.Select(submarine => FormatCompactRoute(submarine.DisplayedRoute)), 170, 420, Flexible: true, FlexWeight: 1.5f),
+            new ResponsiveTableColumn("Current / next route", projection.Submarines.Select(submarine => FormatCompactRoute(submarine.DisplayedRoute)), 170, 420, Flexible: true, FlexWeight: 1.5f, FillRemaining: true),
             new ResponsiveTableColumn("Purpose", projection.Submarines.Select(submarine => submarine.RoutePurpose.ToString()), 82, 145),
             new ResponsiveTableColumn("Expected EXP", projection.Submarines.Select(submarine => submarine.ExpectedExp?.ToString("N0") ?? "Unavailable"), 105, 145),
             new ResponsiveTableColumn("Target ETA", projection.Submarines.Select(submarine => submarine.Rank >= submarine.EffectiveTargetRank ? "Ready" : submarine.TargetEtaAtUtc is { } eta ? FormatRelative(eta, now) : "Unavailable"), 105, 155));

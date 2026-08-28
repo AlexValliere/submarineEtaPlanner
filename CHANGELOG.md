@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.42.0
+
+- Tightened the Operations and Leveling submarine tables with a compact Rank header and a route column that fills spare width.
+
 ## 0.5.41.0
 
 - Moved Income build-and-rank details to four aligned Sub #1–4 columns at the end of each FC row.

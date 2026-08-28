@@ -12,7 +12,8 @@ public sealed partial class PlannerWindow
         float MinimumWidth,
         float MaximumWidth,
         bool Flexible = false,
-        float FlexWeight = 1f);
+        float FlexWeight = 1f,
+        bool FillRemaining = false);
 
     private sealed record ResponsiveTableLayout(
         IReadOnlyList<ResponsiveTableColumn> Columns,
@@ -54,10 +55,12 @@ public sealed partial class PlannerWindow
     {
         for (var index = 0; index < layout.Columns.Count; index++)
         {
+            var column = layout.Columns[index];
+            var fillRemaining = column.FillRemaining && !layout.RequiresHorizontalScroll;
             ImGui.TableSetupColumn(
-                layout.Columns[index].Label,
-                ImGuiTableColumnFlags.WidthFixed,
-                layout.Widths[index]);
+                column.Label,
+                fillRemaining ? ImGuiTableColumnFlags.WidthStretch : ImGuiTableColumnFlags.WidthFixed,
+                fillRemaining ? Math.Max(0.01f, column.FlexWeight) : layout.Widths[index]);
         }
     }
 }
