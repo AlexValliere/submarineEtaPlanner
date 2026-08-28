@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Counts only voyages containing tracked salvaged accessories in Income metrics, excluding earlier leveling voyages.",
+  "Changelog": "Aligns the Core library, test suite, plugin, and CI build environment on .NET 10.",
   "Tags": [
     "Submarine",
     "ETA",

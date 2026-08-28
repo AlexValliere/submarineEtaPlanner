@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.39.0
+
+- Aligned the Core library, test suite, plugin, and CI build environment on .NET 10.
+
 ## 0.5.38.0
 
 - Limited Income voyage counts, per-voyage averages, and history coverage to returns containing tracked salvaged accessories so earlier leveling voyages do not dilute farming income.
