@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.40.0
+
+- Removed the unstable observed run rate from Income and kept one recorded daily average based on each selected FC set's shared history coverage.
+
 ## 0.5.39.0
 
 - Aligned the Core library, test suite, plugin, and CI build environment on .NET 10.

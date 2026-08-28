@@ -92,7 +92,6 @@ public static class IncomeMetricsCalculator
                 voyages.Length == 0 ? 0 : gil / (double)voyages.Length,
                 coveredDays,
                 recordedAverageGilPerDay,
-                recordedAverageGilPerDay,
                 first,
                 last)
             {
@@ -123,7 +122,6 @@ public static class IncomeMetricsCalculator
             voyageCount == 0 ? 0 : gross / (double)voyageCount,
             fcCoveredDays,
             fcCoveredDays <= 0 ? 0 : gross / fcCoveredDays,
-            submarines.Sum(item => item.ObservedRunRateGilPerDay),
             fcFirst,
             fcLast,
             submarines)
@@ -194,7 +192,6 @@ public static class IncomeMetricsCalculator
             voyages == 0 ? 0 : gross / (double)voyages,
             days,
             days == 0 ? 0 : gross / days,
-            metrics.Sum(item => item.ObservedRunRateGilPerDay),
             metrics.Count);
     }
 

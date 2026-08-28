@@ -16,6 +16,22 @@ public static class IncomeViewPreferences
         };
 }
 
+public static class IncomeSortPreferences
+{
+    private const int LegacyRecordedAverageValue = 4;
+
+    public static IncomeSort Normalize(IncomeSort value)
+        => (int)value switch
+        {
+            (int)IncomeSort.GrossGil => IncomeSort.GrossGil,
+            (int)IncomeSort.RecordedAverageGilPerDay => IncomeSort.RecordedAverageGilPerDay,
+            (int)IncomeSort.GilPerVoyage => IncomeSort.GilPerVoyage,
+            (int)IncomeSort.FcName => IncomeSort.FcName,
+            LegacyRecordedAverageValue => IncomeSort.RecordedAverageGilPerDay,
+            _ => IncomeSort.GrossGil,
+        };
+}
+
 internal sealed record IncomeFcHeaderPresentation(
     string WidgetId,
     string FreeCompany,
@@ -23,7 +39,6 @@ internal sealed record IncomeFcHeaderPresentation(
     string Mode,
     string GrossGil,
     string RecordedAverageGilPerDay,
-    string ObservedRunRateGilPerDay,
     string GilPerVoyage,
     string Voyages,
     bool IsFarming)
@@ -41,7 +56,6 @@ internal sealed record IncomeFcHeaderPresentation(
             FcRoleSummaryFormatter.Format(projection.RoleSummary),
             $"{metric.GrossGil:N0}",
             $"{metric.RecordedAverageGilPerDay:N0}",
-            $"{metric.ObservedRunRateGilPerDay:N0}",
             $"{metric.GilPerVoyage:N0}",
             metric.VoyageCount.ToString("N0"),
             projection.RoleSummary is { HasFarming: true, HasLeveling: false, HasPaused: false })

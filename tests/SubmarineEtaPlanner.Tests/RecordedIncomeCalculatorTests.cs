@@ -8,7 +8,7 @@ public sealed class RecordedIncomeCalculatorTests
     private static readonly DateTimeOffset Now = DateTimeOffset.UnixEpoch.AddDays(1_000);
 
     [Fact]
-    public void StaggeredSubmarinesAndMultipleFcsKeepAveragesSeparateFromRunRates()
+    public void StaggeredSubmarinesAndMultipleFcsUseOneSharedRecordedAverage()
     {
         var firstFc = CreateFc(
             1,
@@ -27,19 +27,14 @@ public sealed class RecordedIncomeCalculatorTests
         Assert.Equal(10_000, firstMetrics.GilPerVoyage);
         Assert.Equal(100, firstMetrics.CoveredDays);
         Assert.Equal(200, firstMetrics.RecordedAverageGilPerDay);
-        Assert.Equal(1_100, firstMetrics.ObservedRunRateGilPerDay);
-        Assert.Equal(firstMetrics.ObservedRunRateGilPerDay, firstMetrics.GilPerDay);
+        Assert.Equal(firstMetrics.RecordedAverageGilPerDay, firstMetrics.GilPerDay);
 
         Assert.Equal(30_000, summary.GrossGil);
         Assert.Equal(3, summary.VoyageCount);
         Assert.Equal(10_000, summary.GilPerVoyage);
         Assert.Equal(100, summary.CoveredDays);
         Assert.Equal(300, summary.RecordedAverageGilPerDay);
-        Assert.Equal(1_600, summary.ObservedRunRateGilPerDay);
-        Assert.Equal(
-            firstMetrics.Submarines.Sum(submarine => submarine.ObservedRunRateGilPerDay) +
-            secondMetrics.Submarines.Sum(submarine => submarine.ObservedRunRateGilPerDay),
-            summary.ObservedRunRateGilPerDay);
+        Assert.Equal(summary.RecordedAverageGilPerDay, summary.GilPerDay);
     }
 
     [Fact]
@@ -57,7 +52,6 @@ public sealed class RecordedIncomeCalculatorTests
         Assert.Equal(1_000, submarine.GilPerVoyage);
         Assert.Equal(1, submarine.CoveredDays);
         Assert.Equal(1_000, submarine.RecordedAverageGilPerDay);
-        Assert.Equal(1_000, submarine.ObservedRunRateGilPerDay);
     }
 
     [Theory]
@@ -84,7 +78,6 @@ public sealed class RecordedIncomeCalculatorTests
         Assert.Equal(periodDays * 100d, metrics.GilPerVoyage);
         Assert.Equal(periodDays, metrics.CoveredDays);
         Assert.Equal(100, metrics.RecordedAverageGilPerDay);
-        Assert.Equal(100, metrics.ObservedRunRateGilPerDay);
         Assert.Equal(Now.AddDays(-periodDays), metrics.FirstReturnAtUtc);
         Assert.Equal(Now.AddDays(-periodDays), metrics.LastReturnAtUtc);
     }
@@ -103,7 +96,6 @@ public sealed class RecordedIncomeCalculatorTests
         Assert.Equal(40_000, metrics.GilPerVoyage);
         Assert.Equal(400, metrics.CoveredDays);
         Assert.Equal(100, metrics.RecordedAverageGilPerDay);
-        Assert.Equal(100, metrics.ObservedRunRateGilPerDay);
     }
 
     [Fact]
@@ -120,37 +112,41 @@ public sealed class RecordedIncomeCalculatorTests
         Assert.Equal(0, metrics.GilPerVoyage);
         Assert.Equal(0, metrics.CoveredDays);
         Assert.Equal(0, metrics.RecordedAverageGilPerDay);
-        Assert.Equal(0, metrics.ObservedRunRateGilPerDay);
         Assert.Null(metrics.FirstReturnAtUtc);
         Assert.Null(metrics.LastReturnAtUtc);
         Assert.Equal(0, summary.CoveredDays);
         Assert.Equal(0, summary.RecordedAverageGilPerDay);
-        Assert.Equal(0, summary.ObservedRunRateGilPerDay);
     }
 
     [Fact]
-    public void OrderingCanChooseRecordedAverageOrObservedRunRateExplicitly()
+    public void RecordedAverageSortReusesLegacyDailySortValues()
     {
-        Assert.Equal(1, (int)IncomeSort.ObservedRunRateGilPerDay);
-        Assert.Equal(4, (int)IncomeSort.RecordedAverageGilPerDay);
+        Assert.Equal(1, (int)IncomeSort.RecordedAverageGilPerDay);
+        Assert.Equal(IncomeSort.RecordedAverageGilPerDay, IncomeSortPreferences.Normalize((IncomeSort)4));
 
-        var higherRecordedAverage = Metrics("recorded", recordedAverage: 500, observedRunRate: 600);
-        var higherObservedRunRate = Metrics("observed", recordedAverage: 400, observedRunRate: 700);
+        var higherRecordedAverage = Metrics("higher", recordedAverage: 500);
+        var lowerRecordedAverage = Metrics("lower", recordedAverage: 400);
 
         var byRecorded = IncomeMetricsOrdering.Order(
-            [higherObservedRunRate, higherRecordedAverage],
+            [lowerRecordedAverage, higherRecordedAverage],
             IncomeSort.RecordedAverageGilPerDay,
             _ => false);
-        var byObserved = IncomeMetricsOrdering.Order(
-            [higherRecordedAverage, higherObservedRunRate],
-            IncomeSort.ObservedRunRateGilPerDay,
+        var byLegacyRecorded = IncomeMetricsOrdering.Order(
+            [lowerRecordedAverage, higherRecordedAverage],
+            (IncomeSort)4,
             _ => false);
 
-        Assert.Equal(["recorded", "observed"], byRecorded.Select(metric => metric.FcIdKey));
-        Assert.Equal(["observed", "recorded"], byObserved.Select(metric => metric.FcIdKey));
+        Assert.Equal(["higher", "lower"], byRecorded.Select(metric => metric.FcIdKey));
+        Assert.Equal(["higher", "lower"], byLegacyRecorded.Select(metric => metric.FcIdKey));
     }
 
-    private static IncomeFcMetrics Metrics(string id, double recordedAverage, double observedRunRate)
+    [Fact]
+    public void InvalidIncomeSortNormalizesToGrossGil()
+    {
+        Assert.Equal(IncomeSort.GrossGil, IncomeSortPreferences.Normalize((IncomeSort)999));
+    }
+
+    private static IncomeFcMetrics Metrics(string id, double recordedAverage)
         => new(
             id,
             id,
@@ -159,7 +155,6 @@ public sealed class RecordedIncomeCalculatorTests
             1_000,
             10,
             recordedAverage,
-            observedRunRate,
             Now.AddDays(-10),
             Now,
             []);

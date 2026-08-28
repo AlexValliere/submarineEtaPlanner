@@ -18,7 +18,7 @@ public sealed partial class PlannerWindow
             "income-definition",
             FontAwesomeIcon.InfoCircle,
             "Recorded gross NPC salvage value",
-            "Only voyages containing tracked salvaged accessories count toward voyages and history coverage. Recorded average spreads historical gross gil over that covered period. Observed run rate adds each submarine's own recorded daily rate, so newer tracking does not suppress it. Both describe past observations, not guaranteed income. The fleet filter uses each FC's current effective submarine roles.",
+            "Only voyages containing tracked salvaged accessories count toward voyages and history coverage. Recorded average spreads historical gross gil over that covered period. It describes past observations, not guaranteed income. The fleet filter uses each FC's current effective submarine roles.",
             PlannerUi.Teal);
         ImGui.Spacing();
         DrawIncomeViewButton("All fleets", IncomeView.AllFleets);
@@ -121,7 +121,6 @@ public sealed partial class PlannerWindow
             new ResponsiveTableColumn("Build", metric.Submarines.Select(submarine => submarine.CurrentBuild.Code), 72, 100),
             new ResponsiveTableColumn("Gross gil", metric.Submarines.Select(submarine => $"{submarine.GrossGil:N0}"), 105, 175),
             new ResponsiveTableColumn("Recorded avg / day", metric.Submarines.Select(submarine => $"{submarine.RecordedAverageGilPerDay:N0}"), 125, 175),
-            new ResponsiveTableColumn("Observed run rate", metric.Submarines.Select(submarine => $"{submarine.ObservedRunRateGilPerDay:N0}"), 125, 175),
             new ResponsiveTableColumn("Voyages", metric.Submarines.Select(submarine => submarine.VoyageCount.ToString("N0")), 82, 105),
             new ResponsiveTableColumn("Gil/voyage", metric.Submarines.Select(submarine => $"{submarine.GilPerVoyage:N0}"), 105, 155),
             new ResponsiveTableColumn("First return", metric.Submarines.Select(submarine => FormatIncomeDate(submarine.FirstReturnAtUtc)), 125, 170),
@@ -131,11 +130,11 @@ public sealed partial class PlannerWindow
             flags |= ImGuiTableFlags.ScrollX;
         var tableHeight = CalculateTableHeight(metric.Submarines.Count, layout.RequiresHorizontalScroll);
         if (!ImGui.BeginTable(
-                $"income-table-{metric.FcIdKey}",
-                10,
-                flags,
-                new Vector2(-1, tableHeight),
-                layout.RequiresHorizontalScroll ? layout.InnerWidth : 0f))
+            $"income-table-{metric.FcIdKey}",
+            9,
+            flags,
+            new Vector2(-1, tableHeight),
+            layout.RequiresHorizontalScroll ? layout.InnerWidth : 0f))
             return;
 
         SetupResponsiveTableColumns(layout);
@@ -150,7 +149,6 @@ public sealed partial class PlannerWindow
             DrawCurrentBuild(submarine.CurrentBuild);
             DrawTableText($"{submarine.GrossGil:N0}");
             DrawTableText($"{submarine.RecordedAverageGilPerDay:N0}");
-            DrawTableText($"{submarine.ObservedRunRateGilPerDay:N0}");
             DrawTableText(submarine.VoyageCount.ToString("N0"));
             DrawTableText($"{submarine.GilPerVoyage:N0}");
             DrawTableText(FormatIncomeDate(submarine.FirstReturnAtUtc));
@@ -162,11 +160,10 @@ public sealed partial class PlannerWindow
     private void DrawIncomeSummary(IReadOnlyList<IncomeFcMetrics> metrics, DateTimeOffset now, TimeSpan? period)
     {
         var summary = IncomeMetricsCalculator.Summarize(metrics, now, period);
-        if (!ImGui.BeginTable("income-summary", 5, ImGuiTableFlags.SizingStretchSame))
+        if (!ImGui.BeginTable("income-summary", 4, ImGuiTableFlags.SizingStretchSame))
             return;
         ImGui.TableNextColumn(); PlannerUi.MetricCard("income-gross", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(summary.GrossGil), "Gross gil", PlannerUi.Green);
         ImGui.TableNextColumn(); PlannerUi.MetricCard("income-recorded-average", FontAwesomeIcon.CalendarDay, summary.CoveredDays == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.RecordedAverageGilPerDay), "Recorded avg / day", PlannerUi.Teal);
-        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-observed-run-rate", FontAwesomeIcon.ChartLine, summary.CoveredDays == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.ObservedRunRateGilPerDay), "Observed run rate", PlannerUi.Cyan);
         ImGui.TableNextColumn(); PlannerUi.MetricCard("income-voyage", FontAwesomeIcon.Ship, summary.VoyageCount == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.GilPerVoyage), "Gil / voyage", PlannerUi.Cyan);
         ImGui.TableNextColumn(); PlannerUi.MetricCard("income-fcs", FontAwesomeIcon.Building, summary.FcCount.ToString(), $"FCs shown · {summary.CoveredDays:0.#} days", PlannerUi.Muted);
         ImGui.EndTable();
@@ -205,7 +202,7 @@ public sealed partial class PlannerWindow
 
     private void DrawIncomeSortCombo()
     {
-        string[] labels = ["Gross gil", "Observed run rate", "Gil / voyage", "FC name", "Recorded avg / day"];
+        string[] labels = ["Gross gil", "Recorded avg / day", "Gil / voyage", "FC name"];
         var value = this.configuration.IncomeSort;
         if (DrawEnumCombo("##income-sort", labels, ref value))
         {

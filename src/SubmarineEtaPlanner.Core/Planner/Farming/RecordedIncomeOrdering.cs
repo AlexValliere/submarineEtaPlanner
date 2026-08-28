@@ -8,9 +8,8 @@ public static class IncomeMetricsOrdering
         Func<IncomeFcMetrics, bool> isFavorite)
         => metrics
             .OrderByDescending(isFavorite)
-            .ThenByDescending(metric => sort switch
+            .ThenByDescending(metric => IncomeSortPreferences.Normalize(sort) switch
             {
-                IncomeSort.ObservedRunRateGilPerDay => metric.ObservedRunRateGilPerDay,
                 IncomeSort.RecordedAverageGilPerDay => metric.RecordedAverageGilPerDay,
                 IncomeSort.GilPerVoyage => metric.GilPerVoyage,
                 IncomeSort.FcName => 0,

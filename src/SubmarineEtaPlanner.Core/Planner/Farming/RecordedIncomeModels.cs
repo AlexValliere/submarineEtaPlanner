@@ -10,13 +10,9 @@ public enum IncomeView
 public enum IncomeSort
 {
     GrossGil = 0,
-    ObservedRunRateGilPerDay = 1,
+    RecordedAverageGilPerDay = 1,
     GilPerVoyage = 2,
     FcName = 3,
-    RecordedAverageGilPerDay = 4,
-
-    [Obsolete("Use ObservedRunRateGilPerDay or RecordedAverageGilPerDay explicitly.")]
-    GilPerDay = ObservedRunRateGilPerDay,
 }
 
 public sealed record IncomeSubmarineMetrics(
@@ -27,12 +23,11 @@ public sealed record IncomeSubmarineMetrics(
     double GilPerVoyage,
     double CoveredDays,
     double RecordedAverageGilPerDay,
-    double ObservedRunRateGilPerDay,
     DateTimeOffset? FirstReturnAtUtc,
     DateTimeOffset? LastReturnAtUtc)
 {
     public int ValidVoyages => VoyageCount;
-    public double GilPerDay => ObservedRunRateGilPerDay;
+    public double GilPerDay => RecordedAverageGilPerDay;
     public int Rank { get; init; }
     public CurrentBuildPresentation CurrentBuild { get; init; } = CurrentBuildPresentation.Unavailable;
     public IReadOnlyList<RecordedVoyageMetrics> RecordedVoyages { get; init; } = [];
@@ -54,13 +49,12 @@ public sealed record IncomeFcMetrics(
     double GilPerVoyage,
     double CoveredDays,
     double RecordedAverageGilPerDay,
-    double ObservedRunRateGilPerDay,
     DateTimeOffset? FirstReturnAtUtc,
     DateTimeOffset? LastReturnAtUtc,
     IReadOnlyList<IncomeSubmarineMetrics> Submarines)
 {
     public int ValidVoyages => VoyageCount;
-    public double GilPerDay => ObservedRunRateGilPerDay;
+    public double GilPerDay => RecordedAverageGilPerDay;
     public int KnownFuelVoyageCount { get; init; }
     public int UnknownFuelVoyageCount { get; init; }
     public int TotalRecordedTanks { get; init; }
@@ -77,8 +71,7 @@ public sealed record IncomeSummaryMetrics(
     double GilPerVoyage,
     double CoveredDays,
     double RecordedAverageGilPerDay,
-    double ObservedRunRateGilPerDay,
     int FcCount)
 {
-    public double GilPerDay => ObservedRunRateGilPerDay;
+    public double GilPerDay => RecordedAverageGilPerDay;
 }

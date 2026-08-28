@@ -92,7 +92,8 @@ public sealed class Configuration : IPluginConfiguration
         if (!Enum.IsDefined(LevelingSort)) { LevelingSort = global::SubmarineEtaPlanner.LevelingSort.FarmReadyEta; changed = true; }
         if (!Enum.IsDefined(LevelingFilter)) { LevelingFilter = global::SubmarineEtaPlanner.LevelingFilter.All; changed = true; }
         if (!Enum.IsDefined(IncomePeriod)) { IncomePeriod = global::SubmarineEtaPlanner.IncomePeriod.Days30; changed = true; }
-        if (!Enum.IsDefined(IncomeSort)) { IncomeSort = global::SubmarineEtaPlanner.Planner.IncomeSort.GrossGil; changed = true; }
+        var normalizedIncomeSort = IncomeSortPreferences.Normalize(IncomeSort);
+        if (IncomeSort != normalizedIncomeSort) { IncomeSort = normalizedIncomeSort; changed = true; }
         var normalizedIncomeView = IncomeViewPreferences.Normalize(IncomeView);
         if (IncomeView != normalizedIncomeView) { IncomeView = normalizedIncomeView; changed = true; }
         if (!Enum.IsDefined(ResultsFilter)) { ResultsFilter = FcResultFilter.Leveling; changed = true; }
