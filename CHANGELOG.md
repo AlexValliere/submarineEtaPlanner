@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.48.0
+
+- Kept Income fleet FC tag and World columns sized to their text instead of stretching into the spare space.
+- Spread Gross gil, Recorded average/day, and Voyages evenly across the remaining width, preserving aligned headings and values and wrapping in narrow windows.
+
 ## 0.5.47.0
 
 - Fixed expanded Income tables squeezing submarine names to a few letters near the minimum fitting width.

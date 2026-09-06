@@ -286,15 +286,22 @@ public sealed partial class PlannerWindow
         IEnumerable<IncomeFcHeaderPresentation> presentations, float availableWidth)
     {
         var values = presentations.ToArray();
+        // Keep FC identity sized to its contents. Equal metric widths give the three
+        // right-aligned values evenly spaced anchors instead of crowding the right edge.
+        var metricWidth = Math.Max(
+            MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 100f, 170f),
+            Math.Max(
+                MeasureHeaderColumn(values.Select(value => value.RecordedAverageGilPerDay), "Recorded avg/day", 135f, 185f),
+                MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 65f, 95f)));
         return CalculateCompactFcHeaderLayout(
             [
                 MeasureHeaderColumn(values.Select(value => value.FreeCompany), "FC tag", 70f, 135f),
                 MeasureHeaderColumn(values.Select(value => value.World), "World", 90f, 150f),
-                MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 100f, 170f),
-                MeasureHeaderColumn(values.Select(value => value.RecordedAverageGilPerDay), "Recorded avg/day", 135f, 185f),
-                MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 65f, 95f),
+                metricWidth,
+                metricWidth,
+                metricWidth,
             ],
-            [1f, 1.2f, 1f, 1f, 0f], 2, availableWidth);
+            [0f, 0f, 1f, 1f, 1f], 2, availableWidth);
     }
 
     private static void DrawIncomeHeaderLegend(CompactFcHeaderLayout layout)

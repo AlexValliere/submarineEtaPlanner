@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Fixes cramped submarine names in expanded Income tables. Detail columns now size automatically to the window, with compact numeric columns and padding-aware scrolling. Retains the restored Operations headings and separate FC tag and world columns.",
+  "Changelog": "Balances Income fleet columns: FC tag and World stay sized to their text, while Gross gil, Recorded average/day, and Voyages share the remaining width evenly. Numeric headings and values remain right-aligned, with a wrapped layout in narrow windows.",
   "Tags": [
     "Submarine",
     "ETA",
