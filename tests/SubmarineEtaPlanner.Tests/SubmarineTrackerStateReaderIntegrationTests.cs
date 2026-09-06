@@ -28,6 +28,7 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
 
             Assert.True(freeCompanies.Count == 1, string.Join(Environment.NewLine, warnings));
             var fc = freeCompanies[0];
+            Assert.Equal(IncomeHistoryReadStatus.Available, fc.IncomeHistory.Status);
             var expectedRawFcId = MessagePackSerializer.Serialize(GameFreeCompanyId);
             Assert.Equal(expectedRawFcId, fc.FcId);
             Assert.Equal(Convert.ToHexString(expectedRawFcId), fc.FcIdKey);
@@ -171,6 +172,8 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             var submarine = Assert.Single(fc.Submarines);
             Assert.Empty(submarine.VoyageHistory);
             Assert.Equal(SubmarineSalvageSummary.Empty, submarine.Salvage);
+            Assert.Equal(IncomeHistoryReadStatus.Unavailable, fc.IncomeHistory.Status);
+            Assert.Contains("no loot history table", fc.IncomeHistory.Reason);
             Assert.Empty(warnings);
         }
         finally
@@ -201,6 +204,8 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
             Assert.Empty(submarine.VoyageHistory);
             Assert.Equal(SubmarineSalvageSummary.Empty, submarine.Salvage);
             var warning = Assert.Single(warnings);
+            Assert.Equal(IncomeHistoryReadStatus.Unavailable, fc.IncomeHistory.Status);
+            Assert.Contains("Could not read", fc.IncomeHistory.Reason);
             Assert.Contains("Could not read SubmarineTracker loot history", warning);
             Assert.Contains("Voyage history and recorded salvage value are unavailable", warning);
         }
@@ -237,6 +242,25 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
         {
             directory.Delete(recursive: true);
         }
+    }
+
+    [Fact]
+    public void EmptyLootTableIsAvailableWithNoRecordedReturns()
+    {
+        var directory = Directory.CreateTempSubdirectory("seta-tracker-empty-loot-");
+        try
+        {
+            var databasePath = Path.Combine(directory.FullName, "submarine-sqlite.db");
+            CreateDatabase(databasePath);
+            Execute(databasePath, "DELETE FROM loot");
+            var settings = EtaSettings.CreateDefault() with { SubmarineTrackerDatabasePathOverride = databasePath };
+            var warnings = new List<string>();
+            var fc = Assert.Single(new SubmarineTrackerStateReader().Read(settings, warnings));
+            Assert.Equal(IncomeHistoryReadStatus.Available, fc.IncomeHistory.Status);
+            Assert.Empty(Assert.Single(fc.Submarines).VoyageHistory);
+            Assert.Empty(warnings);
+        }
+        finally { directory.Delete(recursive: true); }
     }
 
     private static void CreateDatabase(string path, byte[]? freeCompanyId = null)

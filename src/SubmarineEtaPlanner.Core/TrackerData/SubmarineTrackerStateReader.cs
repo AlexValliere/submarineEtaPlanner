@@ -34,14 +34,14 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
             using var transaction = connection.BeginTransaction();
             var fcs = ReadFreeCompanies(connection, transaction, warnings);
             var voyageHistory = ReadVoyageHistory(connection, transaction, warnings);
-            var subs = ReadSubmarines(connection, transaction, settings, warnings, voyageHistory)
+            var subs = ReadSubmarines(connection, transaction, settings, warnings, voyageHistory.Observations)
                 .GroupBy(s => Convert.ToHexString(s.FcId))
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<SubmarineState>)g.OrderBy(s => s.Name).ToArray());
 
             var states = fcs.Select(fc =>
             {
                 subs.TryGetValue(fc.FcIdKey, out var fcSubs);
-                var complete = fc with { Submarines = fcSubs ?? [] };
+                var complete = fc with { Submarines = fcSubs ?? [], IncomeHistory = voyageHistory.State };
                 return complete with { DataFingerprint = FcDataFingerprint.Create(complete) };
             }).OrderBy(fc => fc.DisplayName).ToArray();
             transaction.Commit();
@@ -161,16 +161,21 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
         return subs;
     }
 
-    private IReadOnlyDictionary<TrackedSubmarineKey, IReadOnlyList<VoyageObservation>> ReadVoyageHistory(
+    private sealed record VoyageHistoryReadResult(
+        IReadOnlyDictionary<TrackedSubmarineKey, IReadOnlyList<VoyageObservation>> Observations,
+        IncomeHistoryReadState State);
+
+    private VoyageHistoryReadResult ReadVoyageHistory(
         SQLiteConnection connection,
         SQLiteTransaction transaction,
         ICollection<string> warnings)
     {
-        if (!TableExists(connection, transaction, "loot"))
-            return new Dictionary<TrackedSubmarineKey, IReadOnlyList<VoyageObservation>>();
-
         try
         {
+            if (!TableExists(connection, transaction, "loot"))
+                return new(new Dictionary<TrackedSubmarineKey, IReadOnlyList<VoyageObservation>>(),
+                    new(IncomeHistoryReadStatus.Unavailable, "SubmarineTracker has no loot history table."));
+
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = """
@@ -211,16 +216,18 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
                     Convert.ToInt64(reader["AdditionalCount"])));
             }
 
-            return VoyageObservationBuilder.Build(rows, this.salvageItems, warnings)
+            var observations = VoyageObservationBuilder.Build(rows, this.salvageItems, warnings)
                 .GroupBy(observation => new TrackedSubmarineKey(observation.FcIdKey, observation.SubmarineId))
                 .ToDictionary(
                     group => group.Key,
                     group => (IReadOnlyList<VoyageObservation>)group.OrderBy(observation => observation.ReturnAtUtc).ToArray());
+            return new(observations, IncomeHistoryReadState.Available);
         }
         catch (Exception ex)
         {
             warnings.Add($"Could not read SubmarineTracker loot history: {ex.Message} Voyage history and recorded salvage value are unavailable.");
-            return new Dictionary<TrackedSubmarineKey, IReadOnlyList<VoyageObservation>>();
+            return new(new Dictionary<TrackedSubmarineKey, IReadOnlyList<VoyageObservation>>(),
+                new(IncomeHistoryReadStatus.Unavailable, $"Could not read SubmarineTracker loot history: {ex.Message}"));
         }
     }
 

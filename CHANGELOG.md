@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.50.0
+
+- Added a compact recorded-income chart below Income's summary cards, following the existing period, fleet filters, and FC scope.
+- Added daily bars for short periods and weekly/monthly grouping for longer histories, with exact totals and coverage on hover.
+- Distinguished recorded zero gil from days without entries and unavailable tracker history. Marked today and partially included calendar periods as incomplete, with local-calendar and daylight-saving handling.
+- Cached chart aggregation independently of forecasts, invalidating on history, scope, period, timezone, and time-boundary changes.
+- Made chart visibility an automatically saved display preference; collapsing the chart skips its history aggregation.
+
 ## 0.5.49.0
 
 - Centered the Gross gil, Recorded average/day, and Voyages headings within Income fleet columns.

@@ -132,6 +132,8 @@ public sealed record FcState(
 
     public bool UnlockDataKnown { get; init; } = true;
 
+    internal IncomeHistoryReadState IncomeHistory { get; init; } = IncomeHistoryReadState.Unknown;
+
     public FcDataFingerprint DataFingerprint { get; init; }
 
     public long RecordedSalvageGil => Submarines.Sum(submarine => submarine.Salvage.TotalGil);

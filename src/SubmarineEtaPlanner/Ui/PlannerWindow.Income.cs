@@ -15,7 +15,7 @@ public sealed partial class PlannerWindow
             return;
 
         DrawFleetNotices(currentSnapshot);
-        PlannerUi.WrappedText("Recorded gross NPC salvage value · history coverage begins with tracked salvaged accessories.", PlannerUi.Muted);
+        PlannerUi.WrappedText("Recorded gross NPC salvage value · summary coverage begins with tracked salvaged accessories.", PlannerUi.Muted);
         PlannerUi.Tooltip("Recorded average spreads historical gross gil over the covered period. Costs are not deducted; these are past observations, not guaranteed income.");
         if (this.incomeFcScope is { } scope)
         {
@@ -57,6 +57,8 @@ public sealed partial class PlannerWindow
             metric => this.configuration.GetFcPreferences(metric.FcIdKey).Favorite);
 
         DrawIncomeSummary(metrics, now, period);
+        ImGui.Spacing();
+        DrawIncomeChart(currentSnapshot.FreeCompanies, includedFcIds, period, now);
         ImGui.Spacing();
         var modeLabel = this.incomeFcScope is not null ? "selected FC · all roles" : this.configuration.IncomeView switch
         {

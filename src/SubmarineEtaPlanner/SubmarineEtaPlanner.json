@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Centers the last three Income fleet headings and number groups within their columns. Numbers keep a shared right edge in each centered group, so their final digits stay aligned across FCs.",
+  "Changelog": "Adds a collapsible recorded-income chart following the selected fleets and period. Daily bars group into weeks or months for longer histories. Recorded zero income, days without entries, and unavailable history remain distinct; hover for exact totals and coverage. Chart visibility is saved automatically.",
   "Tags": [
     "Submarine",
     "ETA",

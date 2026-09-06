@@ -30,6 +30,8 @@ public sealed class Configuration : IPluginConfiguration
 
     public IncomeView IncomeView { get; set; } = IncomeViewPreferences.Default;
 
+    public bool ShowIncomeChart { get; set; } = true;
+
     public bool Migrate()
     {
         var changed = false;
