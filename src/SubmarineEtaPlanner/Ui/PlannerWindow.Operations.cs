@@ -8,149 +8,238 @@ namespace SubmarineEtaPlanner.Ui;
 
 public sealed partial class PlannerWindow
 {
+    private OperationsAttentionFilter attentionFilter;
+
     private void DrawOperationsPage()
     {
         var currentSnapshot = EnsureFleetSnapshot();
-        if (currentSnapshot is null)
-            return;
-
+        if (currentSnapshot is null) return;
         DrawFleetNotices(currentSnapshot);
         DrawSearch("Search FC, world, or submarine…");
-        ImGui.SameLine();
+        PlannerUi.SameLineIfFits("All fleets");
         DrawOperationsViewButton("All fleets", OperationsView.AllFleets);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Leveling");
         DrawOperationsViewButton("Leveling", OperationsView.Leveling);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Farming");
         DrawOperationsViewButton("Farming", OperationsView.Farming);
-        ImGui.SameLine();
+        PlannerUi.SameLineIfFits("", 200f * ImGuiHelpers.GlobalScale);
         DrawOperationsSortCombo();
 
         var now = DateTimeOffset.UtcNow;
-        var allProjections = CreateProjections(currentSnapshot, now);
+        var all = CreateProjections(currentSnapshot, now);
         var requiredMode = this.configuration.OperationsView switch
         {
             OperationsView.Leveling => FleetMode.Leveling,
             OperationsView.Farming => FleetMode.Farming,
             _ => (FleetMode?)null,
         };
-        var filteredProjections = allProjections
-            .Where(projection => MatchesSearch(projection.State))
-            .Where(projection => FleetPresentationFiltering.Includes(projection, requiredMode))
-            .ToArray();
-        var projections = this.configuration.OperationsSort switch
+        var matched = all.Where(fc => MatchesSearch(fc.State))
+            .Where(fc => FleetPresentationFiltering.Includes(fc, requiredMode)).ToArray();
+        var fuel = matched.ToDictionary(fc => fc.State.FcIdKey, fc => GetFuelPresentation(fc, now));
+        DrawAttentionCounters(OperationsAttentionSummary.Create(matched, fuel, now, TimeZoneInfo.Local));
+        var filtered = matched.Where(fc => OperationsAttentionSummary.MatchesFleet(
+            fc, fuel[fc.State.FcIdKey], this.attentionFilter, now, TimeZoneInfo.Local)).ToArray();
+        var fleets = this.configuration.OperationsSort switch
         {
-            OperationsSort.FarmReadyEta => FleetPresentationOrdering.FarmReadyEta(filteredProjections, IsFavorite),
-            OperationsSort.FcName => FleetPresentationOrdering.ByName(filteredProjections, IsFavorite),
-            _ => FleetPresentationOrdering.ActionsFirst(filteredProjections, IsFavorite),
+            OperationsSort.FarmReadyEta => FleetPresentationOrdering.FarmReadyEta(filtered, IsFavorite),
+            OperationsSort.FcName => FleetPresentationOrdering.ByName(filtered, IsFavorite),
+            _ => FleetPresentationOrdering.ActionsFirst(filtered, IsFavorite),
         };
-
-        ImGui.Spacing();
-        ImGui.TextColored(PlannerUi.Muted, $"{projections.Count} fleet{(projections.Count == 1 ? string.Empty : "s")} shown of {allProjections.Count} tracked");
-        ImGui.Spacing();
-        var headerContexts = projections.ToDictionary(
-            projection => projection.State.FcIdKey,
-            projection => new OperationsHeaderRenderContext(
-                OperationsFcHeaderPresentation.Create(projection, IsFavorite(projection), now),
-                CurrentVoyageProgressFormatter.CreateForFc(projection.State.Submarines, this.catalog, now)));
-        var headerLayout = CalculateOperationsHeaderLayout(
-            headerContexts.Values.Select(context => context.Presentation),
-            ImGui.GetContentRegionAvail().X);
-        DrawOperationsHeaderLegend(headerLayout);
-        foreach (var projection in projections)
-            DrawOperationsFleetGroup(projection, now, headerContexts[projection.State.FcIdKey], headerLayout);
+        PlannerUi.WrappedText($"{fleets.Count} fleets shown of {all.Count} tracked", PlannerUi.Muted);
+        if (fleets.Count == 0)
+        {
+            PlannerUi.WrappedText("No fleets match these filters.");
+            if (ImGui.Button("Clear filters"))
+            {
+                this.attentionFilter = OperationsAttentionFilter.None;
+                this.fcSearch = string.Empty;
+                this.configuration.OperationsView = OperationsView.AllFleets;
+                this.saveConfiguration();
+            }
+        }
+        foreach (var fc in fleets) DrawOperationsFleetGroup(fc, fuel[fc.State.FcIdKey], now);
     }
 
-    private void DrawOperationsFleetGroup(
-        FcOperationalProjection projection,
-        DateTimeOffset now,
-        OperationsHeaderRenderContext headerContext,
-        OperationsHeaderLayout layout)
+    private void DrawAttentionCounters(OperationsAttentionSummary counts)
     {
-        if (this.viewState.ExpansionOverride is { } expansion)
-            ImGui.SetNextItemOpen(expansion, ImGuiCond.Always);
-
         ImGui.Spacing();
-        var open = DrawAlignedOperationsHeader(
-            $"operations-fc-{projection.State.FcIdKey}",
-            headerContext,
-            layout);
-        DrawOperationsHeaderTooltip(projection, headerContext, now);
-        if (!open)
-            return;
-
-        var completion = OperationsCompletionPresentation.Create(projection);
-        ImGui.TextColored(PlannerUi.Muted, completion.Label);
-        PlannerUi.Tooltip(completion.Tooltip);
+        var items = new[]
+        {
+            (OperationsAttentionFilter.Collect, $"Ready to collect: {counts.Collect} subs"),
+            (OperationsAttentionFilter.ReturningToday, $"Returning today: {counts.ReturningToday} subs"),
+            (OperationsAttentionFilter.LowFuel, $"Low fuel: {counts.LowFuel} FCs"),
+            (OperationsAttentionFilter.NeedsSetup, $"Needs setup: {counts.NeedsSetup} FCs"),
+        };
+        var first = true;
+        foreach (var (filter, label) in items)
+        {
+            if (!first) PlannerUi.SameLineIfFits(label);
+            if (PlannerUi.SegmentedButton($"attention-{filter}", label, this.attentionFilter == filter))
+                this.attentionFilter = this.attentionFilter == filter ? OperationsAttentionFilter.None : filter;
+            first = false;
+        }
+        if (this.attentionFilter != OperationsAttentionFilter.None)
+        {
+            PlannerUi.SameLineIfFits("Clear attention filter");
+            if (ImGui.SmallButton("Clear attention filter")) this.attentionFilter = OperationsAttentionFilter.None;
+        }
         ImGui.Spacing();
-        DrawFuelRunway(projection, now);
-        ImGui.Spacing();
-        DrawOperationsSubmarineTable(projection, now);
     }
 
-    private void DrawOperationsSubmarineTable(FcOperationalProjection projection, DateTimeOffset now)
+    private void DrawOperationsFleetGroup(FcOperationalProjection fc, FleetFuelPresentation fuel, DateTimeOffset now)
     {
-        var layout = CalculateResponsiveTableLayout(
-            ImGui.GetContentRegionAvail().X,
-            new ResponsiveTableColumn("Submarine", projection.Submarines.Select(submarine => submarine.Name), 115, 220),
-            new ResponsiveTableColumn("Rank", projection.Submarines.Select(submarine => OperationsRankPresentation.Create(submarine).Label), 105, 165),
-            new ResponsiveTableColumn("Build", projection.Submarines.Select(submarine => submarine.CurrentBuild.Code), 72, 100),
-            new ResponsiveTableColumn("State", projection.Submarines.Select(submarine => CompactOperationalStatePresentation.Create(submarine, now).Label), 115, 190),
-            new ResponsiveTableColumn("Current / next route", projection.Submarines.Select(submarine => FormatCompactRoute(submarine.DisplayedRoute)), 170, 420, Flexible: true, FlexWeight: 1.5f, FillRemaining: true),
-            new ResponsiveTableColumn("Purpose", projection.Submarines.Select(submarine => submarine.RoutePurpose.ToString()), 82, 145),
-            new ResponsiveTableColumn("Expected EXP", projection.Submarines.Select(submarine => submarine.ExpectedExp?.ToString("N0") ?? "Unavailable"), 105, 145),
-            new ResponsiveTableColumn("Target ETA", projection.Submarines.Select(submarine => submarine.Rank >= submarine.EffectiveTargetRank ? "Ready" : submarine.TargetEtaAtUtc is { } eta ? FormatRelative(eta, now) : "Unavailable"), 105, 155));
-        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit;
-        if (layout.RequiresHorizontalScroll)
-            flags |= ImGuiTableFlags.ScrollX;
-        var tableHeight = CalculateTableHeight(projection.Submarines.Count, layout.RequiresHorizontalScroll);
-        if (!ImGui.BeginTable(
-                $"operations-projection-table-{projection.State.FcIdKey}",
-                8,
-                flags,
-                new Vector2(-1, tableHeight),
-                layout.RequiresHorizontalScroll ? layout.InnerWidth : 0f))
-            return;
+        ImGui.Spacing();
+        DrawFavoriteControl(fc.State.FcIdKey);
+        if (this.viewState.ExpansionOverride is { } expansion) ImGui.SetNextItemOpen(expansion, ImGuiCond.Always);
+        var presentation = OperationsFcHeaderPresentation.Create(fc, false, now);
+        var progress = CurrentVoyageProgressFormatter.CreateForFc(fc.State.Submarines, this.catalog, now);
+        var open = DrawCompactOperationsHeader(fc, presentation, progress, fuel);
+        if (!open) return;
+        DrawFcShortcuts(fc.State.FcIdKey);
+        PlannerUi.WrappedText(OperationsCompletionPresentation.Create(fc).Label, PlannerUi.Muted);
+        DrawFuelRunway(fc, now);
+        ImGui.Spacing();
+        var narrow = ImGui.GetContentRegionAvail().X < 680f * ImGuiHelpers.GlobalScale;
+        if (BeginOperationsTable($"operations-legend-{fc.State.FcIdKey}", narrow))
+        {
+            ImGui.TableHeadersRow();
+            ImGui.EndTable();
+        }
+        foreach (var submarine in fc.Submarines)
+            DrawOperationsEntry(fc, submarine, fuel, now, narrow);
+    }
 
-        SetupResponsiveTableColumns(layout);
-        ImGui.TableSetupScrollFreeze(1, 1);
-        ImGui.TableHeadersRow();
-        foreach (var submarine in projection.Submarines)
+    private bool DrawCompactOperationsHeader(FcOperationalProjection fc, OperationsFcHeaderPresentation presentation,
+        FcCurrentVoyageProgressPresentation progress, FleetFuelPresentation fuel)
+    {
+        var origin = ImGui.GetCursorScreenPos();
+        var width = ImGui.GetContentRegionAvail().X;
+        var scale = ImGuiHelpers.GlobalScale;
+        var twoLines = width < 760f * scale;
+        var line = ImGui.GetTextLineHeight();
+        var height = twoLines ? line * 2 + 12f * scale : ImGui.GetFrameHeight();
+        DrawFcProgressBackground(progress, height);
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(ImGui.GetStyle().FramePadding.X, (height - line) / 2));
+        ImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
+        var open = ImGui.CollapsingHeader($"###operations-fc-{fc.State.FcIdKey}");
+        ImGui.PopStyleColor();
+        ImGui.PopStyleVar();
+        var text = new[] { fc.State.DisplayName, presentation.Mode, presentation.Attention, CompactFuelLabel(fuel, true) };
+        var contentWidth = Math.Max(1, width - 26f * scale);
+        var fractions = twoLines ? new[] { .6f, .4f, .5f, .5f } : new[] { .32f, .18f, .27f, .23f };
+        var x = origin.X + 26f * scale;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (twoLines && i == 2) x = origin.X + 26f * scale;
+            var y = origin.Y + 5f * scale + (twoLines && i >= 2 ? line + 2f * scale : 0);
+            var cellWidth = contentWidth * fractions[i];
+            var color = i == 3 ? FuelStatusColor(fuel) : i == 2 && presentation.HasImmediateActions ? PlannerUi.Amber : ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
+            ImGui.GetWindowDrawList().AddText(new Vector2(x, y), ImGui.ColorConvertFloat4ToU32(color),
+                FitHeaderText(text[i], Math.Max(1, cellWidth - 8f * scale)));
+            x += cellWidth;
+        }
+        PlannerUi.Tooltip(string.Join("\n", text) + (fuel.HasFarming ? "\n" + CompactFuelLabel(fuel) : ""));
+        return open;
+    }
+
+    private static bool BeginOperationsTable(string id, bool narrow)
+    {
+        if (!ImGui.BeginTable(id, narrow ? 3 : 5, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.NoSavedSettings))
+            return false;
+        ImGui.TableSetupColumn("Submarine", ImGuiTableColumnFlags.WidthStretch, narrow ? 1.5f : 1.25f);
+        ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthStretch, .9f);
+        ImGui.TableSetupColumn("Return time", ImGuiTableColumnFlags.WidthStretch, 1.1f);
+        if (!narrow)
+        {
+            ImGui.TableSetupColumn("Route", ImGuiTableColumnFlags.WidthStretch, 1.7f);
+            ImGui.TableSetupColumn("Next action", ImGuiTableColumnFlags.WidthStretch, 1.65f);
+        }
+        return true;
+    }
+
+    private void DrawOperationsEntry(FcOperationalProjection fc, SubmarineOperationalProjection submarine,
+        FleetFuelPresentation fuel, DateTimeOffset now, bool narrow)
+    {
+        var tracked = fc.State.Submarines.First(sub => sub.SubmarineId == submarine.SubmarineId);
+        var plan = fuel.Routes.FirstOrDefault(route => route.SubmarineId == submarine.SubmarineId);
+        var row = CompactSubmarinePresentation.Create(submarine, tracked, plan);
+        var key = $"operations:{fc.State.FcIdKey}:{submarine.SubmarineId}";
+        var expanded = this.expandedSubmarines.Contains(key);
+        var highlighted = OperationsAttentionSummary.MatchesSubmarine(submarine, fc.State, this.attentionFilter, now, TimeZoneInfo.Local) ||
+            (this.attentionFilter == OperationsAttentionFilter.LowFuel && submarine.EffectiveRole == EffectiveSubmarineRole.Farming && fuel.LowFuel) ||
+            (this.attentionFilter == OperationsAttentionFilter.NeedsSetup && submarine.EffectiveRole == EffectiveSubmarineRole.Farming &&
+                (plan?.IsUsable != true || !fuel.Stock.IsAvailable));
+        if (BeginOperationsTable(key, narrow))
         {
             ImGui.TableNextRow();
-            DrawTableText(submarine.Name);
+            ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, ImGui.ColorConvertFloat4ToU32(
+                highlighted ? new Vector4(.08f, .28f, .30f, .6f) : PlannerUi.PanelBackground with { W = .5f }));
             ImGui.TableNextColumn();
-            var rankPresentation = OperationsRankPresentation.Create(submarine);
-            ImGui.TextUnformatted(rankPresentation.Label);
-            if (rankPresentation.Tooltip is not null)
-                PlannerUi.Tooltip(rankPresentation.Tooltip);
-            ImGui.TableNextColumn();
-            DrawCurrentBuild(submarine.CurrentBuild);
-            ImGui.TableNextColumn();
-            var compactState = CompactOperationalStatePresentation.Create(submarine, now);
-            ImGui.TextUnformatted(compactState.Label);
-            PlannerUi.Tooltip(compactState.Tooltip);
-            ImGui.TableNextColumn();
-            DrawCompactRoute(submarine.DisplayedRoute);
-            if ((submarine.State is OperationalState.Underway or OperationalState.ReadyToCollect) &&
-                submarine.Rank < submarine.EffectiveTargetRank &&
-                submarine.RecommendedNextRoute.Count > 0)
+            var start = ImGui.GetCursorScreenPos();
+            var name = $"{(expanded ? "▾" : "▸")} {submarine.Name}";
+            var available = Math.Max(1f, ImGui.GetContentRegionAvail().X);
+            var nameHeight = Math.Max(ImGui.GetTextLineHeight(), ImGui.CalcTextSize(name, false, available).Y);
+            if (ImGui.Selectable($"##expand-{key}", false, ImGuiSelectableFlags.SpanAllColumns, new Vector2(0, nameHeight)))
             {
-                ImGui.SameLine();
-                ImGui.TextColored(PlannerUi.Muted, "then");
-                ImGui.SameLine();
-                DrawCompactRoute(submarine.RecommendedNextRoute, PlannerUi.Teal);
+                if (!this.expandedSubmarines.Add(key)) this.expandedSubmarines.Remove(key);
+                expanded = !expanded;
             }
-            if (submarine.AlternativeRoutes.Count > 1 && ImGui.IsItemHovered())
-                PlannerUi.Tooltip("Conditional recommendation: alternative routes remain possible depending on unlock outcomes.");
-            DrawTableText(submarine.RoutePurpose.ToString());
-            DrawTableText(submarine.ExpectedExp is { } exp ? exp.ToString("N0") : "Unavailable");
-            if (submarine.ExpectedExp is null && submarine.ProjectionUnavailableReason is not null)
-                PlannerUi.Tooltip(submarine.ProjectionUnavailableReason);
-            DrawTableText(submarine.Rank >= submarine.EffectiveTargetRank
-                ? "Ready"
-                : submarine.TargetEtaAtUtc is { } eta ? FormatRelative(eta, now) : "Unavailable");
+            PlannerUi.Tooltip(expanded ? "Hide submarine details" : "Show submarine details");
+            var after = ImGui.GetCursorScreenPos();
+            ImGui.SetCursorScreenPos(start);
+            PlannerUi.WrappedText(name);
+            ImGui.SetCursorScreenPos(after);
+            ImGui.TableNextColumn(); PlannerUi.WrappedText(row.Status);
+            ImGui.TableNextColumn();
+            PlannerUi.WrappedText(submarine.State == OperationalState.Idle ? "—" :
+                tracked.ReturnAtUtc > now ? $"In {FormatDuration(tracked.ReturnAtUtc - now)}" :
+                submarine.State == OperationalState.ReadyToCollect ? "Ready" : "Awaiting tracker");
+            if (tracked.ReturnAtUtc != DateTimeOffset.MinValue) PlannerUi.Tooltip($"Return: {tracked.ReturnAtUtc.LocalDateTime:g}");
+            if (!narrow)
+            {
+                ImGui.TableNextColumn(); DrawOperationsRoutes(row);
+                ImGui.TableNextColumn(); DrawOperationsAction(row);
+            }
+            ImGui.EndTable();
         }
-        ImGui.EndTable();
+        if (narrow)
+        {
+            DrawOperationsRoutes(row);
+            DrawOperationsAction(row);
+        }
+        if (expanded)
+        {
+            ImGui.Indent(8f * ImGuiHelpers.GlobalScale);
+            PlannerUi.WrappedText($"Rank {submarine.Rank} · Build {submarine.CurrentBuild.Code} · Purpose {submarine.RoutePurpose}");
+            PlannerUi.WrappedText($"Expected EXP: {(submarine.ExpectedExp is { } exp ? exp.ToString("N0") : "Unavailable")}");
+            var target = submarine.IsTargetComplete ? "Target reached" : submarine.TargetEtaAtUtc is { } eta
+                ? eta.LocalDateTime.ToString("g") : "Unavailable";
+            PlannerUi.WrappedText($"Target R{submarine.EffectiveTargetRank}: {target}");
+            var result = fc.Result?.PerSubResults.FirstOrDefault(sub => sub.SubmarineId == submarine.SubmarineId);
+            if (result?.EtaForecast is { } range)
+                PlannerUi.WrappedText($"Likely range: {range.P10AtUtc.LocalDateTime:g} – {range.P90AtUtc.LocalDateTime:g}", PlannerUi.Muted);
+            foreach (var reason in new[] { submarine.CurrentBuild.UnavailableReason, row.Reason, result?.IncompleteReason }
+                .Where(reason => !string.IsNullOrWhiteSpace(reason)).Distinct())
+                PlannerUi.WrappedText(reason!, PlannerUi.Amber);
+            if (submarine.AlternativeRoutes.Count > 1)
+                PlannerUi.WrappedText("Conditional recommendation: the next route depends on sector discovery outcomes.", PlannerUi.Muted);
+            ImGui.Unindent(8f * ImGuiHelpers.GlobalScale);
+        }
+        ImGui.Spacing();
+    }
+
+    private void DrawOperationsRoutes(CompactSubmarinePresentation row)
+    {
+        PlannerUi.WrappedText($"Current: {(row.CurrentRoute.Count > 0 ? FormatCompactRoute(row.CurrentRoute) : "—")}");
+        if (row.NextRoute.Count > 0)
+            PlannerUi.WrappedText($"{row.NextRouteLabel}: {FormatCompactRoute(row.NextRoute)}", PlannerUi.Muted);
+    }
+
+    private static void DrawOperationsAction(CompactSubmarinePresentation row)
+    {
+        PlannerUi.WrappedText(row.ActionLabel);
+        PlannerUi.Tooltip(RecommendedActionFormatter.Format(row.Action) +
+            (row.Reason is null ? "" : "\n" + row.Reason) + "\nPlanning guidance; perform workshop actions in game.");
     }
 
     private void DrawOperationsViewButton(string label, OperationsView view)
@@ -165,8 +254,9 @@ public sealed partial class PlannerWindow
     private void DrawOperationsSortCombo()
     {
         string[] labels = ["Next return · actions first", "Farm-ready ETA", "FC name"];
+        ImGui.SetNextItemWidth(Math.Min(200f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
         var value = this.configuration.OperationsSort;
-        if (DrawEnumCombo("##operations-sort", labels, ref value))
+        if (DrawEnumCombo("##operations-sort", labels, ref value, 200f))
         {
             this.configuration.OperationsSort = value;
             this.saveConfiguration();

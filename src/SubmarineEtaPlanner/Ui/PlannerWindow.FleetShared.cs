@@ -10,10 +10,23 @@ public sealed partial class PlannerWindow
 {
     private EtaPlannerSnapshot? EnsureFleetSnapshot()
     {
-        if (this.snapshot is null && this.refreshTask is null)
+        var dependency = this.getSubmarineTrackerState();
+        if (!dependency.IsAvailable)
+        {
+            PlannerUi.Callout("fleet-dependency", FontAwesomeIcon.ExclamationTriangle,
+                dependency.IsInstalled ? "Submarine Tracker is disabled" : "Submarine Tracker is required",
+                "Install or enable Submarine Tracker to refresh fleet data. Existing results remain visible.", PlannerUi.Amber);
+            if (ImGui.Button(dependency.IsInstalled ? "Open installed plugins" : "Find Submarine Tracker"))
+                this.openSubmarineTrackerInstaller(dependency.IsInstalled);
+            return this.snapshot;
+        }
+        if (!string.IsNullOrWhiteSpace(this.lastError))
+            PlannerUi.Callout("fleet-error", FontAwesomeIcon.ExclamationTriangle, "Calculation notice", this.lastError, PlannerUi.Amber);
+        if (this.snapshot is null && this.refreshTask is null && string.IsNullOrWhiteSpace(this.lastError))
             StartRefresh();
         if (this.snapshot is null)
         {
+            if (!string.IsNullOrWhiteSpace(this.lastError)) return null;
             PlannerUi.Callout("loading-fleet-data", FontAwesomeIcon.SyncAlt, "Loading fleet data", "Reading SubmarineTracker and calculating fleet forecasts…", PlannerUi.Cyan);
             return null;
         }
@@ -37,6 +50,7 @@ public sealed partial class PlannerWindow
 
     private IReadOnlyList<FcOperationalProjection> CreateProjections(EtaPlannerSnapshot currentSnapshot, DateTimeOffset now)
     {
+        this.fuelPresentationCache.Retain(currentSnapshot.FreeCompanies.Select(fc => fc.FcIdKey).ToHashSet());
         var results = currentSnapshot.Results.ToDictionary(result => Convert.ToHexString(result.FcId));
         return currentSnapshot.FreeCompanies.Select(fc =>
         {

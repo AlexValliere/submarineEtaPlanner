@@ -176,14 +176,9 @@ public sealed partial class PlannerWindow : Window
 
         var refreshing = this.refreshTask is { IsCompleted: false };
         if (PlannerUi.DrawHeader(
-                GetPageTitle(),
-                GetPageSubtitle(),
-                this.configuration.Settings.TargetRank,
-                EtaModelLabels[(int)this.configuration.Settings.EtaModel],
+                GetPageTitle(), GetForecastStatus(),
                 this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Unlocks or PlannerPage.Income,
-                refreshing,
-                this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Unlocks or PlannerPage.Income,
-                this.configuration.FreeCompanyPreferences.Values.Count(value => value.TargetRankOverride is not null || value.StrategyOverride is not null)))
+                refreshing))
         {
             if (refreshing)
             {
@@ -201,7 +196,7 @@ public sealed partial class PlannerWindow : Window
         {
             var displayPage = this.settingsSection == SettingsSection.Display;
             var showActionBar = !displayPage || this.resetDefaultsPreviewActive;
-            var actionBarHeight = showActionBar ? 64f * ImGuiHelpers.GlobalScale : 0f;
+            var actionBarHeight = showActionBar ? GetSaveBarHeight(false) : 0f;
             if (ImGui.BeginChild("settings-scroll", new Vector2(-1, -actionBarHeight), false))
                 DrawSettingsPage();
             ImGui.EndChild();
@@ -211,7 +206,7 @@ public sealed partial class PlannerWindow : Window
         }
         else if (this.currentPage == PlannerPage.FcSetup)
         {
-            var actionBarHeight = 64f * ImGuiHelpers.GlobalScale;
+            var actionBarHeight = GetSaveBarHeight(true);
             if (ImGui.BeginChild("fc-setup-scroll", new Vector2(-1, -actionBarHeight), false))
                 DrawFcSetupPage();
             ImGui.EndChild();
@@ -234,6 +229,7 @@ public sealed partial class PlannerWindow : Window
         }
 
         ImGui.EndChild();
+        DrawNavigationDialog();
     }
 
     private void DrawSidebar(bool compact)
@@ -251,17 +247,17 @@ public sealed partial class PlannerWindow : Window
         ImGui.Spacing();
         DrawNavigationItem(PlannerPage.Settings, FontAwesomeIcon.Cogs, "Settings", compact);
 
-        if (this.draftDirty)
+        if (this.draftDirty || this.setupDraftDirty)
         {
             ImGui.Spacing();
             if (compact)
             {
                 PlannerUi.DrawStatusPill("!", PlannerUi.Amber);
-                PlannerUi.Tooltip("Calculation settings have unapplied changes.");
+                PlannerUi.Tooltip("Global or FC settings have unsaved changes.");
             }
             else
             {
-                PlannerUi.DrawStatusPill("Unapplied changes", PlannerUi.Amber);
+                PlannerUi.WrappedText("Unsaved changes", PlannerUi.Amber);
             }
         }
     }

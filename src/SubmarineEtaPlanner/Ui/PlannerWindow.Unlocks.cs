@@ -10,6 +10,9 @@ public sealed partial class PlannerWindow
 {
     private string? selectedUnlockFcId;
     private uint? selectedUnlockMapId;
+    private uint? selectedUnlockSectorId;
+    private string unlockSearch = string.Empty;
+    private bool remainingUnlocksOnly;
     private readonly Dictionary<uint, UnlockMapLayoutCacheEntry> unlockMapLayoutCache = [];
 
     private void DrawUnlocksPage()
@@ -33,6 +36,7 @@ public sealed partial class PlannerWindow
         {
             this.selectedUnlockFcId = orderedFcs[0].FcIdKey;
             this.selectedUnlockMapId = null;
+            this.selectedUnlockSectorId = null;
         }
         var selectedFc = orderedFcs.First(fc => fc.FcIdKey == this.selectedUnlockFcId);
         DrawUnlockFcSelector(orderedFcs, selectedFc);
@@ -48,13 +52,13 @@ public sealed partial class PlannerWindow
             return;
         }
 
+        DrawUnlockSearch(presentation);
         if (this.selectedUnlockMapId is null || presentation.Maps.All(map => map.MapId != this.selectedUnlockMapId))
         {
             this.selectedUnlockMapId = presentation.Maps
                 .FirstOrDefault(map => map.RemainingDestinations > 0)?.MapId ??
                 presentation.Maps[^1].MapId;
         }
-        var selectedMap = presentation.Maps.First(map => map.MapId == this.selectedUnlockMapId);
 
         ImGui.Spacing();
         DrawUnlockSummary(presentation);
@@ -71,12 +75,79 @@ public sealed partial class PlannerWindow
 
         ImGui.Spacing();
         DrawUnlockMapTabs(presentation.Maps);
+        var selectedMap = presentation.Maps.First(map => map.MapId == this.selectedUnlockMapId);
         ImGui.Spacing();
         DrawUnlockLegend();
         ImGui.Spacing();
         DrawUnlockMapCanvas(presentation, selectedMap);
+        DrawSelectedUnlockSector(presentation);
         ImGui.Spacing();
         DrawRemainingUnlocks(presentation, selectedMap);
+    }
+
+    private void DrawUnlockSearch(FcUnlockMapsPresentation presentation)
+    {
+        ImGui.SetNextItemWidth(Math.Min(360f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
+        ImGui.InputTextWithHint("##unlock-search", "Search sector code or name across maps…", ref this.unlockSearch, 100);
+        PlannerUi.SameLineIfFits("Remaining only");
+        ImGui.BeginDisabled(!presentation.UnlockDataKnown);
+        ImGui.Checkbox("Remaining only", ref this.remainingUnlocksOnly);
+        ImGui.EndDisabled();
+        if (!presentation.UnlockDataKnown) PlannerUi.Tooltip("Tracker unlock state is required for this filter.");
+        if (string.IsNullOrWhiteSpace(this.unlockSearch)) return;
+        var results = UnlockMapSelection.Search(presentation, this.unlockSearch);
+        if (results.Count == 0) PlannerUi.WrappedText("No matching sectors.", PlannerUi.Muted);
+        else
+        {
+            if (ImGui.BeginChild("unlock-search-results", new Vector2(-1,
+                    Math.Min(180f * ImGuiHelpers.GlobalScale, results.Count * ImGui.GetFrameHeightWithSpacing())), true))
+            {
+                foreach (var item in results)
+                {
+                    var destination = item.Destination;
+                    if (ImGui.Selectable($"{destination.MapName} · {destination.Code} — {destination.Name}##search-{destination.SectorId}"))
+                    {
+                        this.selectedUnlockMapId = destination.MapId;
+                        this.selectedUnlockSectorId = destination.SectorId;
+                        this.unlockSearch = string.Empty;
+                    }
+                }
+            }
+            ImGui.EndChild();
+        }
+    }
+
+    private void DrawSelectedUnlockSector(FcUnlockMapsPresentation presentation)
+    {
+        if (this.selectedUnlockSectorId is not { } selected) return;
+        var destinations = presentation.Maps.SelectMany(map => map.Destinations).ToDictionary(item => item.Destination.SectorId);
+        if (!destinations.TryGetValue(selected, out var item))
+        {
+            this.selectedUnlockSectorId = null;
+            return;
+        }
+        ImGui.Spacing();
+        if (ImGui.SmallButton("Clear sector selection")) this.selectedUnlockSectorId = null;
+        var metadata = destinations.ToDictionary(pair => pair.Key, pair => pair.Value.Destination);
+        BeginContentPanel("selected-unlock-sector");
+        DrawUnlockDestinationContents(item, metadata);
+        var path = item.RemainingUnlockPath
+            .Concat(item.IncomingRule is { } incoming ? new[] { incoming.SourcePoint } : [])
+            .Distinct().Where(point => point != selected).ToArray();
+        if (path.Length > 0)
+        {
+            PlannerUi.WrappedText("Inspect discovery prerequisites", PlannerUi.Muted);
+            foreach (var point in path)
+            {
+                if (!metadata.TryGetValue(point, out var prerequisite)) continue;
+                if (ImGui.SmallButton($"{prerequisite.MapName} · {prerequisite.Code} — {prerequisite.Name}##inspect-{point}"))
+                {
+                    this.selectedUnlockMapId = prerequisite.MapId;
+                    this.selectedUnlockSectorId = prerequisite.SectorId;
+                }
+            }
+        }
+        EndContentPanel();
     }
 
     private void DrawUnlockFcSelector(IReadOnlyList<FcState> freeCompanies, FcState selected)
@@ -92,6 +163,7 @@ public sealed partial class PlannerWindow
                 continue;
             this.selectedUnlockFcId = fc.FcIdKey;
             this.selectedUnlockMapId = null;
+            this.selectedUnlockSectorId = null;
         }
         ImGui.EndCombo();
     }
@@ -132,7 +204,10 @@ public sealed partial class PlannerWindow
                 ImGui.SameLine(0, 4f * ImGuiHelpers.GlobalScale);
 
             if (PlannerUi.SegmentedButton($"unlock-map-{map.MapId}", label, map.MapId == this.selectedUnlockMapId))
+            {
+                if (this.selectedUnlockMapId != map.MapId) this.selectedUnlockSectorId = null;
                 this.selectedUnlockMapId = map.MapId;
+            }
             used += width + 4f * ImGuiHelpers.GlobalScale;
         }
     }
@@ -140,21 +215,21 @@ public sealed partial class PlannerWindow
     private static void DrawUnlockLegend()
     {
         PlannerUi.DrawStatusPill("Explored", PlannerUi.Green);
-        ImGui.SameLine();
+        PlannerUi.SameLineIfFits("Unlocked");
         PlannerUi.DrawStatusPill("Unlocked", PlannerUi.Cyan);
-        ImGui.SameLine();
+        PlannerUi.SameLineIfFits("Discoverable now");
         PlannerUi.DrawStatusPill("Discoverable now", PlannerUi.Amber);
-        ImGui.SameLine();
+        PlannerUi.SameLineIfFits("Locked");
         PlannerUi.DrawStatusPill("Locked", PlannerUi.Muted);
-        ImGui.SameLine();
-        PlannerUi.DrawStatusPill("Active attempt", PlannerUi.Red);
+        PlannerUi.SameLineIfFits("Active attempt");
+        PlannerUi.DrawStatusPill("Active attempt", PlannerUi.Cyan);
     }
 
     private void DrawUnlockMapCanvas(FcUnlockMapsPresentation presentation, UnlockMapPresentation map)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var canvasSize = new Vector2(
-            Math.Max(320f * scale, ImGui.GetContentRegionAvail().X),
+            Math.Max(1f, ImGui.GetContentRegionAvail().X),
             Math.Clamp(ImGui.GetContentRegionAvail().X * 0.54f, 370f * scale, 560f * scale));
         var origin = ImGui.GetCursorScreenPos();
         var end = origin + canvasSize;
@@ -174,6 +249,8 @@ public sealed partial class PlannerWindow
             .SelectMany(candidate => candidate.Destinations)
             .ToDictionary(destination => destination.Destination.SectorId);
         var allMetadata = allDestinations.ToDictionary(pair => pair.Key, pair => pair.Value.Destination);
+        var visible = UnlockMapSelection.Visible(presentation, this.remainingUnlocksOnly, this.selectedUnlockSectorId);
+        var selectedPath = UnlockMapSelection.Path(presentation, this.selectedUnlockSectorId);
 
         drawList.PushClipRect(origin, end, true);
         void DrawArrow(Vector2 from, Vector2 to, Vector4 color, bool trimStart, bool trimEnd)
@@ -196,10 +273,12 @@ public sealed partial class PlannerWindow
 
         foreach (var connection in map.Connections)
         {
+            if (!visible.Contains(connection.SourcePoint) || !visible.Contains(connection.TargetPoint)) continue;
             var sourceLocal = positions.TryGetValue(connection.SourcePoint, out var sourcePoint);
             var targetLocal = positions.TryGetValue(connection.TargetPoint, out var targetPoint);
             var targetState = allDestinations.GetValueOrDefault(connection.TargetPoint)?.State ?? UnlockDestinationState.Unknown;
-            var color = UnlockStateColor(targetState) with { W = 0.62f };
+            var color = selectedPath.Contains(connection.SourcePoint) && selectedPath.Contains(connection.TargetPoint)
+                ? PlannerUi.Teal : UnlockStateColor(targetState) with { W = this.selectedUnlockSectorId is null ? 0.5f : 0.22f };
             if (sourceLocal && targetLocal)
             {
                 DrawArrow(
@@ -237,11 +316,16 @@ public sealed partial class PlannerWindow
 
         foreach (var destination in map.Destinations)
         {
+            if (!visible.Contains(destination.Destination.SectorId)) continue;
             var relative = positions[destination.Destination.SectorId];
             var center = origin + new Vector2(relative.X, relative.Y);
             var color = UnlockStateColor(destination.State);
+            if (this.selectedUnlockSectorId is not null && !selectedPath.Contains(destination.Destination.SectorId))
+                color.W = .45f;
+            if (this.selectedUnlockSectorId == destination.Destination.SectorId)
+                drawList.AddCircle(center, nodeRadius + 8f * scale, ImGui.ColorConvertFloat4ToU32(PlannerUi.Teal), 32, 2.5f * scale);
             if (destination.HasActiveAttempt)
-                drawList.AddCircle(center, nodeRadius + 5f * scale, ImGui.ColorConvertFloat4ToU32(PlannerUi.Red), 32, 2.2f * scale);
+                drawList.AddCircle(center, nodeRadius + 5f * scale, ImGui.ColorConvertFloat4ToU32(PlannerUi.Cyan), 32, 2.2f * scale);
             drawList.AddCircleFilled(
                 center,
                 nodeRadius,
@@ -259,13 +343,18 @@ public sealed partial class PlannerWindow
 
         var mouse = ImGui.GetMousePos();
         var hovered = map.Destinations
+            .Where(destination => visible.Contains(destination.Destination.SectorId))
             .Select(destination => (Destination: destination, Point: positions[destination.Destination.SectorId]))
             .Where(item => Vector2.Distance(mouse, origin + new Vector2(item.Point.X, item.Point.Y)) <= nodeRadius + 3f * scale)
             .OrderBy(item => Vector2.Distance(mouse, origin + new Vector2(item.Point.X, item.Point.Y)))
             .Select(item => item.Destination)
             .FirstOrDefault();
         if (hovered is not null)
+        {
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+                this.selectedUnlockSectorId = hovered.Destination.SectorId;
             DrawUnlockDestinationTooltip(hovered, allMetadata);
+        }
     }
 
     private IReadOnlyDictionary<uint, UnlockMapCanvasPoint> GetUnlockMapPositions(
@@ -374,7 +463,8 @@ public sealed partial class PlannerWindow
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted($"{destination.Destination.Code} — {destination.Destination.Name}");
+                if (ImGui.Selectable($"{destination.Destination.Code} — {destination.Destination.Name}##remaining-{destination.Destination.SectorId}"))
+                    this.selectedUnlockSectorId = destination.Destination.SectorId;
                 DrawTableText(UnlockStateLabel(destination.State, destination.HasActiveAttempt));
                 DrawTableText(destination.IncomingRule is { } rule && metadata.TryGetValue(rule.SourcePoint, out var source)
                     ? $"{source.Code} — {source.Name}"
@@ -393,14 +483,21 @@ public sealed partial class PlannerWindow
         IReadOnlyDictionary<uint, RouteDestination> metadata)
     {
         ImGui.BeginTooltip();
-        ImGui.TextColored(UnlockStateColor(destination.State), $"{destination.Destination.Code} — {destination.Destination.Name}");
+        DrawUnlockDestinationContents(destination, metadata);
+        ImGui.EndTooltip();
+    }
+
+    private void DrawUnlockDestinationContents(UnlockMapDestinationPresentation destination,
+        IReadOnlyDictionary<uint, RouteDestination> metadata)
+    {
+        PlannerUi.WrappedText($"{destination.Destination.Code} — {destination.Destination.Name}", UnlockStateColor(destination.State));
         ImGui.TextUnformatted($"{destination.Destination.MapName} · R{destination.Destination.RequiredRank}");
         ImGui.Separator();
         ImGui.TextUnformatted($"State: {UnlockStateLabel(destination.State, destination.HasActiveAttempt)}");
         if (destination.IncomingRule is { } rule)
         {
             var source = metadata.GetValueOrDefault(rule.SourcePoint);
-            ImGui.TextUnformatted($"Unlock from: {source?.Name ?? this.catalog.PointName(rule.SourcePoint)}");
+            PlannerUi.WrappedText($"Unlock from: {source?.Name ?? this.catalog.PointName(rule.SourcePoint)}");
         }
         else
         {
@@ -421,18 +518,16 @@ public sealed partial class PlannerWindow
 
         var blocked = FormatUnlockBlockReason(destination, metadata);
         if (blocked is not null)
-            ImGui.TextColored(PlannerUi.Amber, blocked);
+            PlannerUi.WrappedText(blocked, PlannerUi.Amber);
         if (destination.IncomingRule?.UnlocksSubSlot == true)
             ImGui.TextColored(PlannerUi.Teal, "Exploring this destination unlocks a submarine slot.");
         if (destination.IncomingRule?.UnlocksMap == true)
             ImGui.TextColored(PlannerUi.Teal, "Exploring this destination unlocks the next map.");
         foreach (var attempt in destination.ActiveAttempts)
         {
-            ImGui.TextColored(
-                PlannerUi.Red,
-                $"{attempt.SubmarineName} is attempting this unlock · returns {attempt.ReturnAtUtc.LocalDateTime:g} ({FormatRelative(attempt.ReturnAtUtc, DateTimeOffset.UtcNow)})");
+            PlannerUi.WrappedText(
+                $"{attempt.SubmarineName} is attempting this unlock · returns {attempt.ReturnAtUtc.LocalDateTime:g} ({FormatRelative(attempt.ReturnAtUtc, DateTimeOffset.UtcNow)})", PlannerUi.Cyan);
         }
-        ImGui.EndTooltip();
     }
 
     private static string? FormatUnlockBlockReason(

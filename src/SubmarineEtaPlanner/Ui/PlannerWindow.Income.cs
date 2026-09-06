@@ -14,19 +14,27 @@ public sealed partial class PlannerWindow
         if (currentSnapshot is null)
             return;
 
-        PlannerUi.Callout(
-            "income-definition",
-            FontAwesomeIcon.InfoCircle,
-            "Recorded gross NPC salvage value",
-            "Only voyages containing tracked salvaged accessories count toward voyages and history coverage. Recorded average spreads historical gross gil over that covered period. It describes past observations, not guaranteed income. The fleet filter uses each FC's current effective submarine roles.",
-            PlannerUi.Teal);
-        ImGui.Spacing();
+        DrawFleetNotices(currentSnapshot);
+        PlannerUi.WrappedText("Recorded gross NPC salvage value · history coverage begins with tracked salvaged accessories.", PlannerUi.Muted);
+        PlannerUi.Tooltip("Recorded average spreads historical gross gil over the covered period. Costs are not deducted; these are past observations, not guaranteed income.");
+        if (this.incomeFcScope is { } scope)
+        {
+            var selected = currentSnapshot.FreeCompanies.FirstOrDefault(fc => fc.FcIdKey == scope);
+            if (selected is null) this.incomeFcScope = null;
+            else
+            {
+                PlannerUi.WrappedText($"FC scope: {selected.DisplayName}", PlannerUi.Teal);
+                if (ImGui.SmallButton("Show all FCs##clear-income-scope")) this.incomeFcScope = null;
+            }
+        }
+        ImGui.BeginDisabled(this.incomeFcScope is not null);
         DrawIncomeViewButton("All fleets", IncomeView.AllFleets);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Leveling");
         DrawIncomeViewButton("Leveling", IncomeView.Leveling);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Farming");
         DrawIncomeViewButton("Farming", IncomeView.Farming);
-        ImGui.SameLine();
+        ImGui.EndDisabled();
+        PlannerUi.SameLineIfFits("", 190f * ImGuiHelpers.GlobalScale);
         DrawIncomeSortCombo();
         ImGui.Spacing();
         DrawIncomePeriodButtons();
@@ -36,7 +44,8 @@ public sealed partial class PlannerWindow
         var allProjections = CreateProjections(currentSnapshot, now);
         var requiredMode = IncomeViewPreferences.RequiredMode(this.configuration.IncomeView);
         var filteredProjections = allProjections
-            .Where(projection => FleetPresentationFiltering.Includes(projection, requiredMode))
+            .Where(projection => this.incomeFcScope is { } scopeId
+                ? projection.State.FcIdKey == scopeId : FleetPresentationFiltering.Includes(projection, requiredMode))
             .ToArray();
         var projections = filteredProjections.ToDictionary(item => item.State.FcIdKey);
         var includedFcIds = projections.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -49,7 +58,7 @@ public sealed partial class PlannerWindow
 
         DrawIncomeSummary(metrics, now, period);
         ImGui.Spacing();
-        var modeLabel = this.configuration.IncomeView switch
+        var modeLabel = this.incomeFcScope is not null ? "selected FC · all roles" : this.configuration.IncomeView switch
         {
             IncomeView.Leveling => "with leveling submarines",
             IncomeView.Farming => "with farming submarines",
@@ -76,8 +85,8 @@ public sealed partial class PlannerWindow
             metric => IncomeFcHeaderPresentation.Create(
                 projections[metric.FcIdKey],
                 metric,
-                this.configuration.GetFcPreferences(metric.FcIdKey).Favorite));
-        var incomeLayout = CalculateIncomeHeaderLayout(incomeHeaders.Values, ImGui.GetContentRegionAvail().X);
+                false));
+        var incomeLayout = CalculateIncomeHeaderLayout(incomeHeaders.Values, ImGui.GetContentRegionAvail().X - FavoriteControlWidth);
         DrawIncomeHeaderLegend(incomeLayout);
         foreach (var metric in metrics)
         {
@@ -93,6 +102,12 @@ public sealed partial class PlannerWindow
         IncomeHeaderLayout layout)
     {
         ImGui.Spacing();
+        DrawFavoriteControl(projection.State.FcIdKey);
+        if (this.expandIncomeFc == projection.State.FcIdKey)
+        {
+            ImGui.SetNextItemOpen(true, ImGuiCond.Always);
+            this.expandIncomeFc = null;
+        }
         var origin = ImGui.GetCursorScreenPos();
         var style = ImGui.GetStyle();
         var paddingY = Math.Max(0f, (layout.HeaderHeight - ImGui.GetTextLineHeight()) / 2f);
@@ -109,6 +124,8 @@ public sealed partial class PlannerWindow
             return;
 
         ImGui.Spacing();
+        DrawFcShortcuts(projection.State.FcIdKey);
+        PlannerUi.WrappedText($"Recorded coverage: {FormatIncomeDate(metric.FirstReturnAtUtc)} – {FormatIncomeDate(metric.LastReturnAtUtc)} · Gross NPC value; costs are not deducted.", PlannerUi.Muted);
         DrawIncomeSubmarineTable(metric);
     }
 
@@ -160,7 +177,7 @@ public sealed partial class PlannerWindow
     private void DrawIncomeSummary(IReadOnlyList<IncomeFcMetrics> metrics, DateTimeOffset now, TimeSpan? period)
     {
         var summary = IncomeMetricsCalculator.Summarize(metrics, now, period);
-        if (!ImGui.BeginTable("income-summary", 4, ImGuiTableFlags.SizingStretchSame))
+        if (!ImGui.BeginTable("income-summary", ImGui.GetContentRegionAvail().X < 680f * ImGuiHelpers.GlobalScale ? 2 : 4, ImGuiTableFlags.SizingStretchSame))
             return;
         ImGui.TableNextColumn(); PlannerUi.MetricCard("income-gross", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(summary.GrossGil), "Gross gil", PlannerUi.Green);
         ImGui.TableNextColumn(); PlannerUi.MetricCard("income-recorded-average", FontAwesomeIcon.CalendarDay, summary.CoveredDays == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.RecordedAverageGilPerDay), "Recorded avg / day", PlannerUi.Teal);
@@ -172,13 +189,13 @@ public sealed partial class PlannerWindow
     private void DrawIncomePeriodButtons()
     {
         DrawIncomePeriodButton("7 days", IncomePeriod.Days7);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("30 days");
         DrawIncomePeriodButton("30 days", IncomePeriod.Days30);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("90 days");
         DrawIncomePeriodButton("90 days", IncomePeriod.Days90);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("1 year");
         DrawIncomePeriodButton("1 year", IncomePeriod.Days365);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Lifetime");
         DrawIncomePeriodButton("Lifetime", IncomePeriod.Lifetime);
     }
 
@@ -204,7 +221,7 @@ public sealed partial class PlannerWindow
     {
         string[] labels = ["Gross gil", "Recorded avg / day", "Gil / voyage", "FC name"];
         var value = this.configuration.IncomeSort;
-        if (DrawEnumCombo("##income-sort", labels, ref value))
+        if (DrawEnumCombo("##income-sort", labels, ref value, 190f))
         {
             this.configuration.IncomeSort = value;
             this.saveConfiguration();

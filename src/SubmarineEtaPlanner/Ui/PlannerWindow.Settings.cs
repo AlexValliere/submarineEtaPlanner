@@ -38,15 +38,15 @@ public sealed partial class PlannerWindow
     private void DrawSettingsTabs()
     {
         DrawSettingsTab("Simulation", SettingsSection.Simulation);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Routes");
         DrawSettingsTab("Routes", SettingsSection.Routes);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Limits");
         DrawSettingsTab("Limits", SettingsSection.Limits);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Data source");
         DrawSettingsTab("Data source", SettingsSection.DataSource);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Build profile");
         DrawSettingsTab("Build profile", SettingsSection.BuildProfile);
-        ImGui.SameLine(0, 3f * ImGuiHelpers.GlobalScale);
+        PlannerUi.SameLineIfFits("Display");
         DrawSettingsTab("Display", SettingsSection.Display);
     }
 
@@ -261,8 +261,8 @@ public sealed partial class PlannerWindow
             "display-card",
             "Result presentation",
             previewingReset
-                ? "Review the staged display defaults. They will be saved with Apply & refresh."
-                : "Display preferences save immediately and do not restart the forecast.");
+                ? "Review the staged display defaults. They will be saved with Save changes."
+                : "Saved automatically. Display preferences do not restart the forecast.");
 
         var showDiagnostics = previewingReset
             ? this.draftSettings.ShowRouteDiagnostics
@@ -306,38 +306,24 @@ public sealed partial class PlannerWindow
     private void DrawSettingsActionBar()
     {
         ImGui.PushStyleColor(ImGuiCol.ChildBg, PlannerUi.PanelBackground);
-        if (ImGui.BeginChild("settings-action-bar", new Vector2(-1, 58f * ImGuiHelpers.GlobalScale), true, ImGuiWindowFlags.NoScrollbar))
+        if (ImGui.BeginChild("settings-action-bar", new Vector2(-1, -1), true))
         {
-            if (this.draftDirty)
-            {
-                PlannerUi.DrawStatusPill("Unapplied changes", PlannerUi.Amber);
-                ImGui.SameLine();
-            }
-            else
-            {
-                PlannerUi.DrawStatusPill("Settings up to date", PlannerUi.Green);
-                ImGui.SameLine();
-            }
-
-            var actionsDisabled = !this.draftDirty;
-            if (actionsDisabled)
-                ImGui.BeginDisabled();
-            if (PlannerUi.IconButtonWithText("apply-settings", FontAwesomeIcon.Check, "Apply & refresh"))
-                ApplyDraftSettings();
-            ImGui.SameLine();
-            if (PlannerUi.IconButtonWithText("revert-settings", FontAwesomeIcon.Undo, "Revert"))
+            PlannerUi.WrappedText(this.draftDirty ? "Unsaved global changes" : "Global settings saved",
+                this.draftDirty ? PlannerUi.Amber : PlannerUi.Muted);
+            ImGui.BeginDisabled(!this.draftDirty);
+            if (ImGui.Button("Save changes##apply-settings")) ApplyDraftSettings();
+            PlannerUi.SameLineIfFits("Discard changes");
+            if (ImGui.Button("Discard changes##revert-settings"))
             {
                 this.draftSettings = CloneSettings(this.configuration.Settings);
                 this.draftDirty = false;
                 this.resetDefaultsPreviewActive = false;
             }
-            if (actionsDisabled)
-                ImGui.EndDisabled();
-
-            ImGui.SameLine();
-            if (PlannerUi.IconButtonWithText("reset-settings", FontAwesomeIcon.SyncAlt, "Reset defaults"))
+            ImGui.EndDisabled();
+            PlannerUi.SameLineIfFits("Reset defaults");
+            if (ImGui.Button("Reset defaults##reset-settings"))
                 ImGui.OpenPopup("Reset all settings?###reset-all-settings");
-
+            PlannerUi.WrappedText("Saving global calculation settings refreshes forecasts.", PlannerUi.Muted);
             DrawResetDefaultsModal();
         }
         ImGui.EndChild();
@@ -358,7 +344,7 @@ public sealed partial class PlannerWindow
             "This loads defaults for Simulation, Routes, Limits, Data Source, Build Profile, and Display—not only the page currently shown.");
         ImGui.Spacing();
         ImGui.TextColored(PlannerUi.Amber, "Unapplied edits and custom data-source or route overrides will be replaced in the draft.");
-        ImGui.TextWrapped("Nothing is saved or recalculated until you select Apply & refresh. You can inspect every tab or use Revert first.");
+        ImGui.TextWrapped("Nothing is saved or recalculated until you select Save changes. You can inspect every tab or use Discard changes first.");
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -488,12 +474,12 @@ public sealed partial class PlannerWindow
         return changed;
     }
 
-    private static bool DrawEnumCombo<TEnum>(string label, IReadOnlyList<string> labels, ref TEnum value)
+    private static bool DrawEnumCombo<TEnum>(string label, IReadOnlyList<string> labels, ref TEnum value, float width = 360f)
         where TEnum : struct, Enum
     {
         var current = Math.Clamp(Convert.ToInt32(value), 0, labels.Count - 1);
         var changed = false;
-        ImGui.SetNextItemWidth(Math.Min(360f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
+        ImGui.SetNextItemWidth(Math.Min(width * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
         if (!ImGui.BeginCombo(label, labels[current]))
             return false;
 
@@ -561,7 +547,7 @@ public sealed partial class PlannerWindow
     {
         BeginContentPanel(id);
         ImGui.TextColored(PlannerUi.Teal, title);
-        ImGui.TextColored(PlannerUi.Muted, description);
+        PlannerUi.WrappedText(description, PlannerUi.Muted);
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -575,7 +561,7 @@ public sealed partial class PlannerWindow
     private static void SettingLabel(string label, string help)
     {
         ImGui.TextUnformatted(label);
-        ImGui.TextColored(PlannerUi.Muted, help);
+        PlannerUi.WrappedText(help, PlannerUi.Muted);
         ImGui.Spacing();
     }
 }

@@ -1264,12 +1264,12 @@ public sealed class EtaSimulatorTests
         Assert.Equal("SubmarineEtaPlanner", repoManifest.GetProperty("InternalName").GetString());
         Assert.Equal(expectedPunchline, repoManifest.GetProperty("Punchline").GetString());
         Assert.Equal(expectedDescription, repoManifest.GetProperty("Description").GetString());
-        Assert.Equal("0.5.44.0", repoManifest.GetProperty("AssemblyVersion").GetString());
+        Assert.Equal("0.5.45.0", repoManifest.GetProperty("AssemblyVersion").GetString());
         Assert.Equal("https://github.com/AlexValliere/submarineEtaPlanner", repoManifest.GetProperty("RepoUrl").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkInstall").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkUpdate").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoManifest.GetProperty("IconUrl").GetString());
-        Assert.Contains("Right-aligns Income", repoManifest.GetProperty("Changelog").GetString());
+        Assert.Contains("Compact fleet overview", repoManifest.GetProperty("Changelog").GetString());
         Assert.Equal(15, repoManifest.GetProperty("DalamudApiLevel").GetInt32());
     }
 
@@ -1311,7 +1311,7 @@ public sealed class EtaSimulatorTests
         Assert.DoesNotContain("valid voyage", incomePage, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"Recorded avg / day\"", incomePage);
         Assert.Contains("new ResponsiveTableColumn(\"Avg / day\"", incomePage);
-        Assert.Contains("\"Avg / day\"", fleetHeaders);
+        Assert.Contains("\"Recorded avg/day\"", fleetHeaders);
         Assert.DoesNotContain("Observed run rate", incomePage, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("not guaranteed income", incomePage);
         Assert.Contains("\"Gil / voyage\"", incomePage);

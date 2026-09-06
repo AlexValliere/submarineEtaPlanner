@@ -9,7 +9,6 @@ namespace SubmarineEtaPlanner.Ui;
 public sealed partial class PlannerWindow
 {
     private string? selectedSetupFcId;
-    private string? pendingSetupFcId;
     private bool setupDraftDirty;
     private bool setupUseGlobalTarget = true;
     private int setupTargetRank;
@@ -53,7 +52,7 @@ public sealed partial class PlannerWindow
         }
 
         ImGui.Spacing();
-        BeginSettingsCard("fc-preference-card", selected.DisplayName, "Favorites save immediately. Target, strategy, assignment, and pinned-route changes remain staged until Save.");
+        BeginSettingsCard("fc-preference-card", selected.DisplayName, "Favorites: Saved automatically. Target, strategy, assignment, and pinned-route changes remain staged until Save changes.");
         var preferences = this.configuration.GetFcPreferences(selected.FcIdKey);
         var favorite = preferences.Favorite;
         SettingLabel("Favorite", "Favorite FCs remain above non-favorites on Operations, Leveling, and Income.");
@@ -97,47 +96,42 @@ public sealed partial class PlannerWindow
         ImGui.Spacing();
         DrawCeruleumStockCard(selected);
         DrawPinnedRoutePicker();
-        DrawUnsavedSetupModal();
         DrawForgetFuelObservationModal();
     }
 
     private void DrawFcSetupActionBar()
     {
         ImGui.PushStyleColor(ImGuiCol.ChildBg, PlannerUi.PanelBackground);
-        if (!ImGui.BeginChild("fc-setup-action-bar", new Vector2(-1, 58f * ImGuiHelpers.GlobalScale), true, ImGuiWindowFlags.NoScrollbar))
+        if (ImGui.BeginChild("fc-setup-action-bar", new Vector2(-1, -1), true))
         {
-            ImGui.EndChild();
-            ImGui.PopStyleColor();
-            return;
+            PlannerUi.WrappedText(this.setupDraftDirty ? "Unsaved FC changes" : "FC settings saved",
+                this.setupDraftDirty ? PlannerUi.Amber : PlannerUi.Muted);
+            ImGui.BeginDisabled(!this.setupDraftDirty);
+            if (ImGui.Button("Save changes##save-fc-settings")) SaveSetupDraft();
+            PlannerUi.SameLineIfFits("Discard changes");
+            if (ImGui.Button("Discard changes##revert-fc-settings") && this.selectedSetupFcId is { } fcId)
+                SelectSetupFc(fcId);
+            ImGui.EndDisabled();
+            PlannerUi.SameLineIfFits("Use global target and strategy");
+            if (ImGui.Button("Use global target and strategy##reset-fc-settings"))
+            {
+                this.setupUseGlobalTarget = true;
+                this.setupStrategy = null;
+                this.setupDraftDirty = true;
+            }
+            PlannerUi.WrappedText("Saving target, strategy or assignment changes recalculates affected forecasts.", PlannerUi.Muted);
         }
-
-        if (this.setupDraftDirty)
-            PlannerUi.DrawStatusPill("Unsaved FC changes", PlannerUi.Amber);
-        else
-            PlannerUi.DrawStatusPill("FC settings up to date", PlannerUi.Green);
-        ImGui.SameLine();
-        if (PlannerUi.IconButtonWithText("save-fc-settings", FontAwesomeIcon.Check, "Save"))
-            SaveSetupDraft();
-        ImGui.SameLine();
-        if (PlannerUi.IconButtonWithText("reset-fc-settings", FontAwesomeIcon.Undo, "Reset to global"))
-        {
-            this.setupUseGlobalTarget = true;
-            this.setupStrategy = null;
-            this.setupDraftDirty = true;
-        }
-        ImGui.SameLine();
-        if (PlannerUi.IconButtonWithText("revert-fc-settings", FontAwesomeIcon.Times, "Revert"))
-        {
-            if (this.selectedSetupFcId is { } fcIdKey)
-                SelectSetupFc(fcIdKey);
-        }
-
         ImGui.EndChild();
         ImGui.PopStyleColor();
     }
 
     private void DrawCeruleumStockCard(FcState selected)
     {
+        if (this.focusSetupFuel)
+        {
+            ImGui.SetScrollHereY(0f);
+            this.focusSetupFuel = false;
+        }
         var now = DateTimeOffset.UtcNow;
         var previewPreferences = CreateSetupFuelPreferences(selected);
         var stock = ResolveFuelStock(selected, previewPreferences);
@@ -873,17 +867,7 @@ public sealed partial class PlannerWindow
             : assignment.ToString();
 
     private void RequestSetupFcSelection(string fcIdKey)
-    {
-        if (fcIdKey == this.selectedSetupFcId)
-            return;
-        if (!this.setupDraftDirty)
-        {
-            SelectSetupFc(fcIdKey);
-            return;
-        }
-        this.pendingSetupFcId = fcIdKey;
-        ImGui.OpenPopup("Unsaved FC changes###unsaved-fc-setup");
-    }
+        => RequestFcNavigation(fcIdKey, PlannerPage.FcSetup);
 
     private void SelectSetupFc(string fcIdKey)
     {
@@ -932,37 +916,6 @@ public sealed partial class PlannerWindow
         this.saveConfiguration();
         if (applyResult.EtaRefreshRequired)
             QueueRefresh(ForecastRefreshMode.Incremental);
-    }
-
-    private void DrawUnsavedSetupModal()
-    {
-        if (!ImGui.BeginPopupModal("Unsaved FC changes###unsaved-fc-setup", ImGuiWindowFlags.AlwaysAutoResize))
-            return;
-        ImGui.TextWrapped("Save the staged FC setup changes before opening another free company?");
-        ImGui.Spacing();
-        if (PlannerUi.IconButtonWithText("save-switch-fc", FontAwesomeIcon.Check, "Save"))
-        {
-            SaveSetupDraft();
-            if (this.pendingSetupFcId is { } pending)
-                SelectSetupFc(pending);
-            this.pendingSetupFcId = null;
-            ImGui.CloseCurrentPopup();
-        }
-        ImGui.SameLine();
-        if (PlannerUi.IconButtonWithText("discard-switch-fc", FontAwesomeIcon.Trash, "Discard"))
-        {
-            if (this.pendingSetupFcId is { } pending)
-                SelectSetupFc(pending);
-            this.pendingSetupFcId = null;
-            ImGui.CloseCurrentPopup();
-        }
-        ImGui.SameLine();
-        if (PlannerUi.IconButtonWithText("stay-on-fc", FontAwesomeIcon.Times, "Stay"))
-        {
-            this.pendingSetupFcId = null;
-            ImGui.CloseCurrentPopup();
-        }
-        ImGui.EndPopup();
     }
 
     private void DrawForgetFuelObservationModal()

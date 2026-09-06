@@ -15,10 +15,11 @@ public sealed partial class PlannerWindow
             return;
 
         DrawFleetNotices(currentSnapshot);
+        PlannerUi.WrappedText($"Global target R{this.configuration.Settings.TargetRank} · {EtaModelLabels[(int)this.configuration.Settings.EtaModel]}", PlannerUi.Muted);
         DrawSearch("Search all leveling fleets…");
-        ImGui.SameLine();
+        PlannerUi.SameLineIfFits("", 210f * ImGuiHelpers.GlobalScale);
         DrawLevelingFilterCombo();
-        ImGui.SameLine();
+        PlannerUi.SameLineIfFits("", 210f * ImGuiHelpers.GlobalScale);
         DrawLevelingSortCombo();
 
         var now = DateTimeOffset.UtcNow;
@@ -52,11 +53,11 @@ public sealed partial class PlannerWindow
         var headerContexts = projections.ToDictionary(
             projection => projection.State.FcIdKey,
             projection => new OperationsHeaderRenderContext(
-                OperationsFcHeaderPresentation.Create(projection, IsFavorite(projection), now),
+                OperationsFcHeaderPresentation.Create(projection, false, now),
                 CurrentVoyageProgressFormatter.CreateForFc(projection.State.Submarines, this.catalog, now)));
         var headerLayout = CalculateOperationsHeaderLayout(
             headerContexts.Values.Select(context => context.Presentation),
-            ImGui.GetContentRegionAvail().X);
+            ImGui.GetContentRegionAvail().X - FavoriteControlWidth);
         DrawOperationsHeaderLegend(headerLayout);
         foreach (var projection in projections)
             DrawLevelingFleetGroup(projection, now, headerContexts[projection.State.FcIdKey], headerLayout);
@@ -68,10 +69,10 @@ public sealed partial class PlannerWindow
         OperationsHeaderRenderContext headerContext,
         OperationsHeaderLayout layout)
     {
+        ImGui.Spacing();
+        DrawFavoriteControl(projection.State.FcIdKey);
         if (this.viewState.ExpansionOverride is { } expansion)
             ImGui.SetNextItemOpen(expansion, ImGuiCond.Always);
-
-        ImGui.Spacing();
         var open = DrawAlignedOperationsHeader(
             $"leveling-fc-{projection.State.FcIdKey}",
             headerContext,
@@ -80,6 +81,9 @@ public sealed partial class PlannerWindow
         if (!open)
             return;
 
+        DrawFcShortcuts(projection.State.FcIdKey);
+        var overrides = this.configuration.GetFcPreferences(projection.State.FcIdKey);
+        PlannerUi.WrappedText($"Effective target R{projection.EffectiveTargetRank} · Strategy: {(overrides.StrategyOverride?.ToString() ?? EtaModelLabels[(int)this.configuration.Settings.EtaModel])}", PlannerUi.Muted);
         var completion = OperationsCompletionPresentation.Create(projection);
         var voyages = projection.Submarines.Sum(submarine => submarine.VoyagesRemaining);
         var bottleneck = projection.Submarines
@@ -88,7 +92,7 @@ public sealed partial class PlannerWindow
             .FirstOrDefault();
         var levelingDetails = $"{completion.Label} · {voyages} voyage{(voyages == 1 ? string.Empty : "s")} remaining" +
                               (bottleneck is null ? string.Empty : $" · Bottleneck: {bottleneck.Name}");
-        ImGui.TextColored(PlannerUi.Muted, levelingDetails);
+        PlannerUi.WrappedText(levelingDetails, PlannerUi.Muted);
         PlannerUi.Tooltip(completion.Tooltip);
         ImGui.Spacing();
         DrawLevelingSubmarineTable(projection, now);
@@ -222,7 +226,7 @@ public sealed partial class PlannerWindow
     {
         string[] labels = ["Farm-ready ETA", "Lowest rank", "Next action", "FC name"];
         var value = this.configuration.LevelingSort;
-        if (DrawEnumCombo("##leveling-sort", labels, ref value))
+        if (DrawEnumCombo("##leveling-sort", labels, ref value, 210f))
         {
             this.configuration.LevelingSort = value;
             this.saveConfiguration();
@@ -233,7 +237,7 @@ public sealed partial class PlannerWindow
     {
         string[] labels = ["All leveling fleets", "Actionable submarines", "Favorites"];
         var value = this.configuration.LevelingFilter;
-        if (DrawEnumCombo("##leveling-filter", labels, ref value))
+        if (DrawEnumCombo("##leveling-filter", labels, ref value, 210f))
         {
             this.configuration.LevelingFilter = value;
             this.saveConfiguration();

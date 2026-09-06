@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Right-aligns Income gil and voyage values, uses neutral Gross gil text, and shortens the average column header.",
+  "Changelog": "Compact fleet overview with attention filters, expandable fuel summaries, independently saved favorites, FC shortcuts, safer staged editing, searchable unlock maps, and simplified Income headers. Income charts remain deferred.",
   "Tags": [
     "Submarine",
     "ETA",

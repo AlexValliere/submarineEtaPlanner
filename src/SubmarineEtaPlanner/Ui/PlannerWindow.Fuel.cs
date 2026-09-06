@@ -6,9 +6,56 @@ namespace SubmarineEtaPlanner.Ui;
 
 public sealed partial class PlannerWindow
 {
+    private readonly PresentationCache<FleetFuelPresentation> fuelPresentationCache = new();
+
+    private FleetFuelPresentation GetFuelPresentation(FcOperationalProjection projection, DateTimeOffset now)
+    {
+        var preferences = this.configuration.GetFcPreferences(projection.State.FcIdKey);
+        var stock = ResolveFuelStock(projection.State, preferences);
+        var key = FuelPresentationFingerprint.Create(projection.State, preferences, projection.EffectiveTargetRank,
+            this.configuration.Settings.CollectionDelayMinutes, stock);
+        return this.fuelPresentationCache.Get(projection.State.FcIdKey, key, now, () =>
+        {
+            var routes = FarmingRoutePlanResolver.Resolve(projection.State, preferences, projection.EffectiveTargetRank,
+                this.catalog, this.operationalCatalog);
+            var cycles = FarmingCyclePlanBuilder.Build(projection.State, routes, preferences, this.configuration.Settings, now);
+            var forecast = FuelRunwayCalculator.Calculate(stock, cycles, routes.Count, preferences.CeruleumReserve, now);
+            var boundary = projection.State.Submarines.Select(sub => sub.ReturnAtUtc)
+                .Concat(cycles.Select(cycle => cycle.NextDepartureAtUtc))
+                .Where(value => value > now).Select(value => (DateTimeOffset?)value).Min();
+            return (new FleetFuelPresentation(stock, routes, cycles, forecast), boundary);
+        });
+    }
+
+    private static string CompactFuelLabel(FleetFuelPresentation fuel, bool shortLabel = false)
+    {
+        if (!fuel.HasFarming) return "Fuel: —";
+        var forecast = fuel.Forecast;
+        if (forecast.Status == FuelRunwayStatus.Unavailable) return shortLabel ? "Fuel unavailable" : $"Fuel unavailable · {fuel.UnavailableReason}";
+        var refill = forecast.RefillBeforeUtc is { } time ? $" · refill before {time.LocalDateTime:ddd d MMM HH:mm}" : "";
+        return $"{(forecast.Status == FuelRunwayStatus.Healthy ? "Fuel" : $"Fuel {forecast.Status.ToString().ToLowerInvariant()}")}: {forecast.FullFleetSendsRemaining} sends" +
+            (shortLabel ? "" : refill);
+    }
+
+    private static System.Numerics.Vector4 FuelStatusColor(FleetFuelPresentation fuel)
+        => fuel.Forecast.Status switch
+        {
+            FuelRunwayStatus.Critical => PlannerUi.Red,
+            FuelRunwayStatus.Low => PlannerUi.Amber,
+            FuelRunwayStatus.Unavailable => PlannerUi.Muted,
+            _ => PlannerUi.Muted,
+        };
+
     private void DrawFuelRunway(FcOperationalProjection projection, DateTimeOffset now)
     {
-        var forecast = CreateFuelRunwayForecast(projection, now);
+        var fuel = GetFuelPresentation(projection, now);
+        if (!fuel.HasFarming) return;
+        var open = ImGui.CollapsingHeader($"Fuel details##fuel-details-{projection.State.FcIdKey}");
+        PlannerUi.WrappedText(CompactFuelLabel(fuel), FuelStatusColor(fuel));
+        if (!open) return;
+        if (ImGui.SmallButton($"Fuel setup##fuel-setup-{projection.State.FcIdKey}"))
+            RequestFcNavigation(projection.State.FcIdKey, PlannerPage.FcSetup, fuel: true);
+        var forecast = fuel.Forecast;
         var statusColor = forecast.Status switch
         {
             FuelRunwayStatus.Healthy => PlannerUi.Green,
@@ -67,23 +114,9 @@ public sealed partial class PlannerWindow
         }
 
         foreach (var warning in forecast.Warnings)
-            ImGui.TextColored(PlannerUi.Amber, $"• {warning}");
+            PlannerUi.WrappedText($"• {warning}", PlannerUi.Amber);
 
         EndContentPanel();
-    }
-
-    private FuelRunwayForecast CreateFuelRunwayForecast(
-        FcOperationalProjection projection,
-        DateTimeOffset now)
-    {
-        var preferences = this.configuration.GetFcPreferences(projection.State.FcIdKey);
-        var stock = ResolveFuelStock(projection.State, preferences);
-        return CalculateFuelRunway(
-            projection.State,
-            projection.EffectiveTargetRank,
-            preferences,
-            stock,
-            now);
     }
 
     private ResolvedFuelStock ResolveFuelStock(FcState freeCompany, FcPreferences preferences)

@@ -40,16 +40,32 @@ Submarine ETA Planner requires [XIVLauncher](https://goatcorp.github.io/) and Da
 
 ## Quick start
 
-1. Open the planner with `/seta`; it starts on **Operations**, where fleets needing attention appear first.
-2. Open **FC Setup** to choose favorites, set FC-specific target ranks and strategies, and assign each submarine to Leveling, Farming, or Paused.
+1. Open the planner with `/seta`; it starts on **Operations**. Use the **Ready to collect**, **Returning today**, **Low fuel**, and **Needs setup** counters to focus the fleet list.
+2. Pin an FC with its star, or expand the FC and use **Setup** to edit its target rank, strategy, and submarine assignments. Stars save automatically; setup edits use **Save changes**.
 3. For farming submarines, optionally pin a route, adjust collection delay, select the FC's local fuel-stock source, and set its safety stock.
 4. Use **Leveling** for progression forecasts and **Unlocks** for FC-specific sector status and remaining discovery paths.
 5. Use **Income** for historical SubmarineTracker salvage results. Farming-cycle and fuel forecasts remain projections, not recorded earnings or game actions.
-6. Use **Settings** when you need global simulation, route, data-source, build-profile, calculation-limit, or display controls, then select **Apply & refresh**.
+6. Use **Settings** when you need global simulation, route, data-source, build-profile, calculation-limit, or display controls, then select **Save changes**.
 
 Fresh installations start with target rank 90, Recommended leveling, FC-wide fleet simulation, a 120-minute collection delay, no voyage-duration cap, a 33% unlock chance, and a 20-second per-FC calculation limit. Existing saved settings are never replaced during an update.
 
-**Reset defaults** asks for confirmation before loading defaults across every settings category. The reset remains staged so you can inspect each tab, adjust values, select **Apply & refresh**, or use **Revert** without changing the saved configuration.
+**Reset defaults** asks for confirmation before loading defaults across every settings category. The reset remains staged so you can inspect each tab, adjust values, select **Save changes**, or use **Discard changes** without changing the saved configuration.
+
+## Compact fleet workspace
+
+Operations shows submarine, status, return time, route, and next action. Expand a submarine to inspect rank, build, expected EXP, target ETA, uncertainty, and missing-data explanations. At narrow widths, route and action move beneath the submarine row. Current voyages and proposed or pinned next routes are labeled separately; workshop actions must still be performed in game.
+
+Attention counters apply after the FC search and role filter. Selecting one filters FC groups while retaining their submarine companions; selecting it again clears it. Voyage counters count submarines (including paused assignments with relevant voyage states). **Returning today** uses known future return times and your local calendar day. Fuel/setup counters count FCs with active farming assignments; missing or stale information is not treated as zero stock.
+
+FC headers include independent favorite stars. Expanded groups provide **Setup**, **Unlock map**, and **Income** shortcuts for that FC. An Income shortcut temporarily shows one FC regardless of the saved role filter; **Show all FCs** restores the overview. Ordinary navigation retains unsaved edits. Opening a different FC's setup offers **Save changes**, **Discard changes**, or **Cancel**.
+
+Healthy fuel appears as a short expandable summary. Low, critical, and unavailable fuel remain visible in collapsed Operations headers. Expand **Fuel details** for stock source, observation age, reserve, consumption, and refill deadlines; **Fuel setup** opens the matching settings. FCs without active farming submarines do not show a farming-fuel panel.
+
+On **Unlocks**, search sector codes or names across all maps, click a sector to keep its details open, and follow prerequisite links between maps. **Remaining only** keeps required path context and any explicitly selected sector visible. Unknown tracker unlock state disables this filter.
+
+Income FC rows show FC/world, gross gil, recorded average/day, and voyage count. Expand an FC for the full submarine table and history coverage. These remain recorded gross NPC salvage values, with the existing calculation rules.
+
+Favorites and display preferences are labeled **Saved automatically**. Other edits use **Save changes** and **Discard changes**. **Use global target and strategy** changes only those two FC overrides. Global **Reset defaults** remains a staged, confirmed preview.
 
 ## Progressive calculations
 

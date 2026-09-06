@@ -28,20 +28,9 @@ public sealed partial class PlannerWindow
     private readonly record struct IncomeHeaderColumn(float Offset, float Width, int Line);
 
     private sealed record IncomeHeaderLayout(
-        bool TwoLine,
-        float HeaderHeight,
-        float LegendHeight,
-        IncomeHeaderColumn FreeCompany,
-        IncomeHeaderColumn World,
-        IncomeHeaderColumn Mode,
-        IncomeHeaderColumn GrossGil,
-        IncomeHeaderColumn RecordedAverageGilPerDay,
-        IncomeHeaderColumn GilPerVoyage,
-        IncomeHeaderColumn Voyages,
-        IncomeHeaderColumn Submarine1,
-        IncomeHeaderColumn Submarine2,
-        IncomeHeaderColumn Submarine3,
-        IncomeHeaderColumn Submarine4);
+        bool TwoLine, float HeaderHeight, float LegendHeight,
+        IncomeHeaderColumn FreeCompany, IncomeHeaderColumn GrossGil,
+        IncomeHeaderColumn RecordedAverageGilPerDay, IncomeHeaderColumn Voyages);
 
     private static OperationsHeaderLayout CalculateOperationsHeaderLayout(
         IEnumerable<OperationsFcHeaderPresentation> presentations,
@@ -104,7 +93,7 @@ public sealed partial class PlannerWindow
 
     private static void DrawOperationsHeaderLegend(OperationsHeaderLayout layout)
     {
-        var origin = ImGui.GetCursorScreenPos();
+        var origin = ImGui.GetCursorScreenPos() + new Vector2(FavoriteControlWidth, 0);
         DrawOperationsHeaderFields(
             origin,
             layout,
@@ -226,158 +215,53 @@ public sealed partial class PlannerWindow
     }
 
     private static IncomeHeaderLayout CalculateIncomeHeaderLayout(
-        IEnumerable<IncomeFcHeaderPresentation> presentations,
-        float availableWidth)
+        IEnumerable<IncomeFcHeaderPresentation> presentations, float availableWidth)
     {
-        var values = presentations.ToArray();
         var scale = ImGuiHelpers.GlobalScale;
-        var gap = 8f * scale;
-        var gutter = 40f * scale;
-        var fcWidth = MeasureHeaderColumn(values.Select(value => value.FreeCompany), "FC", 90f, 155f);
-        var worldWidth = MeasureHeaderColumn(values.Select(value => value.World), "World", 85f, 145f);
-        var modeWidth = MeasureHeaderColumn(values.Select(value => value.Mode), "Mode", 78f, 105f);
-        var grossWidth = MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 95f, 145f);
-        var recordedAverageWidth = MeasureHeaderColumn(values.Select(value => value.RecordedAverageGilPerDay), "Avg / day", 105f, 145f);
-        var voyageWidth = MeasureHeaderColumn(values.Select(value => value.GilPerVoyage), "Gil / voyage", 100f, 140f);
-        var countWidth = MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 72f, 100f);
-        var submarine1Width = MeasureHeaderColumn(values.Select(value => value.Submarine1), "Sub #1", 95f, 135f);
-        var submarine2Width = MeasureHeaderColumn(values.Select(value => value.Submarine2), "Sub #2", 95f, 135f);
-        var submarine3Width = MeasureHeaderColumn(values.Select(value => value.Submarine3), "Sub #3", 95f, 135f);
-        var submarine4Width = MeasureHeaderColumn(values.Select(value => value.Submarine4), "Sub #4", 95f, 135f);
-        var widths = FitIncomeHeaderWidths(
-            [fcWidth, worldWidth, modeWidth, grossWidth, recordedAverageWidth, voyageWidth, countWidth, submarine1Width, submarine2Width, submarine3Width, submarine4Width],
-            [72f * scale, 66f * scale, 60f * scale, 80f * scale, 86f * scale, 78f * scale, 48f * scale, 76f * scale, 76f * scale, 76f * scale, 76f * scale],
-            Math.Max(1f, availableWidth - gutter - (gap * 10f)));
-        var offset = gutter;
-        IncomeHeaderColumn NextColumn(int index)
-        {
-            var column = new IncomeHeaderColumn(offset, widths[index], 0);
-            offset += widths[index] + gap;
-            return column;
-        }
-        return new IncomeHeaderLayout(
-            false,
-            ImGui.GetFrameHeight(),
-            ImGui.GetFrameHeight(),
-            NextColumn(0),
-            NextColumn(1),
-            NextColumn(2),
-            NextColumn(3),
-            NextColumn(4),
-            NextColumn(5),
-            NextColumn(6),
-            NextColumn(7),
-            NextColumn(8),
-            NextColumn(9),
-            NextColumn(10));
-    }
-
-    private static float[] FitIncomeHeaderWidths(
-        IReadOnlyList<float> desiredWidths,
-        IReadOnlyList<float> minimumWidths,
-        float availableWidth)
-    {
-        var desiredTotal = desiredWidths.Sum();
-        if (availableWidth >= desiredTotal)
-        {
-            var widths = desiredWidths.ToArray();
-            var submarineColumnCount = Math.Min(4, widths.Length);
-            var surplusPerSubmarine = (availableWidth - desiredTotal) / Math.Max(1, submarineColumnCount);
-            for (var index = widths.Length - submarineColumnCount; index < widths.Length; index++)
-                widths[index] += surplusPerSubmarine;
-            return widths;
-        }
-
-        var minimumTotal = minimumWidths.Sum();
-        if (availableWidth <= minimumTotal)
-        {
-            var compactScale = availableWidth / minimumTotal;
-            return minimumWidths.Select(width => Math.Max(1f, width * compactScale)).ToArray();
-        }
-
-        var expansion = (availableWidth - minimumTotal) / Math.Max(1f, desiredTotal - minimumTotal);
-        return desiredWidths
-            .Select((width, index) => minimumWidths[index] + ((width - minimumWidths[index]) * expansion))
-            .ToArray();
+        var gutter = 26f * scale;
+        var width = Math.Max(1f, availableWidth - gutter);
+        var twoLine = availableWidth < 640f * scale;
+        var height = twoLine ? ImGui.GetTextLineHeight() * 2 + 14f * scale : ImGui.GetFrameHeight();
+        return twoLine
+            ? new(true, height, height, new(gutter, width, 0),
+                new(gutter, width * .34f, 1), new(gutter + width * .34f, width * .42f, 1),
+                new(gutter + width * .76f, width * .24f, 1))
+            : new(false, height, height, new(gutter, width * .4f, 0),
+                new(gutter + width * .4f, width * .22f, 0), new(gutter + width * .62f, width * .24f, 0),
+                new(gutter + width * .86f, width * .14f, 0));
     }
 
     private static void DrawIncomeHeaderLegend(IncomeHeaderLayout layout)
     {
-        var origin = ImGui.GetCursorScreenPos();
-        DrawIncomeHeaderFields(
-            origin,
-            layout,
-            new IncomeFcHeaderPresentation(
-                "income-legend",
-                "FC",
-                "World",
-                "Mode",
-                "Gross gil",
-                "Avg / day",
-                "Gil / voyage",
-                "Voyages",
-                "Sub #1",
-                "Sub #2",
-                "Sub #3",
-                "Sub #4",
-                false),
-            legend: true);
+        var origin = ImGui.GetCursorScreenPos() + new Vector2(FavoriteControlWidth, 0);
+        DrawIncomeHeaderCell(origin, layout, layout.FreeCompany, "FC / world", PlannerUi.Muted);
+        DrawIncomeHeaderCell(origin, layout, layout.GrossGil, "Gross gil", PlannerUi.Muted);
+        DrawIncomeHeaderCell(origin, layout, layout.RecordedAverageGilPerDay, "Recorded avg/day", PlannerUi.Muted);
+        DrawIncomeHeaderCell(origin, layout, layout.Voyages, "Voyages", PlannerUi.Muted);
         ImGui.Dummy(new Vector2(ImGui.GetContentRegionAvail().X, layout.LegendHeight));
     }
 
-    private static void DrawIncomeHeaderFields(
-        Vector2 origin,
-        IncomeHeaderLayout layout,
-        IncomeFcHeaderPresentation presentation,
-        bool legend)
+    private static void DrawIncomeHeaderFields(Vector2 origin, IncomeHeaderLayout layout,
+        IncomeFcHeaderPresentation presentation, bool legend)
     {
-        var normal = legend ? PlannerUi.Muted : ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
-        DrawIncomeHeaderCell(origin, layout, layout.FreeCompany, presentation.FreeCompany, normal);
-        DrawIncomeHeaderCell(origin, layout, layout.World, presentation.World, normal);
-        DrawIncomeHeaderCell(origin, layout, layout.Mode, presentation.Mode,
-            legend ? PlannerUi.Muted : presentation.IsFarming ? PlannerUi.Green : PlannerUi.Teal);
-        DrawIncomeHeaderCell(origin, layout, layout.GrossGil, presentation.GrossGil, normal, rightAligned: !legend);
-        DrawIncomeHeaderCell(origin, layout, layout.RecordedAverageGilPerDay, presentation.RecordedAverageGilPerDay, normal, rightAligned: !legend);
-        DrawIncomeHeaderCell(origin, layout, layout.GilPerVoyage, presentation.GilPerVoyage, normal, rightAligned: !legend);
-        DrawIncomeHeaderCell(origin, layout, layout.Voyages, presentation.Voyages, normal, rightAligned: !legend);
-        DrawIncomeHeaderCell(origin, layout, layout.Submarine1, presentation.Submarine1, normal);
-        DrawIncomeHeaderCell(origin, layout, layout.Submarine2, presentation.Submarine2, normal);
-        DrawIncomeHeaderCell(origin, layout, layout.Submarine3, presentation.Submarine3, normal);
-        DrawIncomeHeaderCell(origin, layout, layout.Submarine4, presentation.Submarine4, normal);
+        var normal = ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
+        DrawIncomeHeaderCell(origin, layout, layout.FreeCompany, $"{presentation.FreeCompany} · {presentation.World}", normal);
+        DrawIncomeHeaderCell(origin, layout, layout.GrossGil, presentation.GrossGil, normal, true);
+        DrawIncomeHeaderCell(origin, layout, layout.RecordedAverageGilPerDay, presentation.RecordedAverageGilPerDay, normal, true);
+        DrawIncomeHeaderCell(origin, layout, layout.Voyages, presentation.Voyages, normal, true);
     }
 
-    private static void DrawIncomeHeaderCell(
-        Vector2 origin,
-        IncomeHeaderLayout layout,
-        IncomeHeaderColumn column,
-        string text,
-        Vector4 color,
-        bool rightAligned = false)
+    private static void DrawIncomeHeaderCell(Vector2 origin, IncomeHeaderLayout layout,
+        IncomeHeaderColumn column, string text, Vector4 color, bool rightAligned = false)
     {
-        if (column.Width <= 1f)
-            return;
-
         var scale = ImGuiHelpers.GlobalScale;
-        var lineHeight = ImGui.GetTextLineHeight();
-        var lineGap = 2f * scale;
-        var contentHeight = layout.TwoLine ? (lineHeight * 2f) + lineGap : lineHeight;
-        var firstLineY = origin.Y + ((layout.HeaderHeight - contentHeight) / 2f);
-        var y = firstLineY + (column.Line * (lineHeight + lineGap));
-        var padding = 3f * scale;
-        var fitted = FitHeaderText(text, Math.Max(1f, column.Width - (padding * 2f)));
-        var textX = rightAligned
-            ? origin.X + column.Offset + column.Width - padding - ImGui.CalcTextSize(fitted).X
-            : origin.X + column.Offset + padding;
-        var drawList = ImGui.GetWindowDrawList();
-        drawList.PushClipRect(
-            new Vector2(origin.X + column.Offset, y),
-            new Vector2(origin.X + column.Offset + column.Width, y + lineHeight),
-            true);
-        drawList.AddText(
-            new Vector2(Math.Max(origin.X + column.Offset + padding, textX), y),
-            ImGui.ColorConvertFloat4ToU32(color),
-            fitted);
-        drawList.PopClipRect();
+        var line = ImGui.GetTextLineHeight();
+        var y = origin.Y + (layout.HeaderHeight - (layout.TwoLine ? line * 2 + 2f * scale : line)) / 2
+            + column.Line * (line + 2f * scale);
+        var fitted = FitHeaderText(text, Math.Max(1f, column.Width - 8f * scale));
+        var x = origin.X + column.Offset + (rightAligned
+            ? Math.Max(0, column.Width - 4f * scale - ImGui.CalcTextSize(fitted).X) : 4f * scale);
+        ImGui.GetWindowDrawList().AddText(new Vector2(x, y), ImGui.ColorConvertFloat4ToU32(color), fitted);
     }
 
     private static void DrawIncomeHeaderTooltip(FcOperationalProjection projection, IncomeFcMetrics metric)

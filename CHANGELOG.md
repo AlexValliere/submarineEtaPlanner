@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.45.0 — compact interface refresh
+
+- Reduced the decorative header, wrapped narrow controls and explanatory text, and softened table styling.
+- Simplified Operations to submarine, status, return, route, and action, with expandable planning details and a narrow layout.
+- Added attention filters for collection, today's returns, low fuel, and missing farming setup.
+- Added independently saved FC stars and contextual Setup, Unlock map, Income, and Fuel setup shortcuts, with safe handling of staged FC edits.
+- Condensed fuel into expandable summaries, retained collapsed-FC warnings, and cached route/fuel presentation calculations.
+- Added persistent sector selection, cross-map search, prerequisite links, and remaining-sector filtering.
+- Simplified Income FC headers while retaining the expanded statistics and existing gross-income calculations.
+- Standardized saving labels and documented automatic saving. The optional income chart is deferred.
+
 ## 0.5.44.0
 
 - Right-aligned Income gil and voyage values, removed Gross gil highlighting, and shortened the average column header.

@@ -12,7 +12,7 @@ internal static class PlannerUi
     internal static readonly Vector4 SidebarBackground = new(0.025f, 0.050f, 0.072f, 0.98f);
     internal static readonly Vector4 PanelBackground = new(0.055f, 0.100f, 0.130f, 0.96f);
     internal static readonly Vector4 PanelBackgroundAlt = new(0.065f, 0.125f, 0.155f, 0.96f);
-    internal static readonly Vector4 Border = new(0.12f, 0.28f, 0.32f, 0.90f);
+    internal static readonly Vector4 Border = new(0.16f, 0.23f, 0.27f, 0.60f);
     internal static readonly Vector4 Teal = new(0.18f, 0.78f, 0.78f, 1f);
     internal static readonly Vector4 Cyan = new(0.25f, 0.70f, 0.92f, 1f);
     internal static readonly Vector4 Amber = new(0.96f, 0.65f, 0.22f, 1f);
@@ -46,67 +46,66 @@ internal static class PlannerUi
         var scale = ImGuiHelpers.GlobalScale;
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8f, 8f) * scale);
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(7f, 5f) * scale);
-        ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(7f, 6f) * scale);
-        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(7f, 7f) * scale);
+        ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(7f, 4f) * scale);
+        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 8f) * scale);
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5f * scale);
         ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 7f * scale);
         ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarRounding, 5f * scale);
         return new ThemeScope(20, 7);
     }
 
-    internal static bool DrawHeader(
-        string title,
-        string subtitle,
-        int targetRank,
-        string etaModel,
-        bool showRefresh,
-        bool refreshing,
-        bool showGlobalLabels = false,
-        int overrideCount = 0)
+    internal static bool DrawHeader(string title, string status, bool showRefresh, bool refreshing)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var origin = ImGui.GetCursorScreenPos();
-        var size = new Vector2(ImGui.GetContentRegionAvail().X, 96f * scale);
-        var drawList = ImGui.GetWindowDrawList();
-        var end = origin + size;
-        drawList.AddRectFilledMultiColor(
-            origin,
-            end,
-            ColorU32(new Vector4(0.035f, 0.16f, 0.20f, 1f)),
-            ColorU32(new Vector4(0.035f, 0.28f, 0.30f, 1f)),
-            ColorU32(new Vector4(0.025f, 0.10f, 0.15f, 1f)),
-            ColorU32(new Vector4(0.025f, 0.07f, 0.11f, 1f)));
-        drawList.AddRect(origin, end, ColorU32(Border), 8f * scale, ImDrawFlags.None, 1.5f * scale);
-        drawList.AddCircle(end - new Vector2(35f, 28f) * scale, 44f * scale, ColorU32(new Vector4(Teal.X, Teal.Y, Teal.Z, 0.14f)), 48, 1.5f * scale);
-        drawList.AddCircle(end - new Vector2(35f, 28f) * scale, 25f * scale, ColorU32(new Vector4(Cyan.X, Cyan.Y, Cyan.Z, 0.12f)), 40, 1f * scale);
-
-        ImGui.SetCursorScreenPos(origin + new Vector2(18f, 14f) * scale);
-        IconText(FontAwesomeIcon.Ship, title, Teal);
-        ImGui.SetCursorScreenPos(origin + new Vector2(18f, 41f) * scale);
-        ImGui.TextColored(Muted, subtitle);
-        ImGui.SetCursorScreenPos(origin + new Vector2(18f, 67f) * scale);
-        DrawStatusPill($"{(showGlobalLabels ? "Global target" : "Target")} {targetRank}", Cyan);
-        ImGui.SameLine();
-        DrawStatusPill($"{(showGlobalLabels ? "Global strategy · " : string.Empty)}{etaModel}", Teal);
-        if (showGlobalLabels && overrideCount > 0)
-        {
-            ImGui.SameLine();
-            DrawStatusPill($"{overrideCount} FC override{(overrideCount == 1 ? string.Empty : "s")}", Amber);
-        }
-
+        var width = ImGui.GetContentRegionAvail().X;
+        var buttonLabel = refreshing ? "Cancel" : "Refresh";
+        var buttonWidth = showRefresh ? ImGui.CalcTextSize(buttonLabel).X + 50f * scale : 0;
+        var textWidth = Math.Max(1f, width - buttonWidth - 24f * scale);
+        var titleHeight = ImGui.CalcTextSize(title, false, textWidth).Y;
+        var statusHeight = ImGui.CalcTextSize(status, false, Math.Max(1f, width - 16f * scale)).Y;
+        var height = Math.Max(52f * scale, titleHeight + statusHeight + 20f * scale);
+        var end = origin + new Vector2(width, height);
+        ImGui.GetWindowDrawList().AddRectFilled(origin, end, ColorU32(PanelBackground), 5f * scale);
+        ImGui.SetCursorScreenPos(origin + new Vector2(8f, 7f) * scale);
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + textWidth);
+        ImGui.TextUnformatted(title);
+        ImGui.PopTextWrapPos();
         var clicked = false;
         if (showRefresh)
         {
-            var buttonIcon = refreshing ? FontAwesomeIcon.Times : FontAwesomeIcon.SyncAlt;
-            var buttonLabel = refreshing ? "Cancel" : "Refresh";
-            var buttonSize = ImGui.CalcTextSize(buttonLabel) + new Vector2(22f, 12f) * scale;
-            ImGui.SetCursorScreenPos(new Vector2(end.X - buttonSize.X - 18f * scale, origin.Y + 18f * scale));
-            clicked = ImGuiComponents.IconButtonWithText(buttonIcon, $"{buttonLabel}##header-refresh", buttonSize);
+            ImGui.SetCursorScreenPos(new Vector2(end.X - buttonWidth, origin.Y + 3f * scale));
+            clicked = ImGuiComponents.IconButtonWithText(
+                refreshing ? FontAwesomeIcon.Times : FontAwesomeIcon.SyncAlt,
+                $"{buttonLabel}##header-refresh", Vector2.Zero);
         }
-
+        ImGui.SetCursorScreenPos(origin + new Vector2(8f * scale, titleHeight + 12f * scale));
+        ImGui.PushStyleColor(ImGuiCol.Text, Muted);
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + Math.Max(1f, width - 16f * scale));
+        ImGui.TextUnformatted(status);
+        ImGui.PopTextWrapPos();
+        ImGui.PopStyleColor();
         ImGui.SetCursorScreenPos(new Vector2(origin.X, end.Y));
         ImGui.Dummy(Vector2.Zero);
         return clicked;
+    }
+
+    internal static void SameLineIfFits(string label, float extraWidth = 0)
+    {
+        var style = ImGui.GetStyle();
+        var width = ImGui.CalcTextSize(label).X + style.FramePadding.X * 2 + extraWidth;
+        var right = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
+        if (ImGui.GetItemRectMax().X + style.ItemSpacing.X + width <= right)
+            ImGui.SameLine();
+    }
+
+    internal static void WrappedText(string text, Vector4? color = null)
+    {
+        if (color is { } value) ImGui.PushStyleColor(ImGuiCol.Text, value);
+        ImGui.PushTextWrapPos(0);
+        ImGui.TextUnformatted(text);
+        ImGui.PopTextWrapPos();
+        if (color is not null) ImGui.PopStyleColor();
     }
 
     internal static void DrawBrandMark(bool compact)
@@ -284,7 +283,7 @@ internal static class PlannerUi
 
         var clamped = Math.Clamp(fraction.Value, 0f, 1f);
         var fillColor = baseColor is { } baseValue
-            ? Vector4.Lerp(baseValue, accent, accent == Amber ? 0.24f : 0.18f)
+            ? Vector4.Lerp(baseValue, accent, accent == Amber ? 0.14f : 0.10f)
             : new Vector4(accent.X, accent.Y, accent.Z, accent == Amber ? 0.16f : 0.12f);
         var fillEnd = new Vector2(position.X + (size.X * clamped), end.Y);
         drawList.PushClipRect(position, fillEnd, true);
