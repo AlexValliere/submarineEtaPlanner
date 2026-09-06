@@ -26,7 +26,7 @@ public sealed partial class PlannerWindow
         params ResponsiveTableColumn[] columns)
     {
         var scale = ImGuiHelpers.GlobalScale;
-        var horizontalPadding = (ImGui.GetStyle().CellPadding.X * 2f) + (12f * scale);
+        var textAllowance = 12f * scale;
         var measurements = columns.Select(column =>
         {
             var widest = column.Values
@@ -34,21 +34,25 @@ public sealed partial class PlannerWindow
                 .DefaultIfEmpty(string.Empty)
                 .Max(value => ImGui.CalcTextSize(value ?? string.Empty).X);
             return new TableColumnMeasurement(
-                widest + horizontalPadding,
+                widest + textAllowance,
                 column.MinimumWidth * scale,
                 column.MaximumWidth * scale,
                 column.Flexible,
                 column.FlexWeight);
         }).ToArray();
-        var borderAllowance = Math.Max(0, columns.Length - 1) * scale;
+        // ImGui adds cell padding outside each requested column width, including stretch
+        // columns. Reserve it before allocation so the stretch column retains its minimum.
+        var horizontalOverhead = columns.Length * ImGui.GetStyle().CellPadding.X * 2f
+            + (columns.Length + 1) * Math.Max(1f, scale);
         var allocation = TableColumnLayoutAllocator.Allocate(
             measurements,
-            Math.Max(1f, availableWidth - borderAllowance));
+            Math.Max(1f, availableWidth - 1f),
+            horizontalOverhead);
         return new ResponsiveTableLayout(
             columns,
             allocation.Widths,
             allocation.RequiresHorizontalScroll,
-            allocation.InnerWidth + borderAllowance);
+            allocation.InnerWidth);
     }
 
     private static void SetupResponsiveTableColumns(ResponsiveTableLayout layout)

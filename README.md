@@ -63,7 +63,7 @@ Healthy fuel appears as a short expandable summary. Low, critical, and unavailab
 
 On **Unlocks**, search sector codes or names across all maps, click a sector to keep its details open, and follow prerequisite links between maps. **Remaining only** keeps required path context and any explicitly selected sector visible. Unknown tracker unlock state disables this filter.
 
-Income FC rows show FC/world, gross gil, recorded average/day, and voyage count. Expand an FC for the full submarine table and history coverage. These remain recorded gross NPC salvage values, with the existing calculation rules.
+Operations and Income fleet headings keep **FC tag** and **World** in separate aligned columns. Income FC rows also show gross gil, recorded average/day, and voyage count. Expand an FC for the full submarine table and history coverage. Detail columns size automatically to the contents and window, with horizontal scrolling when needed to keep submarine names readable. These remain recorded gross NPC salvage values, with the existing calculation rules.
 
 Favorites and display preferences are labeled **Saved automatically**. Other edits use **Save changes** and **Discard changes**. **Use global target and strategy** changes only those two FC overrides. Global **Reset defaults** remains a staged, confirmed preview.
 

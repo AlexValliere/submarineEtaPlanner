@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.47.0
+
+- Fixed expanded Income tables squeezing submarine names to a few letters near the minimum fitting width.
+- Reserved cell padding and borders when sizing responsive tables and deciding when horizontal scrolling is needed.
+- Made Income detail columns adjust automatically to the current window, with more compact numeric columns and no inherited manual column widths.
+
 ## 0.5.46.0
 
 - Restored Operations fleet column titles and separate, aligned FC tag and world columns.

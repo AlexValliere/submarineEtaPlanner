@@ -16,7 +16,8 @@ public static class TableColumnLayoutAllocator
 {
     public static TableColumnLayout Allocate(
         IReadOnlyList<TableColumnMeasurement> columns,
-        float availableWidth)
+        float availableWidth,
+        float horizontalOverhead = 0f)
     {
         ArgumentNullException.ThrowIfNull(columns);
         if (columns.Count == 0)
@@ -31,10 +32,12 @@ public static class TableColumnLayoutAllocator
         var minimum = columns.Select(column => Math.Max(0f, column.MinimumWidth)).ToArray();
         var desiredTotal = desired.Sum();
         var minimumTotal = minimum.Sum();
-        var usableWidth = Math.Max(0f, availableWidth);
+        // Column widths describe content. Padding and borders occupy additional space.
+        var overhead = Math.Max(0f, horizontalOverhead);
+        var usableWidth = Math.Max(0f, availableWidth - overhead);
 
         if (usableWidth < minimumTotal)
-            return new TableColumnLayout(desired, true, desiredTotal);
+            return new TableColumnLayout(desired, true, desiredTotal + overhead);
 
         if (usableWidth < desiredTotal)
         {
@@ -43,7 +46,7 @@ public static class TableColumnLayoutAllocator
             var widths = desired
                 .Select((width, index) => width - ((width - minimum[index]) * fraction))
                 .ToArray();
-            return new TableColumnLayout(widths, false, usableWidth);
+            return new TableColumnLayout(widths, false, usableWidth + overhead);
         }
 
         var result = desired.ToArray();
@@ -59,6 +62,6 @@ public static class TableColumnLayoutAllocator
                 result[index] += surplus * (Math.Max(0.01f, column.FlexWeight) / totalWeight);
         }
 
-        return new TableColumnLayout(result, false, usableWidth);
+        return new TableColumnLayout(result, false, usableWidth + overhead);
     }
 }

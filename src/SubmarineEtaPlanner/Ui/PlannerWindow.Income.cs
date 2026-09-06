@@ -133,16 +133,18 @@ public sealed partial class PlannerWindow
     {
         var layout = CalculateResponsiveTableLayout(
             ImGui.GetContentRegionAvail().X,
-            new ResponsiveTableColumn("Submarine", metric.Submarines.Select(submarine => submarine.Name), 120, 220, Flexible: true, FillRemaining: true),
-            new ResponsiveTableColumn("Rank", metric.Submarines.Select(submarine => $"R{submarine.Rank}"), 68, 90),
-            new ResponsiveTableColumn("Build", metric.Submarines.Select(submarine => submarine.CurrentBuild.Code), 72, 100),
-            new ResponsiveTableColumn("Gross gil", metric.Submarines.Select(submarine => $"{submarine.GrossGil:N0}"), 105, 175),
-            new ResponsiveTableColumn("Avg / day", metric.Submarines.Select(submarine => $"{submarine.RecordedAverageGilPerDay:N0}"), 125, 175),
-            new ResponsiveTableColumn("Voyages", metric.Submarines.Select(submarine => submarine.VoyageCount.ToString("N0")), 82, 105),
-            new ResponsiveTableColumn("Gil/voyage", metric.Submarines.Select(submarine => $"{submarine.GilPerVoyage:N0}"), 105, 155),
-            new ResponsiveTableColumn("First return", metric.Submarines.Select(submarine => FormatIncomeDate(submarine.FirstReturnAtUtc)), 125, 170),
-            new ResponsiveTableColumn("Last return", metric.Submarines.Select(submarine => FormatIncomeDate(submarine.LastReturnAtUtc)), 125, 170));
-        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit;
+            new ResponsiveTableColumn("Submarine", metric.Submarines.Select(submarine => submarine.Name), 120, 220, Flexible: true),
+            new ResponsiveTableColumn("Rank", metric.Submarines.Select(submarine => $"R{submarine.Rank}"), 44, 64),
+            new ResponsiveTableColumn("Build", metric.Submarines.Select(submarine => submarine.CurrentBuild.Code), 60, 100),
+            new ResponsiveTableColumn("Gross gil", metric.Submarines.Select(submarine => $"{submarine.GrossGil:N0}"), 88, 160),
+            new ResponsiveTableColumn("Avg / day", metric.Submarines.Select(submarine => $"{submarine.RecordedAverageGilPerDay:N0}"), 88, 145),
+            new ResponsiveTableColumn("Voyages", metric.Submarines.Select(submarine => submarine.VoyageCount.ToString("N0")), 58, 90),
+            new ResponsiveTableColumn("Gil/voyage", metric.Submarines.Select(submarine => $"{submarine.GilPerVoyage:N0}"), 88, 145),
+            new ResponsiveTableColumn("First return", metric.Submarines.Select(submarine => FormatIncomeDate(submarine.FirstReturnAtUtc)), 122, 170),
+            new ResponsiveTableColumn("Last return", metric.Submarines.Select(submarine => FormatIncomeDate(submarine.LastReturnAtUtc)), 122, 170));
+        // Reapply measured widths as the window changes; persisted manual widths can
+        // otherwise override the allocation and squeeze the submarine names.
+        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.NoSavedSettings | ImGuiTableFlags.SizingFixedFit;
         if (layout.RequiresHorizontalScroll)
             flags |= ImGuiTableFlags.ScrollX;
         var tableHeight = CalculateTableHeight(metric.Submarines.Count, layout.RequiresHorizontalScroll);
