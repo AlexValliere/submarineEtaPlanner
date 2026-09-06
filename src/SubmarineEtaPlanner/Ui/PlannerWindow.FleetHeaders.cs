@@ -25,7 +25,8 @@ public sealed partial class PlannerWindow
         OperationsHeaderColumn FarmReady,
         OperationsHeaderColumn Ranks);
 
-    private readonly record struct CompactFcHeaderColumn(float Offset, float Width, int Line);
+    private readonly record struct CompactFcHeaderColumn(
+        float Offset, float Width, int Line, float? CenteredValueWidth = null);
 
     private sealed record CompactFcHeaderLayout(
         float HeaderHeight, int LineCount, IReadOnlyList<CompactFcHeaderColumn> Columns);
@@ -71,7 +72,7 @@ public sealed partial class PlannerWindow
 
     private static void DrawCompactFcHeaderCell(
         Vector2 origin, CompactFcHeaderLayout layout, int index, string text,
-        Vector4 color, bool rightAligned = false)
+        Vector4 color, bool rightAligned = false, bool centered = false)
     {
         var column = layout.Columns[index];
         var scale = ImGuiHelpers.GlobalScale;
@@ -81,9 +82,15 @@ public sealed partial class PlannerWindow
         var y = origin.Y + (layout.HeaderHeight - contentHeight) / 2
             + column.Line * (lineHeight + lineGap);
         var padding = 4f * scale;
-        var fitted = FitHeaderText(text, Math.Max(1f, column.Width - padding * 2));
-        var x = origin.X + column.Offset + (rightAligned
-            ? Math.Max(padding, column.Width - padding - ImGui.CalcTextSize(fitted).X) : padding);
+        var available = Math.Max(1f, column.Width - padding * 2);
+        var textRegionWidth = rightAligned && column.CenteredValueWidth is { } valueWidth
+            ? Math.Clamp(valueWidth, 1f, available) : available;
+        var textRegionOffset = padding + (available - textRegionWidth) / 2;
+        var fitted = FitHeaderText(text, textRegionWidth);
+        var textWidth = ImGui.CalcTextSize(fitted).X;
+        var alignmentOffset = centered ? (textRegionWidth - textWidth) / 2
+            : rightAligned ? textRegionWidth - textWidth : 0f;
+        var x = origin.X + column.Offset + textRegionOffset + Math.Max(0f, alignmentOffset);
         var drawList = ImGui.GetWindowDrawList();
         drawList.PushClipRect(new(origin.X + column.Offset, y),
             new(origin.X + column.Offset + column.Width, y + lineHeight), true);
@@ -92,11 +99,11 @@ public sealed partial class PlannerWindow
     }
 
     private static void DrawCompactFcHeaderLegend(
-        CompactFcHeaderLayout layout, IReadOnlyList<string> labels, int rightAlignFrom = int.MaxValue)
+        CompactFcHeaderLayout layout, IReadOnlyList<string> labels, int centerFrom = int.MaxValue)
     {
         var origin = ImGui.GetCursorScreenPos() + new Vector2(FavoriteControlWidth, 0);
         for (var index = 0; index < labels.Count; index++)
-            DrawCompactFcHeaderCell(origin, layout, index, labels[index], PlannerUi.Muted, index >= rightAlignFrom);
+            DrawCompactFcHeaderCell(origin, layout, index, labels[index], PlannerUi.Muted, centered: index >= centerFrom);
         ImGui.Dummy(new(ImGui.GetContentRegionAvail().X, layout.HeaderHeight));
     }
 
@@ -286,14 +293,13 @@ public sealed partial class PlannerWindow
         IEnumerable<IncomeFcHeaderPresentation> presentations, float availableWidth)
     {
         var values = presentations.ToArray();
-        // Keep FC identity sized to its contents. Equal metric widths give the three
-        // right-aligned values evenly spaced anchors instead of crowding the right edge.
+        // Keep FC identity sized to its contents and share spare width between metrics.
         var metricWidth = Math.Max(
             MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 100f, 170f),
             Math.Max(
                 MeasureHeaderColumn(values.Select(value => value.RecordedAverageGilPerDay), "Recorded avg/day", 135f, 185f),
                 MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 65f, 95f)));
-        return CalculateCompactFcHeaderLayout(
+        var layout = CalculateCompactFcHeaderLayout(
             [
                 MeasureHeaderColumn(values.Select(value => value.FreeCompany), "FC tag", 70f, 135f),
                 MeasureHeaderColumn(values.Select(value => value.World), "World", 90f, 150f),
@@ -302,11 +308,24 @@ public sealed partial class PlannerWindow
                 metricWidth,
             ],
             [0f, 0f, 1f, 1f, 1f], 2, availableWidth);
+        // Center one shared number block per column, measured across all visible FCs.
+        // Individual values align to its right edge, so shorter numbers keep aligned units.
+        float[] valueWidths =
+        [
+            values.Select(value => ImGui.CalcTextSize(value.GrossGil).X).DefaultIfEmpty(0f).Max(),
+            values.Select(value => ImGui.CalcTextSize(value.RecordedAverageGilPerDay).X).DefaultIfEmpty(0f).Max(),
+            values.Select(value => ImGui.CalcTextSize(value.Voyages).X).DefaultIfEmpty(0f).Max(),
+        ];
+        return layout with
+        {
+            Columns = layout.Columns.Select((column, index) => index < 2 ? column
+                : column with { CenteredValueWidth = valueWidths[index - 2] }).ToArray(),
+        };
     }
 
     private static void DrawIncomeHeaderLegend(CompactFcHeaderLayout layout)
         => DrawCompactFcHeaderLegend(layout, ["FC tag", "World", "Gross gil", "Recorded avg/day", "Voyages"],
-            rightAlignFrom: 2);
+            centerFrom: 2);
 
     private static void DrawIncomeHeaderFields(Vector2 origin, CompactFcHeaderLayout layout,
         IncomeFcHeaderPresentation presentation)

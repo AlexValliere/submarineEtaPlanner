@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.49.0
+
+- Centered the Gross gil, Recorded average/day, and Voyages headings within Income fleet columns.
+- Centered each column's number group while retaining a shared right edge across FCs, including values with fewer digits.
+
 ## 0.5.48.0
 
 - Kept Income fleet FC tag and World columns sized to their text instead of stretching into the spare space.

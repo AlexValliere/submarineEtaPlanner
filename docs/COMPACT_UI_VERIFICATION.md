@@ -33,7 +33,14 @@ Checked after the user installed the update, at the user's chosen window size an
 
 One minor visual follow-up remains: the hover preview for Map 7 A wrapped into a narrow, tall column. Its persistent details below the map were readable and complete.
 
-The user's subsequent Income screenshot showed that the collapsed row proportions still needed correction: World stretched too far and the numeric values clustered toward the right. The checks above establish readability and alignment, not balanced spacing. Version 0.5.48.0 keeps FC tag/World content-sized and gives the three metrics equal widths. Its in-game spacing needs review after updating.
+The user's subsequent Income screenshot showed that the collapsed row proportions still needed correction: World stretched too far and the numeric values clustered toward the right. The checks above establish readability and alignment, not balanced spacing. Version 0.5.48.0 keeps FC tag/World content-sized and gives the three metrics equal widths. The user's next screenshot confirmed improved spacing and prompted centered headings and number groups, with right-aligned values inside those groups, for 0.5.49.0. The centered rendering needs in-game review after updating, including short voyage counts and wrapped rows.
+
+## Local validation for 0.5.49.0
+
+- Release test suite: 447 passed, none failed or skipped.
+- Release plugin build: succeeded with no warnings or errors.
+- Bundled route-data verification: passed.
+- Release package manifest and required contents: verified.
 
 ## Local validation for 0.5.48.0
 

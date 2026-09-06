@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Balances Income fleet columns: FC tag and World stay sized to their text, while Gross gil, Recorded average/day, and Voyages share the remaining width evenly. Numeric headings and values remain right-aligned, with a wrapped layout in narrow windows.",
+  "Changelog": "Centers the last three Income fleet headings and number groups within their columns. Numbers keep a shared right edge in each centered group, so their final digits stay aligned across FCs.",
   "Tags": [
     "Submarine",
     "ETA",
