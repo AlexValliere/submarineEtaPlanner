@@ -65,3 +65,11 @@ Check every page at 1040 × 700 and 780 × 520 logical units, each at 100% and 1
 - Runtime: refresh/cancel/close/unload/reload, missing/stale tracker and incomplete/queued data. Compare repeated Plugin Statistics samples in equivalent scenes with the window closed, fleet details expanded, chart open/closed and Unlocks visible; check font/texture handle lifetime.
 
 These checks remain pending until the user reports results. Prior pending checks in the compact-interface and Income-chart verification records are not implicitly marked passed by this release.
+
+## Submarine arrow follow-up — 0.5.53.0, 7 September 2026
+
+- The user's Operations screenshot showed fallback glyphs before submarine names. The source used small Unicode disclosure triangles in the body font; other expanders already used native geometry or the icon font.
+- Replaced the Operations markers with filled draw-list triangles sized from the current text height. They now point right when collapsed and down when expanded without requiring a font glyph. The name is measured and wrapped in the remaining column width.
+- Retained the existing row selectable, ImGui ID, tooltip, and expansion state handler. No changes to calculations, configuration, or the adjustable return window introduced in 0.5.52.0.
+- Release validation: **501 tests passed**, 0 failed/skipped; plugin build succeeded with **0 warnings/errors**; route-data verification and `git diff --check` passed. Source, repository and packaged versions match 0.5.53.0, and all nine expected archive entries are present.
+- Local candidate: `artifacts/SubmarineEtaPlanner-0.5.53.0.zip`. In-game confirmation of both arrow directions and long-name wrapping at the user's scale remains pending after installation.

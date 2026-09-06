@@ -330,6 +330,19 @@ internal static class PlannerUi
         ImGui.TextColored(color, text);
     }
 
+    internal static void DrawDisclosureArrow(Vector2 position, float lineHeight, bool expanded)
+    {
+        // Draw geometry rather than a text glyph: the user's body font may not
+        // contain the small disclosure triangles. Text height is already scaled.
+        var center = position + new Vector2(lineHeight * 0.5f);
+        var radius = lineHeight * 0.25f;
+        var first = expanded ? new Vector2(-radius, -radius * 0.5f) : new Vector2(-radius * 0.5f, -radius);
+        var second = expanded ? new Vector2(radius, -radius * 0.5f) : new Vector2(radius, 0f);
+        var third = expanded ? new Vector2(0f, radius) : new Vector2(-radius * 0.5f, radius);
+        ImGui.GetWindowDrawList().AddTriangleFilled(center + first, center + second, center + third,
+            ImGui.GetColorU32(ImGuiCol.Text));
+    }
+
     internal static bool SegmentedButton(string id, string label, bool selected, string? emphasis = null, int? emphasisStart = null)
     {
         using var selection = PlannerTheme.Selection(selected);

@@ -228,9 +228,11 @@ public sealed partial class PlannerWindow
                 highlighted ? PlannerTheme.Selected : PlannerUi.PanelBackground with { W = .5f }));
             ImGui.TableNextColumn();
             var start = ImGui.GetCursorScreenPos();
-            var name = $"{(expanded ? "▾" : "▸")} {submarine.Name}";
+            var lineHeight = ImGui.GetTextLineHeight();
+            var nameOffset = lineHeight + ImGui.GetStyle().ItemInnerSpacing.X;
             var available = Math.Max(1f, ImGui.GetContentRegionAvail().X);
-            var nameHeight = Math.Max(ImGui.GetTextLineHeight(), ImGui.CalcTextSize(name, false, available).Y);
+            var nameWidth = Math.Max(1f, available - nameOffset);
+            var nameHeight = Math.Max(lineHeight, ImGui.CalcTextSize(submarine.Name, false, nameWidth).Y);
             if (ImGui.Selectable($"##expand-{key}", false, ImGuiSelectableFlags.SpanAllColumns, new Vector2(0, nameHeight)))
             {
                 if (!this.expandedSubmarines.Add(key)) this.expandedSubmarines.Remove(key);
@@ -238,8 +240,11 @@ public sealed partial class PlannerWindow
             }
             PlannerUi.Tooltip(expanded ? "Hide submarine details" : "Show submarine details");
             var after = ImGui.GetCursorScreenPos();
-            ImGui.SetCursorScreenPos(start);
-            PlannerUi.WrappedText(name);
+            PlannerUi.DrawDisclosureArrow(start, lineHeight, expanded);
+            ImGui.SetCursorScreenPos(start + new Vector2(nameOffset, 0f));
+            ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + nameWidth);
+            ImGui.TextUnformatted(submarine.Name);
+            ImGui.PopTextWrapPos();
             ImGui.SetCursorScreenPos(after);
             ImGui.TableNextColumn(); PlannerUi.WrappedText(row.Status);
             ImGui.TableNextColumn();

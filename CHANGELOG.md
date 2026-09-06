@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.53.0
+
+- Fixed Operations' submarine expand/collapse arrows appearing as unsupported characters with some body fonts.
+- Draw the arrows independently of font glyphs, with name wrapping measured in the remaining column width. Row clicks, tooltips, and expansion behavior are unchanged.
+
 ## 0.5.52.0
 
 - Replaced Operations' Returning today counter with a rolling return window, defaulting to 4 hours.

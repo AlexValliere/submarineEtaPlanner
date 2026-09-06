@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Replaces Returning today with an adjustable rolling return window in Operations. Choose 1h, 2h, 4h, 8h, or 24h beside the counter; defaults to 4h and saves automatically. Counts, fleet filtering, and submarine highlights follow the same window across midnight and clock changes. Already collectible submarines stay under Ready to collect.",
+  "Changelog": "Fixes Operations submarine expand/collapse arrows appearing as unsupported characters with some fonts. Arrows are now drawn independently of the body font, with the existing row clicks, tooltips, and details preserved.",
   "Tags": [
     "Submarine",
     "ETA",
