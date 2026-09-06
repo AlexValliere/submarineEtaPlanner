@@ -6,6 +6,7 @@ namespace SubmarineEtaPlanner.Tests;
 public sealed class CompactInterfaceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 6, 12, 0, 0, TimeSpan.Zero);
+    private static readonly TimeSpan ReturnWindow = TimeSpan.FromHours(4);
 
     [Fact]
     public void AttentionCountsUseDisplayedFleetsAndPreservePausedVoyages()
@@ -15,40 +16,131 @@ public sealed class CompactInterfaceTests
         var future = Sub(3, OperationalState.Underway);
         var fleet = Fleet([paused, syncing, future], [Now.AddHours(-1), Now.AddHours(-2), Now.AddHours(2)]);
         var fuel = Fuel(FuelRunwayStatus.Low);
-        var summary = OperationsAttentionSummary.Create([fleet], new Dictionary<string, FleetFuelPresentation> { [fleet.State.FcIdKey] = fuel }, Now, TimeZoneInfo.Utc);
+        var summary = OperationsAttentionSummary.Create([fleet], new Dictionary<string, FleetFuelPresentation> { [fleet.State.FcIdKey] = fuel }, Now, ReturnWindow);
         Assert.Equal(new OperationsAttentionSummary(1, 1, 1, 0), summary);
-        Assert.True(OperationsAttentionSummary.MatchesFleet(fleet, fuel, OperationsAttentionFilter.Collect, Now, TimeZoneInfo.Utc));
+        Assert.True(OperationsAttentionSummary.MatchesFleet(fleet, fuel, OperationsAttentionFilter.Collect, Now, ReturnWindow));
         Assert.Equal(3, fleet.Submarines.Count);
-        Assert.False(OperationsAttentionSummary.MatchesSubmarine(syncing, fleet.State, OperationsAttentionFilter.Collect, Now, TimeZoneInfo.Utc));
+        Assert.False(OperationsAttentionSummary.MatchesSubmarine(syncing, fleet.State, OperationsAttentionFilter.Collect, Now, ReturnWindow));
     }
 
-    [Fact]
-    public void ReturningTodayUsesLocalDateAndActualReturnRatherThanNextAction()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(24)]
+    public void ReturningSoonUsesActualReturnAndInclusiveWindowBoundary(int hours)
     {
-        var zone = TimeZoneInfo.CreateCustomTimeZone("Test +2", TimeSpan.FromHours(2), "+2", "+2");
-        var now = new DateTimeOffset(2026, 9, 6, 21, 0, 0, TimeSpan.Zero);
-        var sub = Sub(1, OperationalState.Syncing) with { NextActionAtUtc = now };
+        var window = TimeSpan.FromHours(hours);
+        var sub = Sub(1, OperationalState.Syncing) with { NextActionAtUtc = Now };
         bool Matches(DateTimeOffset returned) => OperationsAttentionSummary.MatchesSubmarine(
-            sub, Fleet([sub], [returned]).State, OperationsAttentionFilter.ReturningToday, now, zone);
-        Assert.True(Matches(now.AddMinutes(59)));
-        Assert.False(Matches(now.AddHours(1)));
-        Assert.False(Matches(now));
+            sub, Fleet([sub], [returned]).State, OperationsAttentionFilter.ReturningSoon, Now, window);
+        Assert.True(Matches(Now.AddTicks(1)));
+        Assert.True(Matches((Now + window).AddTicks(-1)));
+        Assert.True(Matches(Now + window));
+        Assert.False(Matches((Now + window).AddTicks(1)));
+        Assert.False(Matches(Now));
+        Assert.False(Matches(Now.AddTicks(-1)));
         Assert.False(Matches(DateTimeOffset.MinValue));
     }
 
     [Theory]
-    [InlineData(3, 29, 22)] // The spring clock change makes this local day 23 hours long.
-    [InlineData(10, 25, 23)] // The autumn clock change makes this local day 25 hours long.
-    public void ReturningTodayHandlesDaylightSaving(int month, int day, int endUtcHour)
+    [InlineData(3, 29, 0, 5)] // Four elapsed hours span five local hours at the spring clock change.
+    [InlineData(10, 25, 0, 3)] // Four elapsed hours span three local hours at the autumn clock change.
+    [InlineData(9, 6, 21, 4)] // 23:00 local to 03:00 the following day.
+    public void ReturningSoonUsesElapsedHoursAcrossClockChangesAndMidnight(int month, int day, int utcHour, int localHours)
     {
         var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Paris");
-        var now = new DateTimeOffset(2026, month, day, 0, 0, 0, TimeSpan.Zero);
-        var boundary = new DateTimeOffset(2026, month, day, endUtcHour, 0, 0, TimeSpan.Zero);
+        var now = TimeZoneInfo.ConvertTime(new DateTimeOffset(2026, month, day, utcHour, 0, 0, TimeSpan.Zero), zone);
+        var boundary = TimeZoneInfo.ConvertTime(now + ReturnWindow, zone);
+        Assert.Equal(TimeSpan.FromHours(localHours), boundary.DateTime - now.DateTime);
         var sub = Sub(1, OperationalState.Underway);
-        Assert.True(OperationsAttentionSummary.MatchesSubmarine(sub, Fleet([sub], [boundary.AddSeconds(-1)]).State,
-            OperationsAttentionFilter.ReturningToday, now, zone));
-        Assert.False(OperationsAttentionSummary.MatchesSubmarine(sub, Fleet([sub], [boundary]).State,
-            OperationsAttentionFilter.ReturningToday, now, zone));
+        Assert.True(OperationsAttentionSummary.MatchesSubmarine(sub, Fleet([sub], [boundary]).State,
+            OperationsAttentionFilter.ReturningSoon, now, ReturnWindow));
+        Assert.False(OperationsAttentionSummary.MatchesSubmarine(sub, Fleet([sub], [boundary.AddTicks(1)]).State,
+            OperationsAttentionFilter.ReturningSoon, now, ReturnWindow));
+    }
+
+    [Fact]
+    public void ReturningSoonPreservesPausedAndSyncingVoyagesAndExcludesCollectibleOrMissingReturns()
+    {
+        var paused = Sub(1, OperationalState.Underway, EffectiveSubmarineRole.Paused);
+        var syncing = Sub(2, OperationalState.Syncing);
+        var collectible = Sub(3, OperationalState.ReadyToCollect);
+        var unknown = Sub(4, OperationalState.Syncing);
+        var missing = Sub(5, OperationalState.Syncing);
+        // Even inconsistent tracker data must not count a collectible submarine in both counters.
+        var fleet = Fleet([paused, syncing, collectible, unknown],
+            [Now.AddHours(1), Now.AddHours(2), Now.AddHours(3), DateTimeOffset.MinValue]);
+        fleet = fleet with { Submarines = [paused, syncing, collectible, unknown, missing] };
+        Assert.Equal([true, true, false, false, false], fleet.Submarines.Select(sub =>
+            OperationsAttentionSummary.MatchesSubmarine(sub, fleet.State, OperationsAttentionFilter.ReturningSoon, Now, ReturnWindow)));
+        var fuel = new Dictionary<string, FleetFuelPresentation> { [fleet.State.FcIdKey] = Fuel(FuelRunwayStatus.Healthy) };
+        var summary = OperationsAttentionSummary.Create([fleet], fuel, Now, ReturnWindow);
+        Assert.Equal(2, summary.ReturningSoon);
+        Assert.Equal(1, summary.Collect);
+    }
+
+    [Fact]
+    public void DailyRoutesDoNotAllNeedAttentionInTheDefaultWindow()
+    {
+        var fleet = Fleet(Enumerable.Range(1, 4).Select(id => Sub(id, OperationalState.Underway)).ToArray(),
+            [Now.AddHours(5), Now.AddHours(12), Now.AddHours(23), Now.AddHours(24)]);
+        var fuel = new Dictionary<string, FleetFuelPresentation> { [fleet.State.FcIdKey] = Fuel(FuelRunwayStatus.Healthy) };
+        Assert.Equal(0, OperationsAttentionSummary.Create([fleet], fuel, Now,
+            TimeSpan.FromHours(OperationsReturnWindowPreferences.DefaultHours)).ReturningSoon);
+        Assert.Equal(4, OperationsAttentionSummary.Create([fleet], fuel, Now, TimeSpan.FromHours(24)).ReturningSoon);
+    }
+
+    [Fact]
+    public void ReturnCountsFleetFilteringAndHighlightsAgreeAsWindowAndTimeChange()
+    {
+        var mixed = Fleet([Sub(1, OperationalState.Underway), Sub(2, OperationalState.Underway)],
+            [Now.AddHours(3), Now.AddHours(6)]) with { RoleSummary = new(1, 1, 0) };
+        var farming = Fleet([Sub(3, OperationalState.Underway)], [Now.AddHours(12)], 2) with { RoleSummary = new(0, 1, 0) };
+        var leveling = Fleet([Sub(4, OperationalState.Underway)], [Now.AddHours(1)], 3) with { RoleSummary = new(1, 0, 0) };
+        var fleets = new[] { mixed, farming, leveling };
+        var eligible = fleets.Where(fc => FleetPresentationFiltering.Includes(fc, FleetMode.Farming)).ToArray();
+        var fuel = fleets.ToDictionary(fc => fc.State.FcIdKey, _ => Fuel(FuelRunwayStatus.Healthy));
+
+        void Check(FcOperationalProjection[] displayed, DateTimeOffset now, int hours, int expectedSubs, int expectedFleets)
+        {
+            var window = TimeSpan.FromHours(hours);
+            var summary = OperationsAttentionSummary.Create(displayed, fuel, now, window);
+            var filtered = displayed.Where(fc => OperationsAttentionSummary.MatchesFleet(fc, fuel[fc.State.FcIdKey],
+                OperationsAttentionFilter.ReturningSoon, now, window)).ToArray();
+            var highlighted = filtered.Sum(fc => fc.Submarines.Count(sub => OperationsAttentionSummary.MatchesSubmarine(
+                sub, fc.State, OperationsAttentionFilter.ReturningSoon, now, window)));
+            Assert.Equal(expectedSubs, summary.ReturningSoon);
+            Assert.Equal(expectedSubs, highlighted);
+            Assert.Equal(expectedFleets, filtered.Length);
+        }
+
+        Check(eligible, Now, 4, 1, 1);
+        Check(eligible, Now, 8, 2, 1);
+        Check(eligible, Now, 24, 3, 2);
+        Check([farming], Now, 4, 0, 0); // A search narrows the input to this FC.
+        Check([farming], Now, 24, 1, 1);
+        Check(eligible, Now.AddHours(2), 4, 2, 1); // The six-hour return enters the window.
+        Check(eligible, Now.AddHours(3), 4, 1, 1); // The first voyage reaches its return time.
+        Check(eligible, Now.AddHours(12), 4, 0, 0);
+        Assert.Equal(2, mixed.Submarines.Count); // Nonmatching companions remain in the FC.
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(4, 4)]
+    [InlineData(8, 8)]
+    [InlineData(24, 24)]
+    [InlineData(0, 4)]
+    [InlineData(-1, 4)]
+    [InlineData(3, 4)]
+    [InlineData(12, 4)]
+    [InlineData(int.MaxValue, 4)]
+    public void ReturnWindowPreferencesKeepSupportedValuesAndRepairInvalidValues(int savedHours, int expectedHours)
+    {
+        Assert.Equal(expectedHours, OperationsReturnWindowPreferences.Normalize(savedHours));
     }
 
     [Fact]
@@ -58,7 +150,7 @@ public sealed class CompactInterfaceTests
         var leveling = Fleet([Sub(2, OperationalState.ReadyToCollect)], [Now], 2) with { RoleSummary = new(1, 0, 0) };
         var displayed = new[] { mixed, leveling }.Where(fc => FleetPresentationFiltering.Includes(fc, FleetMode.Farming)).ToArray();
         var fuel = displayed.ToDictionary(fc => fc.State.FcIdKey, _ => Fuel(FuelRunwayStatus.Healthy));
-        Assert.Equal(1, OperationsAttentionSummary.Create(displayed, fuel, Now, TimeZoneInfo.Utc).Collect);
+        Assert.Equal(1, OperationsAttentionSummary.Create(displayed, fuel, Now, ReturnWindow).Collect);
     }
 
     [Fact]

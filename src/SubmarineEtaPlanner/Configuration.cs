@@ -20,6 +20,8 @@ public sealed class Configuration : IPluginConfiguration
 
     public OperationsSort OperationsSort { get; set; } = OperationsSort.NextReturnActionsFirst;
 
+    public int OperationsReturnWindowHours { get; set; } = OperationsReturnWindowPreferences.DefaultHours;
+
     public LevelingSort LevelingSort { get; set; } = LevelingSort.FarmReadyEta;
 
     public LevelingFilter LevelingFilter { get; set; } = LevelingFilter.All;
@@ -91,6 +93,8 @@ public sealed class Configuration : IPluginConfiguration
         var changed = false;
         if (!Enum.IsDefined(OperationsView) || OperationsView == global::SubmarineEtaPlanner.OperationsView.ReturningSoon) { OperationsView = global::SubmarineEtaPlanner.OperationsView.AllFleets; changed = true; }
         if (!Enum.IsDefined(OperationsSort)) { OperationsSort = global::SubmarineEtaPlanner.OperationsSort.NextReturnActionsFirst; changed = true; }
+        var normalizedReturnWindow = OperationsReturnWindowPreferences.Normalize(OperationsReturnWindowHours);
+        if (OperationsReturnWindowHours != normalizedReturnWindow) { OperationsReturnWindowHours = normalizedReturnWindow; changed = true; }
         if (!Enum.IsDefined(LevelingSort)) { LevelingSort = global::SubmarineEtaPlanner.LevelingSort.FarmReadyEta; changed = true; }
         if (!Enum.IsDefined(LevelingFilter)) { LevelingFilter = global::SubmarineEtaPlanner.LevelingFilter.All; changed = true; }
         if (!Enum.IsDefined(IncomePeriod)) { IncomePeriod = global::SubmarineEtaPlanner.IncomePeriod.Days30; changed = true; }

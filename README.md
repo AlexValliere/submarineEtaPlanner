@@ -40,7 +40,7 @@ Submarine ETA Planner requires [XIVLauncher](https://goatcorp.github.io/) and Da
 
 ## Quick start
 
-1. Open the planner with `/seta`; it starts on **Operations**. Use the **Ready to collect**, **Returning today**, **Low fuel**, and **Needs setup** counters to focus the fleet list.
+1. Open the planner with `/seta`; it starts on **Operations**. Use the **Ready to collect**, **Returning within 4h**, **Low fuel**, and **Needs setup** counters to focus the fleet list. Adjust the return window with the dropdown beside its counter.
 2. Pin an FC with its star, or expand the FC and use **Setup** to edit its target rank, strategy, and submarine assignments. Stars save automatically; setup edits use **Save changes**.
 3. For farming submarines, optionally pin a route, adjust collection delay, select the FC's local fuel-stock source, and set its safety stock.
 4. Use **Leveling** for progression forecasts and **Unlocks** for FC-specific sector status and remaining discovery paths.
@@ -55,7 +55,7 @@ Fresh installations start with target rank 90, Recommended leveling, FC-wide fle
 
 Operations shows submarine, status, return time, route, and next action. Expand a submarine to inspect rank, build, expected EXP, target ETA, uncertainty, and missing-data explanations. At narrow widths, route and action move beneath the submarine row. Current voyages and proposed or pinned next routes are labeled separately; workshop actions must still be performed in game.
 
-Attention counters apply after the FC search and role filter. Selecting one filters FC groups while retaining their submarine companions; selecting it again clears it. Voyage counters count submarines (including paused assignments with relevant voyage states). **Returning today** uses known future return times and your local calendar day. Fuel/setup counters count FCs with active farming assignments; missing or stale information is not treated as zero stock.
+Attention counters apply after the FC search and role filter. Selecting one filters FC groups while retaining their submarine companions; selecting it again clears it. Voyage counters count submarines (including paused assignments with relevant voyage states). **Returning within 4h** counts known current-voyage returns after now and up to the selected number of elapsed hours ahead, including the exact upper boundary. Already collectible submarines appear only under **Ready to collect**. Choose **1h, 2h, 4h, 8h, or 24h** with the adjacent dropdown; the default is **4h**. The window advances automatically across midnight and clock changes. Its duration is **Saved automatically** for all fleets and remembered across plugin restarts; clearing filters preserves it. Changing the duration updates the counter, filtered fleets, and highlighted submarines together without refreshing forecasts or changing staged settings. Fuel/setup counters count FCs with active farming assignments; missing or stale information is not treated as zero stock.
 
 FC headers include independent favorite stars. Expanded groups provide **Setup**, **Unlock map**, and **Income** shortcuts for that FC. An Income shortcut temporarily shows one FC regardless of the saved role filter; **Show all FCs** restores the overview. Ordinary navigation retains unsaved edits. Opening a different FC's setup offers **Save changes**, **Discard changes**, or **Cancel**.
 

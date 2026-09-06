@@ -26,6 +26,9 @@ public sealed partial class PlannerWindow
         DrawOperationsSortCombo();
 
         var now = DateTimeOffset.UtcNow;
+        // Capture once so a dropdown change takes effect together across the next render.
+        var returnWindowHours = this.configuration.OperationsReturnWindowHours;
+        var returnWindow = TimeSpan.FromHours(returnWindowHours);
         var all = CreateProjections(currentSnapshot, now);
         var requiredMode = this.configuration.OperationsView switch
         {
@@ -36,9 +39,9 @@ public sealed partial class PlannerWindow
         var matched = all.Where(fc => MatchesSearch(fc.State))
             .Where(fc => FleetPresentationFiltering.Includes(fc, requiredMode)).ToArray();
         var fuel = matched.ToDictionary(fc => fc.State.FcIdKey, fc => GetFuelPresentation(fc, now));
-        DrawAttentionCounters(OperationsAttentionSummary.Create(matched, fuel, now, TimeZoneInfo.Local));
+        DrawAttentionCounters(OperationsAttentionSummary.Create(matched, fuel, now, returnWindow), returnWindowHours);
         var filtered = matched.Where(fc => OperationsAttentionSummary.MatchesFleet(
-            fc, fuel[fc.State.FcIdKey], this.attentionFilter, now, TimeZoneInfo.Local)).ToArray();
+            fc, fuel[fc.State.FcIdKey], this.attentionFilter, now, returnWindow)).ToArray();
         var fleets = this.configuration.OperationsSort switch
         {
             OperationsSort.FarmReadyEta => FleetPresentationOrdering.FarmReadyEta(filtered, IsFavorite),
@@ -67,25 +70,39 @@ public sealed partial class PlannerWindow
             DrawCompactFcHeaderLegend(layout, ["FC tag", "World", "Role", "Next action / return", "Fuel"]);
         }
         foreach (var fc in fleets)
-            DrawOperationsFleetGroup(fc, fuel[fc.State.FcIdKey], now, headers[fc.State.FcIdKey], layout);
+            DrawOperationsFleetGroup(fc, fuel[fc.State.FcIdKey], now, returnWindow, headers[fc.State.FcIdKey], layout);
     }
 
-    private void DrawAttentionCounters(OperationsAttentionSummary counts)
+    private void DrawAttentionCounters(OperationsAttentionSummary counts, int returnWindowHours)
     {
         ImGui.Spacing();
         var items = new[]
         {
-            (OperationsAttentionFilter.Collect, $"Ready to collect: {counts.Collect} subs", counts.Collect),
-            (OperationsAttentionFilter.ReturningToday, $"Returning today: {counts.ReturningToday} subs", counts.ReturningToday),
-            (OperationsAttentionFilter.LowFuel, $"Low fuel: {counts.LowFuel} FCs", counts.LowFuel),
-            (OperationsAttentionFilter.NeedsSetup, $"Needs setup: {counts.NeedsSetup} FCs", counts.NeedsSetup),
+            (OperationsAttentionFilter.Collect, "Ready to collect: ", counts.Collect, "subs"),
+            (OperationsAttentionFilter.ReturningSoon, $"Returning within {returnWindowHours}h: ", counts.ReturningSoon, "subs"),
+            (OperationsAttentionFilter.LowFuel, "Low fuel: ", counts.LowFuel, "FCs"),
+            (OperationsAttentionFilter.NeedsSetup, "Needs setup: ", counts.NeedsSetup, "FCs"),
         };
+        var style = ImGui.GetStyle();
+        var comboWidth = ImGui.CalcTextSize("24h").X + style.FramePadding.X * 2 + ImGui.GetFrameHeight();
         var first = true;
-        foreach (var (filter, label, count) in items)
+        foreach (var (filter, prefix, count, unit) in items)
         {
-            if (!first) PlannerUi.SameLineIfFits(label);
-            if (PlannerUi.SegmentedButton($"attention-{filter}", label, this.attentionFilter == filter, count.ToString()))
+            var label = $"{prefix}{count} {unit}";
+            var hasReturnWindow = filter == OperationsAttentionFilter.ReturningSoon;
+            if (!first) PlannerUi.SameLineIfFits(label, hasReturnWindow ? style.ItemSpacing.X + comboWidth : 0);
+            var availableWidth = ImGui.GetContentRegionAvail().X;
+            ImGui.BeginGroup();
+            if (PlannerUi.SegmentedButton($"attention-{filter}", label, this.attentionFilter == filter, count.ToString(), prefix.Length))
                 this.attentionFilter = this.attentionFilter == filter ? OperationsAttentionFilter.None : filter;
+            if (hasReturnWindow)
+            {
+                PlannerUi.Tooltip($"Submarines returning in the next {returnWindowHours} hours. Click to filter fleets.");
+                var counterWidth = ImGui.CalcTextSize(label).X + style.FramePadding.X * 2;
+                if (counterWidth + style.ItemSpacing.X + comboWidth <= availableWidth) ImGui.SameLine();
+                DrawReturnWindowCombo(returnWindowHours, comboWidth);
+            }
+            ImGui.EndGroup();
             first = false;
         }
         if (this.attentionFilter != OperationsAttentionFilter.None)
@@ -96,8 +113,27 @@ public sealed partial class PlannerWindow
         ImGui.Spacing();
     }
 
+    private void DrawReturnWindowCombo(int returnWindowHours, float width)
+    {
+        ImGui.SetNextItemWidth(Math.Max(1f, Math.Min(width, ImGui.GetContentRegionAvail().X)));
+        var open = ImGui.BeginCombo("##operations-return-window", $"{returnWindowHours}h");
+        PlannerUi.Tooltip("Choose the return window. Saved automatically.");
+        if (!open) return;
+        foreach (var hours in OperationsReturnWindowPreferences.SupportedHours)
+        {
+            var selected = hours == returnWindowHours;
+            if (ImGui.Selectable($"{hours}h", selected) && !selected)
+            {
+                this.configuration.OperationsReturnWindowHours = hours;
+                this.saveConfiguration();
+            }
+            if (selected) ImGui.SetItemDefaultFocus();
+        }
+        ImGui.EndCombo();
+    }
+
     private void DrawOperationsFleetGroup(FcOperationalProjection fc, FleetFuelPresentation fuel, DateTimeOffset now,
-        OperationsFcHeaderPresentation presentation, CompactFcHeaderLayout layout)
+        TimeSpan returnWindow, OperationsFcHeaderPresentation presentation, CompactFcHeaderLayout layout)
     {
         ImGui.Spacing();
         DrawFavoriteControl(fc.State.FcIdKey);
@@ -116,7 +152,7 @@ public sealed partial class PlannerWindow
             ImGui.EndTable();
         }
         foreach (var submarine in fc.Submarines)
-            DrawOperationsEntry(fc, submarine, fuel, now, narrow);
+            DrawOperationsEntry(fc, submarine, fuel, now, returnWindow, narrow);
     }
 
     private static CompactFcHeaderLayout CalculateCompactOperationsHeaderLayout(
@@ -174,14 +210,14 @@ public sealed partial class PlannerWindow
     }
 
     private void DrawOperationsEntry(FcOperationalProjection fc, SubmarineOperationalProjection submarine,
-        FleetFuelPresentation fuel, DateTimeOffset now, bool narrow)
+        FleetFuelPresentation fuel, DateTimeOffset now, TimeSpan returnWindow, bool narrow)
     {
         var tracked = fc.State.Submarines.First(sub => sub.SubmarineId == submarine.SubmarineId);
         var plan = fuel.Routes.FirstOrDefault(route => route.SubmarineId == submarine.SubmarineId);
         var row = CompactSubmarinePresentation.Create(submarine, tracked, plan);
         var key = $"operations:{fc.State.FcIdKey}:{submarine.SubmarineId}";
         var expanded = this.expandedSubmarines.Contains(key);
-        var highlighted = OperationsAttentionSummary.MatchesSubmarine(submarine, fc.State, this.attentionFilter, now, TimeZoneInfo.Local) ||
+        var highlighted = OperationsAttentionSummary.MatchesSubmarine(submarine, fc.State, this.attentionFilter, now, returnWindow) ||
             (this.attentionFilter == OperationsAttentionFilter.LowFuel && submarine.EffectiveRole == EffectiveSubmarineRole.Farming && fuel.LowFuel) ||
             (this.attentionFilter == OperationsAttentionFilter.NeedsSetup && submarine.EffectiveRole == EffectiveSubmarineRole.Farming &&
                 (plan?.IsUsable != true || !fuel.Stock.IsAvailable));

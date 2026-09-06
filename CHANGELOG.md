@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.52.0
+
+- Replaced Operations' Returning today counter with a rolling return window, defaulting to 4 hours.
+- Added an adjacent 1h / 2h / 4h / 8h / 24h selector that saves automatically across plugin restarts and remains available with no matching returns.
+- Kept counts, fleet filtering, and submarine highlights consistent as time advances, including across midnight and daylight-saving changes; already collectible submarines remain in Ready to collect.
+- Grouped the counter and selector for narrow layouts and kept the count highlighted separately from the duration.
+
 ## 0.5.51.0
 
 - Refreshed all six pages with a consistent graphite and teal palette, including the native window, menus, dialogs, tables, and focus states.

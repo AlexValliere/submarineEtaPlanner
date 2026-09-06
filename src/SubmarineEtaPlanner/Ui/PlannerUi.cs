@@ -330,7 +330,7 @@ internal static class PlannerUi
         ImGui.TextColored(color, text);
     }
 
-    internal static bool SegmentedButton(string id, string label, bool selected, string? emphasis = null)
+    internal static bool SegmentedButton(string id, string label, bool selected, string? emphasis = null, int? emphasisStart = null)
     {
         using var selection = PlannerTheme.Selection(selected);
         if (emphasis is not null) ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
@@ -338,7 +338,7 @@ internal static class PlannerUi
         if (emphasis is not null)
         {
             ImGui.PopStyleColor();
-            var start = label.IndexOf(emphasis, StringComparison.Ordinal);
+            var start = emphasisStart ?? label.IndexOf(emphasis, StringComparison.Ordinal);
             var position = ImGui.GetItemRectMin() + ImGui.GetStyle().FramePadding;
             var draw = ImGui.GetWindowDrawList();
             var textColor = ImGui.GetColorU32(ImGuiCol.Text);

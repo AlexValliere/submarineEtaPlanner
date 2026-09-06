@@ -1,6 +1,6 @@
 namespace SubmarineEtaPlanner.Planner;
 
-internal enum OperationsAttentionFilter { None, Collect, ReturningToday, LowFuel, NeedsSetup }
+internal enum OperationsAttentionFilter { None, Collect, ReturningSoon, LowFuel, NeedsSetup }
 
 internal sealed record FleetFuelPresentation(
     ResolvedFuelStock Stock,
@@ -14,39 +14,38 @@ internal sealed record FleetFuelPresentation(
     public string UnavailableReason => Forecast.Warnings.FirstOrDefault() ?? "Fuel stock is unavailable.";
 }
 
-internal sealed record OperationsAttentionSummary(int Collect, int ReturningToday, int LowFuel, int NeedsSetup)
+internal sealed record OperationsAttentionSummary(int Collect, int ReturningSoon, int LowFuel, int NeedsSetup)
 {
     public static OperationsAttentionSummary Create(
         IReadOnlyList<FcOperationalProjection> fleets,
         IReadOnlyDictionary<string, FleetFuelPresentation> fuel,
         DateTimeOffset now,
-        TimeZoneInfo zone)
+        TimeSpan returnWindow)
         => new(
-            fleets.Sum(fc => fc.Submarines.Count(sub => MatchesSubmarine(sub, fc.State, OperationsAttentionFilter.Collect, now, zone))),
-            fleets.Sum(fc => fc.Submarines.Count(sub => MatchesSubmarine(sub, fc.State, OperationsAttentionFilter.ReturningToday, now, zone))),
+            fleets.Sum(fc => fc.Submarines.Count(sub => MatchesSubmarine(sub, fc.State, OperationsAttentionFilter.Collect, now, returnWindow))),
+            fleets.Sum(fc => fc.Submarines.Count(sub => MatchesSubmarine(sub, fc.State, OperationsAttentionFilter.ReturningSoon, now, returnWindow))),
             fleets.Count(fc => fuel[fc.State.FcIdKey].LowFuel),
             fleets.Count(fc => fuel[fc.State.FcIdKey].NeedsSetup));
 
     public static bool MatchesFleet(FcOperationalProjection fleet, FleetFuelPresentation fuel,
-        OperationsAttentionFilter filter, DateTimeOffset now, TimeZoneInfo zone)
+        OperationsAttentionFilter filter, DateTimeOffset now, TimeSpan returnWindow)
         => filter switch
         {
             OperationsAttentionFilter.None => true,
             OperationsAttentionFilter.LowFuel => fuel.LowFuel,
             OperationsAttentionFilter.NeedsSetup => fuel.NeedsSetup,
-            _ => fleet.Submarines.Any(sub => MatchesSubmarine(sub, fleet.State, filter, now, zone)),
+            _ => fleet.Submarines.Any(sub => MatchesSubmarine(sub, fleet.State, filter, now, returnWindow)),
         };
 
     public static bool MatchesSubmarine(SubmarineOperationalProjection sub, FcState fc,
-        OperationsAttentionFilter filter, DateTimeOffset now, TimeZoneInfo zone)
+        OperationsAttentionFilter filter, DateTimeOffset now, TimeSpan returnWindow)
     {
         if (filter == OperationsAttentionFilter.Collect)
             return sub.State == OperationalState.ReadyToCollect;
-        if (filter != OperationsAttentionFilter.ReturningToday)
+        if (filter != OperationsAttentionFilter.ReturningSoon || sub.State == OperationalState.ReadyToCollect)
             return false;
         var returned = fc.Submarines.FirstOrDefault(item => item.SubmarineId == sub.SubmarineId)?.ReturnAtUtc;
-        return returned is { } timestamp && timestamp > now &&
-               TimeZoneInfo.ConvertTime(timestamp, zone).Date == TimeZoneInfo.ConvertTime(now, zone).Date;
+        return returned is { } timestamp && timestamp > now && timestamp - now <= returnWindow;
     }
 }
 
