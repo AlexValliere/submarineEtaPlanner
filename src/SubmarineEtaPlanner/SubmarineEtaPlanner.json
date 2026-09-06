@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Adds a collapsible recorded-income chart following the selected fleets and period. Daily bars group into weeks or months for longer histories. Recorded zero income, days without entries, and unavailable history remain distinct; hover for exact totals and coverage. Chart visibility is saved automatically.",
+  "Changelog": "Refreshes all six pages with a graphite and teal theme, clearer headings and summary values, quieter navigation, aligned settings, and consistent dialogs and tooltips. Preserves existing calculations, filters, routes, chart data, preferences, and save workflows.",
   "Tags": [
     "Submarine",
     "ETA",

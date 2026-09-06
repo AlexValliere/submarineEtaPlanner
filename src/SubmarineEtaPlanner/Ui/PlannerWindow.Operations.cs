@@ -75,16 +75,16 @@ public sealed partial class PlannerWindow
         ImGui.Spacing();
         var items = new[]
         {
-            (OperationsAttentionFilter.Collect, $"Ready to collect: {counts.Collect} subs"),
-            (OperationsAttentionFilter.ReturningToday, $"Returning today: {counts.ReturningToday} subs"),
-            (OperationsAttentionFilter.LowFuel, $"Low fuel: {counts.LowFuel} FCs"),
-            (OperationsAttentionFilter.NeedsSetup, $"Needs setup: {counts.NeedsSetup} FCs"),
+            (OperationsAttentionFilter.Collect, $"Ready to collect: {counts.Collect} subs", counts.Collect),
+            (OperationsAttentionFilter.ReturningToday, $"Returning today: {counts.ReturningToday} subs", counts.ReturningToday),
+            (OperationsAttentionFilter.LowFuel, $"Low fuel: {counts.LowFuel} FCs", counts.LowFuel),
+            (OperationsAttentionFilter.NeedsSetup, $"Needs setup: {counts.NeedsSetup} FCs", counts.NeedsSetup),
         };
         var first = true;
-        foreach (var (filter, label) in items)
+        foreach (var (filter, label, count) in items)
         {
             if (!first) PlannerUi.SameLineIfFits(label);
-            if (PlannerUi.SegmentedButton($"attention-{filter}", label, this.attentionFilter == filter))
+            if (PlannerUi.SegmentedButton($"attention-{filter}", label, this.attentionFilter == filter, count.ToString()))
                 this.attentionFilter = this.attentionFilter == filter ? OperationsAttentionFilter.None : filter;
             first = false;
         }
@@ -189,7 +189,7 @@ public sealed partial class PlannerWindow
         {
             ImGui.TableNextRow();
             ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, ImGui.ColorConvertFloat4ToU32(
-                highlighted ? new Vector4(.08f, .28f, .30f, .6f) : PlannerUi.PanelBackground with { W = .5f }));
+                highlighted ? PlannerTheme.Selected : PlannerUi.PanelBackground with { W = .5f }));
             ImGui.TableNextColumn();
             var start = ImGui.GetCursorScreenPos();
             var name = $"{(expanded ? "▾" : "▸")} {submarine.Name}";

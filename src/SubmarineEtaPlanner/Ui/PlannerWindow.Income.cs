@@ -115,8 +115,8 @@ public sealed partial class PlannerWindow
         var paddingY = Math.Max(0f, (layout.HeaderHeight - ImGui.GetTextLineHeight()) / 2f);
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(style.FramePadding.X, paddingY));
         ImGui.PushStyleColor(ImGuiCol.Header, PlannerUi.PanelBackgroundAlt);
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(PlannerUi.PanelBackgroundAlt.X + 0.02f, PlannerUi.PanelBackgroundAlt.Y + 0.05f, PlannerUi.PanelBackgroundAlt.Z + 0.05f, 1f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(PlannerUi.PanelBackgroundAlt.X + 0.03f, PlannerUi.PanelBackgroundAlt.Y + 0.08f, PlannerUi.PanelBackgroundAlt.Z + 0.08f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerTheme.Hover);
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, PlannerTheme.Selected);
         var open = ImGui.CollapsingHeader($"###{presentation.WidgetId}");
         ImGui.PopStyleColor(3);
         ImGui.PopStyleVar();
@@ -183,10 +183,10 @@ public sealed partial class PlannerWindow
         var summary = IncomeMetricsCalculator.Summarize(metrics, now, period);
         if (!ImGui.BeginTable("income-summary", ImGui.GetContentRegionAvail().X < 680f * ImGuiHelpers.GlobalScale ? 2 : 4, ImGuiTableFlags.SizingStretchSame))
             return;
-        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-gross", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(summary.GrossGil), "Gross gil", PlannerUi.Green);
-        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-recorded-average", FontAwesomeIcon.CalendarDay, summary.CoveredDays == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.RecordedAverageGilPerDay), "Recorded avg / day", PlannerUi.Teal);
-        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-voyage", FontAwesomeIcon.Ship, summary.VoyageCount == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.GilPerVoyage), "Gil / voyage", PlannerUi.Cyan);
-        ImGui.TableNextColumn(); PlannerUi.MetricCard("income-fcs", FontAwesomeIcon.Building, summary.FcCount.ToString(), $"FCs shown · {summary.CoveredDays:0.#} days", PlannerUi.Muted);
+        ImGui.TableNextColumn(); PlannerUi.MetricCard(this.typography, "income-gross", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(summary.GrossGil), "Gross gil", PlannerUi.Green);
+        ImGui.TableNextColumn(); PlannerUi.MetricCard(this.typography, "income-recorded-average", FontAwesomeIcon.CalendarDay, summary.CoveredDays == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.RecordedAverageGilPerDay), "Recorded avg / day", PlannerUi.Teal);
+        ImGui.TableNextColumn(); PlannerUi.MetricCard(this.typography, "income-voyage", FontAwesomeIcon.Ship, summary.VoyageCount == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.GilPerVoyage), "Gil / voyage", PlannerUi.Cyan);
+        ImGui.TableNextColumn(); PlannerUi.MetricCard(this.typography, "income-fcs", FontAwesomeIcon.Building, summary.FcCount.ToString(), $"FCs shown · {summary.CoveredDays:0.#} days", PlannerUi.Muted);
         ImGui.EndTable();
     }
 

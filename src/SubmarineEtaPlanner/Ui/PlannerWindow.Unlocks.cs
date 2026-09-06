@@ -168,7 +168,7 @@ public sealed partial class PlannerWindow
         ImGui.EndCombo();
     }
 
-    private static void DrawUnlockSummary(FcUnlockMapsPresentation presentation)
+    private void DrawUnlockSummary(FcUnlockMapsPresentation presentation)
     {
         var columns = ImGui.GetContentRegionAvail().X < 700f * ImGuiHelpers.GlobalScale ? 2 : 4;
         if (!ImGui.BeginTable("unlock-summary", columns, ImGuiTableFlags.SizingStretchSame))
@@ -181,10 +181,10 @@ public sealed partial class PlannerWindow
         ImGui.EndTable();
     }
 
-    private static void DrawUnlockSummaryMetric(string id, string value, string label, Vector4 color)
+    private void DrawUnlockSummaryMetric(string id, string value, string label, Vector4 color)
     {
         ImGui.TableNextColumn();
-        PlannerUi.MetricCard(id, FontAwesomeIcon.MapMarkerAlt, value, label, color);
+        PlannerUi.MetricCard(this.typography, id, FontAwesomeIcon.MapMarkerAlt, value, label, color);
     }
 
     private static string FormatUnlockCount(int? count) => count?.ToString("N0") ?? "Unknown";
@@ -234,7 +234,7 @@ public sealed partial class PlannerWindow
         var origin = ImGui.GetCursorScreenPos();
         var end = origin + canvasSize;
         var drawList = ImGui.GetWindowDrawList();
-        var background = new Vector4(PlannerUi.PanelBackground.X, PlannerUi.PanelBackground.Y, PlannerUi.PanelBackground.Z, 0.92f);
+        var background = PlannerUi.PanelBackground;
         drawList.AddRectFilled(origin, end, ImGui.ColorConvertFloat4ToU32(background), 7f * scale);
         drawList.AddRect(origin, end, ImGui.ColorConvertFloat4ToU32(PlannerUi.Border), 7f * scale, ImDrawFlags.None, 1.2f * scale);
 
@@ -329,11 +329,11 @@ public sealed partial class PlannerWindow
             drawList.AddCircleFilled(
                 center,
                 nodeRadius,
-                ImGui.ColorConvertFloat4ToU32(new Vector4(color.X, color.Y, color.Z, destination.State == UnlockDestinationState.Locked ? 0.16f : 0.42f)),
+                ImGui.ColorConvertFloat4ToU32(PlannerTheme.WithAlpha(color, color.W * (destination.State == UnlockDestinationState.Locked ? 0.10f : 0.22f))),
                 32);
             drawList.AddCircle(center, nodeRadius, ImGui.ColorConvertFloat4ToU32(color), 32, 1.7f * scale);
             var labelSize = ImGui.CalcTextSize(destination.Destination.Code);
-            drawList.AddText(center - (labelSize / 2f), ImGui.ColorConvertFloat4ToU32(Vector4.One), destination.Destination.Code);
+            drawList.AddText(center - (labelSize / 2f), ImGui.ColorConvertFloat4ToU32(PlannerTheme.Text), destination.Destination.Code);
         }
         drawList.PopClipRect();
 
@@ -482,9 +482,9 @@ public sealed partial class PlannerWindow
         UnlockMapDestinationPresentation destination,
         IReadOnlyDictionary<uint, RouteDestination> metadata)
     {
-        ImGui.BeginTooltip();
+        PlannerUi.BeginTooltip();
         DrawUnlockDestinationContents(destination, metadata);
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 
     private void DrawUnlockDestinationContents(UnlockMapDestinationPresentation destination,

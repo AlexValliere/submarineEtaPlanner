@@ -122,7 +122,7 @@ public sealed partial class PlannerWindow
                 $"{metrics.AwaitingTrackerFreeCompanies} waiting for tracker");
             if (ImGui.IsItemHovered())
             {
-                ImGui.BeginTooltip();
+                PlannerUi.BeginTooltip();
                 ImGui.TextColored(PlannerUi.Teal, "Route-search details");
                 ImGui.Separator();
                 ImGui.TextUnformatted($"Exact-result cache hits: {metrics.RouteCacheHits:N0}");
@@ -133,7 +133,7 @@ public sealed partial class PlannerWindow
                 ImGui.TextUnformatted($"Ranking build time: {metrics.RouteRankingBuildMilliseconds:N0} ms");
                 ImGui.TextUnformatted($"Exact-cache evictions: {metrics.ExactRouteCacheEvictions:N0}");
                 ImGui.TextUnformatted($"Ranking-cache evictions: {metrics.RouteRankingCacheEvictions:N0}");
-                ImGui.EndTooltip();
+                PlannerUi.EndTooltip();
             }
         }
 
@@ -227,16 +227,16 @@ public sealed partial class PlannerWindow
             return;
 
         ImGui.TableNextColumn();
-        PlannerUi.MetricCard("metric-tracked", FontAwesomeIcon.Ship, total.ToString(), "Tracked FCs", PlannerUi.Cyan);
+        PlannerUi.MetricCard(this.typography, "metric-tracked", FontAwesomeIcon.Ship, total.ToString(), "Tracked FCs", PlannerUi.Cyan);
         ImGui.TableNextColumn();
-        PlannerUi.MetricCard("metric-leveling", FontAwesomeIcon.ChartLine, leveling.ToString(), "Leveling", PlannerUi.Teal);
+        PlannerUi.MetricCard(this.typography, "metric-leveling", FontAwesomeIcon.ChartLine, leveling.ToString(), "Leveling", PlannerUi.Teal);
         ImGui.TableNextColumn();
-        PlannerUi.MetricCard("metric-ready", FontAwesomeIcon.CheckCircle, ready.ToString(), "Ready", PlannerUi.Green);
+        PlannerUi.MetricCard(this.typography, "metric-ready", FontAwesomeIcon.CheckCircle, ready.ToString(), "Ready", PlannerUi.Green);
         ImGui.TableNextColumn();
-        PlannerUi.MetricCard("metric-salvage", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(recordedGil), "Salvage gil", PlannerUi.Green);
+        PlannerUi.MetricCard(this.typography, "metric-salvage", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(recordedGil), "Salvage gil", PlannerUi.Green);
         PlannerUi.Tooltip($"{recordedGil:N0} gil gross NPC value across recorded SubmarineTracker salvage history.");
         ImGui.TableNextColumn();
-        PlannerUi.MetricCard("metric-warnings", FontAwesomeIcon.ExclamationTriangle, warnings.ToString(), "Needs attention", warnings > 0 ? PlannerUi.Amber : PlannerUi.Muted);
+        PlannerUi.MetricCard(this.typography, "metric-warnings", FontAwesomeIcon.ExclamationTriangle, warnings.ToString(), "Needs attention", warnings > 0 ? PlannerUi.Amber : PlannerUi.Muted);
         ImGui.EndTable();
     }
 
@@ -416,8 +416,8 @@ public sealed partial class PlannerWindow
         var framePaddingY = Math.Max(0f, (layout.HeaderHeight - ImGui.GetTextLineHeight()) / 2f);
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(style.FramePadding.X, framePaddingY));
         ImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.62f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.76f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerTheme.WithAlpha(PlannerTheme.Hover, 0.7f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, PlannerTheme.WithAlpha(PlannerTheme.Selected, 0.85f));
         var open = ImGui.CollapsingHeader($"###{id}");
         ImGui.PopStyleColor(3);
         ImGui.PopStyleVar();
@@ -561,7 +561,7 @@ public sealed partial class PlannerWindow
             ImGui.SameLine();
             PlannerUi.DrawStatusPill(calculationStatusText, statusColor);
             if (calculationProgress.Status == FcCalculationStatus.Reused && ImGui.IsItemHovered())
-                ImGui.SetTooltip($"Forecast originally calculated {result.GeneratedAtUtc.LocalDateTime:g}.");
+                PlannerUi.Tooltip($"Forecast originally calculated {result.GeneratedAtUtc.LocalDateTime:g}.");
         }
         if (!ready && result.CompletionForecast is not null)
         {
@@ -728,7 +728,7 @@ public sealed partial class PlannerWindow
                     this.expandedSubmarines.Remove(subKey);
             }
             if (rowHovered)
-                ImGui.SetTooltip(subOpen ? "Hide voyage forecast" : "Show voyage forecast");
+                PlannerUi.Tooltip(subOpen ? "Hide voyage forecast" : "Show voyage forecast");
             ImGui.TableNextColumn();
             ImGui.TextUnformatted($"{sub.StartingRank} → {sub.FinalRank}");
             if (!ready)
@@ -739,7 +739,7 @@ public sealed partial class PlannerWindow
                     : sub.StartingRank >= result.TargetRank ? "now" : $"P50 {FormatRelative(sub.EtaAtUtc, renderNow)}");
                 if (sub.IncludedInLevelingTarget && sub.EtaForecast is not null && ImGui.IsItemHovered())
                 {
-                    ImGui.SetTooltip(
+                    PlannerUi.Tooltip(
                         $"Likely range: {FormatRelative(sub.EtaForecast.P10AtUtc, renderNow)}–" +
                         $"{FormatRelative(sub.EtaForecast.P90AtUtc, renderNow)} ({sub.EtaForecast.SampleCount} samples)\n" +
                         $"Forecast calculated: {result.GeneratedAtUtc.LocalDateTime:g}");
@@ -758,7 +758,7 @@ public sealed partial class PlannerWindow
                 };
                 ImGui.TextColored(voyageColor, voyageProgress.Label);
                 if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip(voyageProgress.Tooltip);
+                    PlannerUi.Tooltip(voyageProgress.Tooltip);
             }
             ImGui.TableNextColumn();
             ImGui.TextColored(salvage.TotalGil > 0 ? PlannerUi.Green : PlannerUi.Muted, ResultsViewState.FormatCompactGil(salvage.TotalGil));
@@ -812,7 +812,7 @@ public sealed partial class PlannerWindow
         {
             PlannerUi.DrawStatusPill("Ready to collect", PlannerUi.Amber);
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Retrieve this submarine in-game so its actual EXP and rank can be recorded.");
+                PlannerUi.Tooltip("Retrieve this submarine in-game so its actual EXP and rank can be recorded.");
             return;
         }
 
@@ -846,7 +846,7 @@ public sealed partial class PlannerWindow
 
     private static void DrawSalvageTooltip(SubmarineSalvageSummary salvage)
     {
-        ImGui.BeginTooltip();
+        PlannerUi.BeginTooltip();
         ImGui.TextColored(PlannerUi.Green, $"Recorded NPC value: {salvage.TotalGil:N0} gil");
         ImGui.Separator();
         ImGui.TextUnformatted($"{salvage.VoyageCount:N0} voyage{(salvage.VoyageCount == 1 ? string.Empty : "s")} returned with salvage");
@@ -854,7 +854,7 @@ public sealed partial class PlannerWindow
             ImGui.TextUnformatted($"{item.Name}: {item.Quantity:N0} × {item.NpcSalePrice:N0} = {item.TotalGil:N0} gil");
         ImGui.Spacing();
         ImGui.TextColored(PlannerUi.Muted, "Recorded history only · gross value · NPC prices from game data");
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 
     private static void DrawFcProgressBackground(
@@ -880,7 +880,7 @@ public sealed partial class PlannerWindow
         if (!ImGui.IsItemHovered())
             return;
 
-        ImGui.BeginTooltip();
+        PlannerUi.BeginTooltip();
         ImGui.TextColored(PlannerUi.Teal, $"{presentation.FreeCompanyTag} — {presentation.World}");
         ImGui.TextUnformatted($"Target ETA: {presentation.TargetEta}");
         ImGui.TextUnformatted($"Current voyage: {presentation.CurrentVoyage}");
@@ -907,7 +907,7 @@ public sealed partial class PlannerWindow
             }
         }
 
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 
     private void DrawCurrentVoyageReturn(
@@ -924,9 +924,9 @@ public sealed partial class PlannerWindow
         if (!ImGui.IsItemHovered())
             return;
 
-        ImGui.BeginTooltip();
+        PlannerUi.BeginTooltip();
         DrawCurrentVoyageTooltipContents(progress, submarine);
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 
     private static Vector4 GetCurrentVoyageColor(CurrentVoyageProgressState? state)
@@ -1070,7 +1070,7 @@ public sealed partial class PlannerWindow
                 ImGui.TextColored(PlannerUi.Amber, "projected");
                 if (ImGui.IsItemHovered())
                 {
-                    ImGui.SetTooltip(
+                    PlannerUi.Tooltip(
                         $"Available only after the forecasted unlock of " +
                         string.Join(", ", plan.RequiredProjectedUnlocks.Select(FormatPoint)) + ".");
                 }
@@ -1082,7 +1082,7 @@ public sealed partial class PlannerWindow
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(plan.ExpGain.ToString("N0"));
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Total EXP represented by this row. Batched rows combine repeated voyages.");
+                PlannerUi.Tooltip("Total EXP represented by this row. Batched rows combine repeated voyages.");
             ImGui.TableNextColumn();
             ImGui.TextUnformatted($"{plan.RankBefore}→{plan.RankAfter}");
             ImGui.TableNextColumn();
@@ -1097,11 +1097,11 @@ public sealed partial class PlannerWindow
                 var perExp = plan.ExpPerVoyage == 0 ? plan.ExpGain : plan.ExpPerVoyage;
                 ImGui.TextUnformatted($"{FormatDuration(perDuration)} / {perExp:N0} EXP");
                 if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Duration and EXP for one voyage before repeats.");
+                    PlannerUi.Tooltip("Duration and EXP for one voyage before repeats.");
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(plan.ExpPerHour.ToString("N0"));
                 if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Expected EXP per real-time hour; this is a route-comparison rate, not EXP awarded per voyage.");
+                    PlannerUi.Tooltip("Expected EXP per real-time hour; this is a route-comparison rate, not EXP awarded per voyage.");
             }
         }
 
@@ -1183,7 +1183,7 @@ public sealed partial class PlannerWindow
         if (!hovered)
             return;
 
-        ImGui.BeginTooltip();
+        PlannerUi.BeginTooltip();
         ImGui.TextColored(PlannerUi.Amber, outcomes.Length > 1 ? "Next route depends on unlock" : "Projected after unlock");
         ImGui.TextColored(PlannerUi.Muted, "The table shows the most likely modeled outcome.");
         ImGui.Separator();
@@ -1202,7 +1202,7 @@ public sealed partial class PlannerWindow
             if (outcomeIndex < outcomes.Length - 1)
                 ImGui.Separator();
         }
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 
     private static float CalculateTableHeight(int rowCount, bool hasHorizontalScrollbar)

@@ -27,6 +27,7 @@ public sealed partial class PlannerWindow : Window
     private static readonly int[] PracticalDurations = [0, 24, 36, 48, -1];
 
     private readonly Configuration configuration;
+    private readonly PlannerTypography typography;
     private readonly Action saveConfiguration;
     private readonly EtaPlannerService plannerService;
     private readonly ISubmarineCatalog catalog;
@@ -59,6 +60,7 @@ public sealed partial class PlannerWindow : Window
     private bool resetDefaultsPreviewActive;
 
     internal PlannerWindow(
+        PlannerTypography typography,
         Configuration configuration,
         Action saveConfiguration,
         EtaPlannerService plannerService,
@@ -69,6 +71,7 @@ public sealed partial class PlannerWindow : Window
         Action<bool> openSubmarineTrackerInstaller)
         : base("Submarine ETA Planner###SubmarineEtaPlanner", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
+        this.typography = typography;
         this.configuration = configuration;
         this.saveConfiguration = saveConfiguration;
         this.plannerService = plannerService;
@@ -153,7 +156,6 @@ public sealed partial class PlannerWindow : Window
     {
         ApplyRefreshProgressUpdates();
         CompleteRefreshIfReady();
-        using var theme = PlannerUi.PushTheme();
 
         var available = ImGui.GetContentRegionAvail();
         var compact = available.X < 920f * ImGuiHelpers.GlobalScale;
@@ -176,6 +178,7 @@ public sealed partial class PlannerWindow : Window
 
         var refreshing = this.refreshTask is { IsCompleted: false };
         if (PlannerUi.DrawHeader(
+                this.typography,
                 GetPageTitle(), GetForecastStatus(),
                 this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Unlocks or PlannerPage.Income,
                 refreshing))
@@ -571,12 +574,12 @@ public sealed partial class PlannerWindow : Window
         if (route.Count == 0 || !ImGui.IsItemHovered())
             return;
 
-        ImGui.BeginTooltip();
+        PlannerUi.BeginTooltip();
         ImGui.TextColored(PlannerUi.Teal, "Full route");
         ImGui.Separator();
         for (var index = 0; index < route.Count; index++)
             ImGui.TextUnformatted($"{index + 1}. {FormatPoint(route[index])}");
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 
     private void DrawCompactRoute(IReadOnlyList<uint> route, Vector4? color = null)
@@ -586,12 +589,12 @@ public sealed partial class PlannerWindow : Window
         if (route.Count == 0 || !ImGui.IsItemHovered())
             return;
 
-        ImGui.BeginTooltip();
+        PlannerUi.BeginTooltip();
         ImGui.TextColored(PlannerUi.Teal, "Full route");
         ImGui.Separator();
         for (var index = 0; index < route.Count; index++)
             ImGui.TextUnformatted($"{index + 1}. {FormatPoint(route[index])}");
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 
     private static string FormatElapsed(TimeSpan elapsed)

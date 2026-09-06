@@ -65,10 +65,11 @@ public sealed partial class PlannerWindow
         };
 
         BeginContentPanel($"fuel-runway-{projection.State.FcIdKey}");
-        ImGui.TextColored(PlannerUi.Teal, "Fuel forecast");
-        ImGui.SameLine();
+        using (this.typography.Heading())
+            ImGui.TextUnformatted("Fuel forecast");
+        PlannerUi.SameLineIfFits(forecast.Status.ToString());
         PlannerUi.DrawStatusPill(forecast.Status.ToString(), statusColor);
-        ImGui.TextColored(PlannerUi.Muted, "Read-only forecast from local stock and active farming schedules.");
+        PlannerUi.WrappedText("Read-only forecast from local stock and active farming schedules.", PlannerUi.Muted);
         ImGui.Spacing();
 
         var fuelLayout = CalculateResponsiveTableLayout(

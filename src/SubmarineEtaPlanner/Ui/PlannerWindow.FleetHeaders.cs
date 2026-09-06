@@ -196,8 +196,8 @@ public sealed partial class PlannerWindow
         var paddingY = Math.Max(0f, (layout.HeaderHeight - ImGui.GetTextLineHeight()) / 2f);
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(style.FramePadding.X, paddingY));
         ImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.62f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(PlannerUi.PanelBackgroundAlt.X, PlannerUi.PanelBackgroundAlt.Y, PlannerUi.PanelBackgroundAlt.Z, 0.76f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PlannerTheme.WithAlpha(PlannerTheme.Hover, 0.7f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, PlannerTheme.WithAlpha(PlannerTheme.Selected, 0.85f));
         var open = ImGui.CollapsingHeader($"###{id}");
         ImGui.PopStyleColor(3);
         ImGui.PopStyleVar();
@@ -261,7 +261,7 @@ public sealed partial class PlannerWindow
         if (!ImGui.IsItemHovered())
             return;
 
-        ImGui.BeginTooltip();
+        PlannerUi.BeginTooltip();
         ImGui.TextColored(PlannerUi.Teal, $"{projection.State.FreeCompanyTag} — {projection.State.World}");
         ImGui.TextUnformatted($"{context.Presentation.Mode} · Target R{projection.EffectiveTargetRank}");
         ImGui.TextUnformatted($"{context.Presentation.Attention} · Farm ready: {context.Presentation.FarmReady}");
@@ -286,7 +286,7 @@ public sealed partial class PlannerWindow
             ImGui.Separator();
             ImGui.TextColored(PlannerUi.Muted, $"Likely ready between {FormatRelative(p10, now)} and {FormatRelative(p90, now)}");
         }
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 
     private static CompactFcHeaderLayout CalculateIncomeHeaderLayout(
@@ -343,7 +343,7 @@ public sealed partial class PlannerWindow
         if (!ImGui.IsItemHovered())
             return;
 
-        ImGui.BeginTooltip();
+        PlannerUi.BeginTooltip();
         ImGui.TextColored(PlannerUi.Teal, $"{projection.State.FreeCompanyTag} — {projection.State.World}");
         ImGui.TextUnformatted($"{projection.Mode} · {metric.VoyageCount:N0} tracked voyage{(metric.VoyageCount == 1 ? string.Empty : "s")}");
         ImGui.Separator();
@@ -360,6 +360,6 @@ public sealed partial class PlannerWindow
                 PlannerUi.Tooltip(submarine.CurrentBuild.UnavailableReason);
         }
         ImGui.TextColored(PlannerUi.Muted, "Current tracker values; recorded income may come from earlier ranks or builds.");
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 }

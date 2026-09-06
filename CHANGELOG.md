@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.51.0
+
+- Refreshed all six pages with a consistent graphite and teal palette, including the native window, menus, dialogs, tables, and focus states.
+- Added managed heading and summary-value fonts based on the user's Dalamud font, retaining body text and table density.
+- Refined navigation, selected filters, status labels, current-voyage progress, and primary Save actions.
+- Aligned settings and FC controls on wider windows, with stacked labels and help on narrower windows; aligned route-picker actions and wrapped long explanations.
+- Standardized tooltip width and wrapping, including long Unlocks paths and exact Income chart details.
+- Preserved existing features, data semantics, configuration, routes, calculations, and saving behavior.
+
 ## 0.5.50.0
 
 - Added a compact recorded-income chart below Income's summary cards, following the existing period, fleet filters, and FC scope.

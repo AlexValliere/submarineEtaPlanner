@@ -43,6 +43,7 @@ public sealed class Plugin : IDalamudPlugin
     internal static IFramework Framework { get; private set; } = null!;
 
     private readonly PlannerWindow plannerWindow;
+    private readonly PlannerTypography typography;
     private readonly FuelObservationCoordinator fuelObservationCoordinator;
     private readonly List<string> fuelObservationWarnings = [];
     private readonly Dalamud.Interface.Windowing.WindowSystem windowSystem = new("SubmarineEtaPlanner");
@@ -79,7 +80,9 @@ public sealed class Plugin : IDalamudPlugin
             catalog as IPlannerDataDiagnostics,
             catalog.MaximumRank);
 
+        this.typography = new PlannerTypography(PluginInterface.UiBuilder.FontAtlas);
         this.plannerWindow = new PlannerWindow(
+            this.typography,
             Configuration,
             SaveConfiguration,
             service,
@@ -112,6 +115,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
         this.plannerWindow.CancelRefresh();
         this.windowSystem.RemoveAllWindows();
+        this.typography.Dispose();
         this.fuelObservationCoordinator.Dispose();
         LogFuelObservationWarnings();
     }
@@ -142,6 +146,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         try
         {
+            using var theme = PlannerTheme.Push();
             this.windowSystem.Draw();
         }
         catch (Exception ex)

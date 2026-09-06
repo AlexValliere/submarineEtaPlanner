@@ -55,34 +55,40 @@ public sealed partial class PlannerWindow
         BeginSettingsCard("fc-preference-card", selected.DisplayName, "Favorites: Saved automatically. Target, strategy, assignment, and pinned-route changes remain staged until Save changes.");
         var preferences = this.configuration.GetFcPreferences(selected.FcIdKey);
         var favorite = preferences.Favorite;
-        SettingLabel("Favorite", "Favorite FCs remain above non-favorites on Operations, Leveling, and Income.");
-        if (ImGui.Checkbox("Pin this free company##favorite-fc", ref favorite))
+        using (PlannerUi.SettingRow("Favorite", "Favorite FCs remain above non-favorites on Operations, Leveling, and Income."))
         {
-            preferences.Favorite = favorite;
-            this.saveConfiguration();
-        }
-
-        SettingLabel("Target rank", $"Use the global target ({this.configuration.Settings.TargetRank}) or override it for this FC.");
-        var useGlobalTarget = this.setupUseGlobalTarget;
-        if (ImGui.Checkbox("Use global target##setup-global-target", ref useGlobalTarget))
-        {
-            this.setupUseGlobalTarget = useGlobalTarget;
-            this.setupDraftDirty = true;
-        }
-        if (!this.setupUseGlobalTarget)
-        {
-            ImGui.SetNextItemWidth(160f * ImGuiHelpers.GlobalScale);
-            var target = this.setupTargetRank;
-            if (ImGui.InputInt("Rank##setup-target-rank", ref target))
+            if (ImGui.Checkbox("Pin this free company##favorite-fc", ref favorite))
             {
-                this.setupTargetRank = Math.Clamp(target, 1, this.catalog.MaximumRank);
-                this.setupDraftDirty = true;
+                preferences.Favorite = favorite;
+                this.saveConfiguration();
             }
         }
 
-        SettingLabel("Leveling strategy", "Recommended unlocks missing slots and required main leveling routes, then selects the best expected EXP/hour.");
-        if (DrawStrategyCombo(ref this.setupStrategy))
-            this.setupDraftDirty = true;
+        using (PlannerUi.SettingRow("Target rank", $"Use the global target ({this.configuration.Settings.TargetRank}) or override it for this FC."))
+        {
+            var useGlobalTarget = this.setupUseGlobalTarget;
+            if (ImGui.Checkbox("Use global target##setup-global-target", ref useGlobalTarget))
+            {
+                this.setupUseGlobalTarget = useGlobalTarget;
+                this.setupDraftDirty = true;
+            }
+            if (!this.setupUseGlobalTarget)
+            {
+                ImGui.SetNextItemWidth(160f * ImGuiHelpers.GlobalScale);
+                var target = this.setupTargetRank;
+                if (ImGui.InputInt("Rank##setup-target-rank", ref target))
+                {
+                    this.setupTargetRank = Math.Clamp(target, 1, this.catalog.MaximumRank);
+                    this.setupDraftDirty = true;
+                }
+            }
+        }
+
+        using (PlannerUi.SettingRow("Leveling strategy", "Recommended unlocks missing slots and required main leveling routes, then selects the best expected EXP/hour."))
+        {
+            if (DrawStrategyCombo(ref this.setupStrategy))
+                this.setupDraftDirty = true;
+        }
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -107,7 +113,7 @@ public sealed partial class PlannerWindow
             PlannerUi.WrappedText(this.setupDraftDirty ? "Unsaved FC changes" : "FC settings saved",
                 this.setupDraftDirty ? PlannerUi.Amber : PlannerUi.Muted);
             ImGui.BeginDisabled(!this.setupDraftDirty);
-            if (ImGui.Button("Save changes##save-fc-settings")) SaveSetupDraft();
+            if (PlannerUi.PrimaryButton("Save changes##save-fc-settings")) SaveSetupDraft();
             PlannerUi.SameLineIfFits("Discard changes");
             if (ImGui.Button("Discard changes##revert-fc-settings") && this.selectedSetupFcId is { } fcId)
                 SelectSetupFc(fcId);
@@ -150,25 +156,27 @@ public sealed partial class PlannerWindow
             "Ceruleum stock",
             "Choose the local stock observation used for this FC and preview its read-only fuel forecast.");
 
-        SettingLabel("Source", "Automatic selects a single matching local observation, or the current live character when it belongs to this FC.");
-        var sourceLabels = new Dictionary<FuelStockMode, string>
+        using (PlannerUi.SettingRow("Source", "Automatic selects a single matching local observation, or the current live character when it belongs to this FC."))
         {
-            [FuelStockMode.Automatic] = "Automatic",
-            [FuelStockMode.Character] = "Observed character",
-            [FuelStockMode.Manual] = "Manual count",
-        };
-        ImGui.SetNextItemWidth(Math.Min(300f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
-        if (ImGui.BeginCombo("##setup-fuel-source", sourceLabels[this.setupFuelStockMode]))
-        {
-            foreach (var mode in Enum.GetValues<FuelStockMode>())
+            var sourceLabels = new Dictionary<FuelStockMode, string>
             {
-                if (ImGui.Selectable($"{sourceLabels[mode]}##setup-fuel-source-{mode}", this.setupFuelStockMode == mode))
+                [FuelStockMode.Automatic] = "Automatic",
+                [FuelStockMode.Character] = "Observed character",
+                [FuelStockMode.Manual] = "Manual count",
+            };
+            ImGui.SetNextItemWidth(Math.Min(300f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
+            if (ImGui.BeginCombo("##setup-fuel-source", sourceLabels[this.setupFuelStockMode]))
+            {
+                foreach (var mode in Enum.GetValues<FuelStockMode>())
                 {
-                    this.setupFuelStockMode = mode;
-                    this.setupDraftDirty = true;
+                    if (ImGui.Selectable($"{sourceLabels[mode]}##setup-fuel-source-{mode}", this.setupFuelStockMode == mode))
+                    {
+                        this.setupFuelStockMode = mode;
+                        this.setupDraftDirty = true;
+                    }
                 }
+                ImGui.EndCombo();
             }
-            ImGui.EndCombo();
         }
 
         var candidates = FuelStockPresentation.CandidatesForFreeCompany(
@@ -190,32 +198,34 @@ public sealed partial class PlannerWindow
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
-        SettingLabel("Safety stock", "Automatic safety stock keeps enough tanks for one complete resend of every active farming submarine.");
-        var automaticReserve = this.setupAutomaticReserve;
-        if (ImGui.Checkbox("Automatic safety stock##setup-automatic-reserve", ref automaticReserve))
+        using (PlannerUi.SettingRow("Safety stock", "Automatic safety stock keeps enough tanks for one complete resend of every active farming submarine."))
         {
-            this.setupAutomaticReserve = automaticReserve;
-            this.setupDraftDirty = true;
-        }
-        if (this.setupAutomaticReserve)
-        {
-            ImGui.TextColored(
-                PlannerUi.Muted,
-                forecast.TanksPerFullResend is { } tanksPerFullResend
-                    ? $"One complete fleet trip: {tanksPerFullResend:N0} tanks"
-                    : "One complete fleet trip: unavailable");
-        }
-        else
-        {
-            var reserve = this.setupFixedReserve;
-            ImGui.SetNextItemWidth(Math.Min(180f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
-            if (ImGui.InputInt("Fixed safety stock##setup-fixed-reserve", ref reserve))
+            var automaticReserve = this.setupAutomaticReserve;
+            if (ImGui.Checkbox("Automatic safety stock##setup-automatic-reserve", ref automaticReserve))
             {
-                this.setupFixedReserve = Math.Max(0, reserve);
+                this.setupAutomaticReserve = automaticReserve;
                 this.setupDraftDirty = true;
             }
-            ImGui.SameLine();
-            ImGui.TextUnformatted("tanks");
+            if (this.setupAutomaticReserve)
+            {
+                ImGui.TextColored(
+                    PlannerUi.Muted,
+                    forecast.TanksPerFullResend is { } tanksPerFullResend
+                        ? $"One complete fleet trip: {tanksPerFullResend:N0} tanks"
+                        : "One complete fleet trip: unavailable");
+            }
+            else
+            {
+                var reserve = this.setupFixedReserve;
+                ImGui.SetNextItemWidth(Math.Min(180f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
+                if (ImGui.InputInt("Fixed safety stock##setup-fixed-reserve", ref reserve))
+                {
+                    this.setupFixedReserve = Math.Max(0, reserve);
+                    this.setupDraftDirty = true;
+                }
+                ImGui.SameLine();
+                ImGui.TextUnformatted("tanks");
+            }
         }
 
         ImGui.Spacing();
@@ -701,7 +711,9 @@ public sealed partial class PlannerWindow
             this.setupRoutePickerOpenRequested = false;
         }
 
-        ImGui.SetNextWindowSize(new Vector2(760f, 640f) * ImGuiHelpers.GlobalScale, ImGuiCond.FirstUseEver);
+        var modalSize = Vector2.Min(new Vector2(760f, 640f) * ImGuiHelpers.GlobalScale,
+            ImGui.GetWindowViewport().WorkSize - new Vector2(32f * ImGuiHelpers.GlobalScale));
+        ImGui.SetNextWindowSize(modalSize, ImGuiCond.FirstUseEver);
         if (!ImGui.BeginPopupModal(popupId, ImGuiWindowFlags.NoSavedSettings))
             return;
 
@@ -721,7 +733,7 @@ public sealed partial class PlannerWindow
 
         var build = this.catalog.ResolveBuild(submarine.BuildParts, submarine.Rank);
         PlannerUi.IconText(FontAwesomeIcon.Ship, $"{submarine.Name} · R{submarine.Rank} · {build?.Code ?? "Unknown build"}", PlannerUi.Teal);
-        ImGui.TextColored(PlannerUi.Muted, "Choose up to five unlocked destinations. Their order is the order the submarine will visit them.");
+        PlannerUi.WrappedText("Choose up to five unlocked destinations. Their order is the order the submarine will visit them.", PlannerUi.Muted);
         if (submarine.CurrentRoute.Count > 0)
         {
             ImGui.TextUnformatted("Tracked route:");
@@ -742,29 +754,30 @@ public sealed partial class PlannerWindow
             {
                 var sectorId = this.setupRoutePickerRoute[index];
                 ImGui.PushID($"selected-route-{sectorId}-{index}");
-                ImGui.TextUnformatted($"{index + 1}. {this.catalog.PointName(sectorId)}");
-                ImGui.SameLine();
-                if (index == 0)
-                    ImGui.BeginDisabled();
-                if (ImGui.SmallButton("Up"))
-                    (this.setupRoutePickerRoute[index - 1], this.setupRoutePickerRoute[index]) =
-                        (this.setupRoutePickerRoute[index], this.setupRoutePickerRoute[index - 1]);
-                if (index == 0)
-                    ImGui.EndDisabled();
-                ImGui.SameLine();
-                if (index == this.setupRoutePickerRoute.Count - 1)
-                    ImGui.BeginDisabled();
-                if (ImGui.SmallButton("Down"))
-                    (this.setupRoutePickerRoute[index + 1], this.setupRoutePickerRoute[index]) =
-                        (this.setupRoutePickerRoute[index], this.setupRoutePickerRoute[index + 1]);
-                if (index == this.setupRoutePickerRoute.Count - 1)
-                    ImGui.EndDisabled();
-                ImGui.SameLine();
-                if (ImGui.SmallButton("Remove"))
+                using (PlannerUi.ActionRow($"{index + 1}. {this.catalog.PointName(sectorId)}", "Up", "Down", "Remove"))
                 {
-                    this.setupRoutePickerRoute.RemoveAt(index);
-                    ImGui.PopID();
-                    break;
+                    if (index == 0)
+                        ImGui.BeginDisabled();
+                    if (ImGui.SmallButton("Up"))
+                        (this.setupRoutePickerRoute[index - 1], this.setupRoutePickerRoute[index]) =
+                            (this.setupRoutePickerRoute[index], this.setupRoutePickerRoute[index - 1]);
+                    if (index == 0)
+                        ImGui.EndDisabled();
+                    ImGui.SameLine();
+                    if (index == this.setupRoutePickerRoute.Count - 1)
+                        ImGui.BeginDisabled();
+                    if (ImGui.SmallButton("Down"))
+                        (this.setupRoutePickerRoute[index + 1], this.setupRoutePickerRoute[index]) =
+                            (this.setupRoutePickerRoute[index], this.setupRoutePickerRoute[index + 1]);
+                    if (index == this.setupRoutePickerRoute.Count - 1)
+                        ImGui.EndDisabled();
+                    ImGui.SameLine();
+                    if (ImGui.SmallButton("Remove"))
+                    {
+                        this.setupRoutePickerRoute.RemoveAt(index);
+                        ImGui.PopID();
+                        break;
+                    }
                 }
                 ImGui.PopID();
             }
@@ -817,7 +830,7 @@ public sealed partial class PlannerWindow
                         ImGui.EndDisabled();
                     if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                     {
-                        ImGui.SetTooltip(alreadySelected
+                        PlannerUi.Tooltip(alreadySelected
                             ? "Already selected."
                             : string.Join('\n', tentativeValidation.Errors));
                     }
@@ -832,14 +845,14 @@ public sealed partial class PlannerWindow
         {
             var tanksText = validation.CeruleumTanks is { } tanks ? $"{tanks:N0} tanks" : "Fuel unavailable";
             var durationText = validation.Duration is { } duration ? FormatDuration(duration) : "duration unavailable";
-            ImGui.TextColored(PlannerUi.Muted, $"Preview: {tanksText} · {durationText}");
+            PlannerUi.WrappedText($"Preview: {tanksText} · {durationText}", PlannerUi.Muted);
         }
         foreach (var error in validation.Errors)
-            ImGui.TextColored(PlannerUi.Amber, error);
+            PlannerUi.WrappedText(error, PlannerUi.Amber);
 
         if (!validation.IsRunnable)
             ImGui.BeginDisabled();
-        if (PlannerUi.IconButtonWithText("apply-pinned-route", FontAwesomeIcon.Check, "Use route"))
+        if (PlannerUi.PrimaryIconButtonWithText("apply-pinned-route", FontAwesomeIcon.Check, "Use route"))
         {
             var draft = this.setupSubmarineDrafts.GetValueOrDefault(submarine.SubmarineId, SubmarineSetupDraft.Automatic);
             this.setupSubmarineDrafts[submarine.SubmarineId] = draft.WithPinnedFarmingRoute(validation.Route);
@@ -849,7 +862,7 @@ public sealed partial class PlannerWindow
         }
         if (!validation.IsRunnable)
             ImGui.EndDisabled();
-        ImGui.SameLine();
+        PlannerUi.SameLineIfFits("Cancel", 30f * ImGuiHelpers.GlobalScale);
         if (PlannerUi.IconButtonWithText("cancel-pinned-route", FontAwesomeIcon.Times, "Cancel"))
         {
             ClosePinnedRoutePicker();

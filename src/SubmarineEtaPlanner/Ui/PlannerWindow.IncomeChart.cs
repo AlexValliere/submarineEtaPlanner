@@ -43,11 +43,11 @@ public sealed partial class PlannerWindow
                 PlannerUi.WrappedText(series.HistoryNotices[0], PlannerUi.Muted);
             if (ImGui.IsItemHovered())
             {
-                BeginIncomeChartTooltip();
+                PlannerUi.BeginTooltip();
                 foreach (var notice in series.HistoryNotices.Take(6)) PlannerUi.WrappedText(notice);
                 if (series.HistoryNotices.Count > 6)
                     PlannerUi.WrappedText($"And {series.HistoryNotices.Count - 6} more FCs. Use an FC's Income shortcut to inspect it.", PlannerUi.Muted);
-                ImGui.EndTooltip();
+                PlannerUi.EndTooltip();
             }
         }
         if (!series.HasRecordedReturns)
@@ -61,9 +61,9 @@ public sealed partial class PlannerWindow
         PlannerUi.WrappedText("Bars: recorded gil · Dots: 0 gil recorded · Hatching: days without entries · * Incomplete", PlannerUi.Muted);
         if (ImGui.IsItemHovered())
         {
-            BeginIncomeChartTooltip();
+            PlannerUi.BeginTooltip();
             PlannerUi.WrappedText("Days without entries have no recorded returns; history may be incomplete. They are not assumed to be zero income. Today and partly included boundary periods are marked incomplete.");
-            ImGui.EndTooltip();
+            PlannerUi.EndTooltip();
         }
     }
 
@@ -90,7 +90,7 @@ public sealed partial class PlannerWindow
         var hoverIndex = hovered && mouse.X >= plotStart.X && mouse.X < plotEnd.X
             && mouse.Y >= plotStart.Y && mouse.Y <= plotEnd.Y + 6f * scale
             ? Math.Clamp((int)((mouse.X - plotStart.X) / slotWidth), 0, series.Buckets.Count - 1) : -1;
-        var green = ImGui.ColorConvertFloat4ToU32(new Vector4(0.27f, 0.61f, 0.46f, 0.9f));
+        var green = ImGui.ColorConvertFloat4ToU32(PlannerTheme.WithAlpha(PlannerUi.Green, 0.8f));
         var muted = ImGui.ColorConvertFloat4ToU32(PlannerUi.Muted);
         var border = ImGui.ColorConvertFloat4ToU32(PlannerUi.Border);
         draw.PushClipRect(origin, end, true);
@@ -112,7 +112,7 @@ public sealed partial class PlannerWindow
             var inset = Math.Min(2f * scale, slotWidth * 0.2f);
             if (index == hoverIndex)
                 draw.AddRectFilled(new(left, plotStart.Y), new(right, plotEnd.Y),
-                    ImGui.ColorConvertFloat4ToU32(new Vector4(PlannerUi.Cyan.X, PlannerUi.Cyan.Y, PlannerUi.Cyan.Z, 0.12f)));
+                    ImGui.ColorConvertFloat4ToU32(PlannerTheme.WithAlpha(PlannerUi.Cyan, 0.10f)));
             if (bucket.State == IncomeChartBucketState.RecordedGil)
             {
                 var height = Math.Max(1f, (float)(bucket.GrossGil / axisMaximum) * plotHeight);
@@ -125,7 +125,7 @@ public sealed partial class PlannerWindow
             else
             {
                 draw.AddRectFilled(new(left + inset, plotStart.Y), new(right - inset, plotEnd.Y),
-                    ImGui.ColorConvertFloat4ToU32(new Vector4(0.62f, 0.72f, 0.76f, 0.05f)));
+                    ImGui.ColorConvertFloat4ToU32(PlannerTheme.WithAlpha(PlannerUi.Muted, 0.05f)));
             }
             if (bucket.DaysWithoutReturns > 0)
             {
@@ -163,16 +163,9 @@ public sealed partial class PlannerWindow
             : value >= 1_000_000 ? $"{value / 1_000_000:0.#}m"
             : value >= 1_000 ? $"{value / 1_000:0.#}k" : $"{value:0.#}";
 
-    private static void BeginIncomeChartTooltip()
-    {
-        var width = Math.Min(380f * ImGuiHelpers.GlobalScale, Math.Max(1f, ImGui.GetIO().DisplaySize.X - 24f * ImGuiHelpers.GlobalScale));
-        ImGui.SetNextWindowSizeConstraints(new(width, 0f), new(width, float.MaxValue));
-        ImGui.BeginTooltip();
-    }
-
     private static void DrawIncomeChartTooltip(IncomeChartSeries series, IncomeChartBucket bucket)
     {
-        BeginIncomeChartTooltip();
+        PlannerUi.BeginTooltip();
         PlannerUi.WrappedText(bucket.StartDate == bucket.EndDate ? bucket.StartDate.ToString("D")
             : $"{bucket.StartDate:d} – {bucket.EndDate:d}", PlannerUi.Cyan);
         if (bucket.State == IncomeChartBucketState.NoRecordedReturns)
@@ -186,6 +179,6 @@ public sealed partial class PlannerWindow
             PlannerUi.WrappedText(bucket.IncludesToday ? "Incomplete: includes today or an unfinished calendar period."
                 : "Incomplete: the selected time window includes only part of this calendar period.", PlannerUi.Amber);
         PlannerUi.WrappedText("Days without entries are not assumed to be zero income. Recorded-return counts include returns with no salvage gil; the summary voyage count includes salvage returns only.", PlannerUi.Muted);
-        ImGui.EndTooltip();
+        PlannerUi.EndTooltip();
     }
 }

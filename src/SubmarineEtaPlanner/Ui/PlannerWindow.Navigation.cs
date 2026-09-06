@@ -45,7 +45,8 @@ public sealed partial class PlannerWindow
             })
             {
                 if (choice != DraftNavigationChoice.Save) PlannerUi.SameLineIfFits(label);
-                if (!ImGui.Button(label)) continue;
+                var clicked = choice == DraftNavigationChoice.Save ? PlannerUi.PrimaryButton(label) : ImGui.Button(label);
+                if (!clicked) continue;
                 this.requestedNavigation = this.fcNavigation.Resolve(choice, SaveSetupDraft);
                 ImGui.CloseCurrentPopup();
             }
@@ -131,7 +132,8 @@ public sealed partial class PlannerWindow
         }
         var hint = fc ? "Saving target, strategy or assignment changes recalculates affected forecasts."
             : "Saving global calculation settings refreshes forecasts.";
-        return style.WindowPadding.Y * 2 + ImGui.GetTextLineHeight() +
+        var state = fc ? "Unsaved FC changes" : "Unsaved global changes";
+        return style.WindowPadding.Y * 2 + ImGui.CalcTextSize(state, false, width).Y +
             rows * ImGui.GetFrameHeightWithSpacing() + ImGui.CalcTextSize(hint, false, width).Y +
             style.ItemSpacing.Y * 2 + 8f * ImGuiHelpers.GlobalScale;
     }

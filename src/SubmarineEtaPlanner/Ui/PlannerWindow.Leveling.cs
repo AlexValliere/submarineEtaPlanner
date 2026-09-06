@@ -151,7 +151,7 @@ public sealed partial class PlannerWindow
                     this.expandedSubmarines.Remove(expansionKey);
             }
             if (rowHovered)
-                ImGui.SetTooltip(expanded ? "Hide voyage forecast" : "Show complete voyage forecast");
+                PlannerUi.Tooltip(expanded ? "Hide voyage forecast" : "Show complete voyage forecast");
 
             ImGui.TableNextColumn();
             var rankPresentation = OperationsRankPresentation.Create(submarine);
