@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Compact fleet overview with attention filters, expandable fuel summaries, independently saved favorites, FC shortcuts, safer staged editing, searchable unlock maps, and simplified Income headers. Income charts remain deferred.",
+  "Changelog": "Restores Operations fleet column titles and separate FC tag and world columns. Aligns Income headings with their values and sizes both fleet layouts to their contents, including narrow windows.",
   "Tags": [
     "Submarine",
     "ETA",

@@ -25,12 +25,80 @@ public sealed partial class PlannerWindow
         OperationsHeaderColumn FarmReady,
         OperationsHeaderColumn Ranks);
 
-    private readonly record struct IncomeHeaderColumn(float Offset, float Width, int Line);
+    private readonly record struct CompactFcHeaderColumn(float Offset, float Width, int Line);
 
-    private sealed record IncomeHeaderLayout(
-        bool TwoLine, float HeaderHeight, float LegendHeight,
-        IncomeHeaderColumn FreeCompany, IncomeHeaderColumn GrossGil,
-        IncomeHeaderColumn RecordedAverageGilPerDay, IncomeHeaderColumn Voyages);
+    private sealed record CompactFcHeaderLayout(
+        float HeaderHeight, int LineCount, IReadOnlyList<CompactFcHeaderColumn> Columns);
+
+    // A page calculates these boundaries once; its legend and every FC use the same layout.
+    private static CompactFcHeaderLayout CalculateCompactFcHeaderLayout(
+        IReadOnlyList<float> desiredWidths, IReadOnlyList<float> stretchWeights,
+        int wrapAfter, float availableWidth)
+    {
+        var scale = ImGuiHelpers.GlobalScale;
+        var gutter = 26f * scale;
+        var gap = 14f * scale;
+        var contentWidth = Math.Max(1f, availableWidth - gutter - 10f * scale);
+        var twoLines = desiredWidths.Sum() + gap * (desiredWidths.Count - 1) > contentWidth;
+        var columns = new CompactFcHeaderColumn[desiredWidths.Count];
+
+        void PlaceLine(int start, int end, int line)
+        {
+            var width = Math.Max(1f, contentWidth - gap * (end - start - 1));
+            var desired = Enumerable.Range(start, end - start).Sum(index => desiredWidths[index]);
+            var weight = Enumerable.Range(start, end - start).Sum(index => stretchWeights[index]);
+            var offset = gutter;
+            for (var index = start; index < end; index++)
+            {
+                var columnWidth = width < desired
+                    ? desiredWidths[index] * width / Math.Max(1f, desired)
+                    : desiredWidths[index] + (width - desired) * stretchWeights[index] / Math.Max(1f, weight);
+                columns[index] = new(offset, columnWidth, line);
+                offset += columnWidth + gap;
+            }
+        }
+
+        if (twoLines)
+        {
+            PlaceLine(0, wrapAfter, 0);
+            PlaceLine(wrapAfter, desiredWidths.Count, 1);
+        }
+        else PlaceLine(0, desiredWidths.Count, 0);
+        return new(
+            twoLines ? ImGui.GetTextLineHeight() * 2 + 14f * scale : ImGui.GetFrameHeight(),
+            twoLines ? 2 : 1, columns);
+    }
+
+    private static void DrawCompactFcHeaderCell(
+        Vector2 origin, CompactFcHeaderLayout layout, int index, string text,
+        Vector4 color, bool rightAligned = false)
+    {
+        var column = layout.Columns[index];
+        var scale = ImGuiHelpers.GlobalScale;
+        var lineHeight = ImGui.GetTextLineHeight();
+        var lineGap = 2f * scale;
+        var contentHeight = lineHeight * layout.LineCount + lineGap * (layout.LineCount - 1);
+        var y = origin.Y + (layout.HeaderHeight - contentHeight) / 2
+            + column.Line * (lineHeight + lineGap);
+        var padding = 4f * scale;
+        var fitted = FitHeaderText(text, Math.Max(1f, column.Width - padding * 2));
+        var x = origin.X + column.Offset + (rightAligned
+            ? Math.Max(padding, column.Width - padding - ImGui.CalcTextSize(fitted).X) : padding);
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.PushClipRect(new(origin.X + column.Offset, y),
+            new(origin.X + column.Offset + column.Width, y + lineHeight), true);
+        drawList.AddText(new(x, y), ImGui.ColorConvertFloat4ToU32(color), fitted);
+        drawList.PopClipRect();
+    }
+
+    private static void DrawCompactFcHeaderLegend(
+        CompactFcHeaderLayout layout, IReadOnlyList<string> labels, int rightAlignFrom = int.MaxValue)
+    {
+        var origin = ImGui.GetCursorScreenPos() + new Vector2(FavoriteControlWidth, 0);
+        for (var index = 0; index < labels.Count; index++)
+            DrawCompactFcHeaderCell(origin, layout, index, labels[index], PlannerUi.Muted, index >= rightAlignFrom);
+        ImGui.Dummy(new(ImGui.GetContentRegionAvail().X, layout.HeaderHeight));
+    }
 
     private static OperationsHeaderLayout CalculateOperationsHeaderLayout(
         IEnumerable<OperationsFcHeaderPresentation> presentations,
@@ -214,54 +282,34 @@ public sealed partial class PlannerWindow
         ImGui.EndTooltip();
     }
 
-    private static IncomeHeaderLayout CalculateIncomeHeaderLayout(
+    private static CompactFcHeaderLayout CalculateIncomeHeaderLayout(
         IEnumerable<IncomeFcHeaderPresentation> presentations, float availableWidth)
     {
-        var scale = ImGuiHelpers.GlobalScale;
-        var gutter = 26f * scale;
-        var width = Math.Max(1f, availableWidth - gutter);
-        var twoLine = availableWidth < 640f * scale;
-        var height = twoLine ? ImGui.GetTextLineHeight() * 2 + 14f * scale : ImGui.GetFrameHeight();
-        return twoLine
-            ? new(true, height, height, new(gutter, width, 0),
-                new(gutter, width * .34f, 1), new(gutter + width * .34f, width * .42f, 1),
-                new(gutter + width * .76f, width * .24f, 1))
-            : new(false, height, height, new(gutter, width * .4f, 0),
-                new(gutter + width * .4f, width * .22f, 0), new(gutter + width * .62f, width * .24f, 0),
-                new(gutter + width * .86f, width * .14f, 0));
+        var values = presentations.ToArray();
+        return CalculateCompactFcHeaderLayout(
+            [
+                MeasureHeaderColumn(values.Select(value => value.FreeCompany), "FC tag", 70f, 135f),
+                MeasureHeaderColumn(values.Select(value => value.World), "World", 90f, 150f),
+                MeasureHeaderColumn(values.Select(value => value.GrossGil), "Gross gil", 100f, 170f),
+                MeasureHeaderColumn(values.Select(value => value.RecordedAverageGilPerDay), "Recorded avg/day", 135f, 185f),
+                MeasureHeaderColumn(values.Select(value => value.Voyages), "Voyages", 65f, 95f),
+            ],
+            [1f, 1.2f, 1f, 1f, 0f], 2, availableWidth);
     }
 
-    private static void DrawIncomeHeaderLegend(IncomeHeaderLayout layout)
-    {
-        var origin = ImGui.GetCursorScreenPos() + new Vector2(FavoriteControlWidth, 0);
-        DrawIncomeHeaderCell(origin, layout, layout.FreeCompany, "FC / world", PlannerUi.Muted);
-        DrawIncomeHeaderCell(origin, layout, layout.GrossGil, "Gross gil", PlannerUi.Muted);
-        DrawIncomeHeaderCell(origin, layout, layout.RecordedAverageGilPerDay, "Recorded avg/day", PlannerUi.Muted);
-        DrawIncomeHeaderCell(origin, layout, layout.Voyages, "Voyages", PlannerUi.Muted);
-        ImGui.Dummy(new Vector2(ImGui.GetContentRegionAvail().X, layout.LegendHeight));
-    }
+    private static void DrawIncomeHeaderLegend(CompactFcHeaderLayout layout)
+        => DrawCompactFcHeaderLegend(layout, ["FC tag", "World", "Gross gil", "Recorded avg/day", "Voyages"],
+            rightAlignFrom: 2);
 
-    private static void DrawIncomeHeaderFields(Vector2 origin, IncomeHeaderLayout layout,
-        IncomeFcHeaderPresentation presentation, bool legend)
+    private static void DrawIncomeHeaderFields(Vector2 origin, CompactFcHeaderLayout layout,
+        IncomeFcHeaderPresentation presentation)
     {
         var normal = ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
-        DrawIncomeHeaderCell(origin, layout, layout.FreeCompany, $"{presentation.FreeCompany} · {presentation.World}", normal);
-        DrawIncomeHeaderCell(origin, layout, layout.GrossGil, presentation.GrossGil, normal, true);
-        DrawIncomeHeaderCell(origin, layout, layout.RecordedAverageGilPerDay, presentation.RecordedAverageGilPerDay, normal, true);
-        DrawIncomeHeaderCell(origin, layout, layout.Voyages, presentation.Voyages, normal, true);
-    }
-
-    private static void DrawIncomeHeaderCell(Vector2 origin, IncomeHeaderLayout layout,
-        IncomeHeaderColumn column, string text, Vector4 color, bool rightAligned = false)
-    {
-        var scale = ImGuiHelpers.GlobalScale;
-        var line = ImGui.GetTextLineHeight();
-        var y = origin.Y + (layout.HeaderHeight - (layout.TwoLine ? line * 2 + 2f * scale : line)) / 2
-            + column.Line * (line + 2f * scale);
-        var fitted = FitHeaderText(text, Math.Max(1f, column.Width - 8f * scale));
-        var x = origin.X + column.Offset + (rightAligned
-            ? Math.Max(0, column.Width - 4f * scale - ImGui.CalcTextSize(fitted).X) : 4f * scale);
-        ImGui.GetWindowDrawList().AddText(new Vector2(x, y), ImGui.ColorConvertFloat4ToU32(color), fitted);
+        DrawCompactFcHeaderCell(origin, layout, 0, presentation.FreeCompany, normal);
+        DrawCompactFcHeaderCell(origin, layout, 1, presentation.World, normal);
+        DrawCompactFcHeaderCell(origin, layout, 2, presentation.GrossGil, normal, rightAligned: true);
+        DrawCompactFcHeaderCell(origin, layout, 3, presentation.RecordedAverageGilPerDay, normal, rightAligned: true);
+        DrawCompactFcHeaderCell(origin, layout, 4, presentation.Voyages, normal, rightAligned: true);
     }
 
     private static void DrawIncomeHeaderTooltip(FcOperationalProjection projection, IncomeFcMetrics metric)

@@ -99,7 +99,7 @@ public sealed partial class PlannerWindow
         FcOperationalProjection projection,
         IncomeFcMetrics metric,
         IncomeFcHeaderPresentation presentation,
-        IncomeHeaderLayout layout)
+        CompactFcHeaderLayout layout)
     {
         ImGui.Spacing();
         DrawFavoriteControl(projection.State.FcIdKey);
@@ -118,7 +118,7 @@ public sealed partial class PlannerWindow
         var open = ImGui.CollapsingHeader($"###{presentation.WidgetId}");
         ImGui.PopStyleColor(3);
         ImGui.PopStyleVar();
-        DrawIncomeHeaderFields(origin, layout, presentation, legend: false);
+        DrawIncomeHeaderFields(origin, layout, presentation);
         DrawIncomeHeaderTooltip(projection, metric);
         if (!open)
             return;

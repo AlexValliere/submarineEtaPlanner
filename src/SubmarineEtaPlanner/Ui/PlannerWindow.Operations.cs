@@ -57,7 +57,17 @@ public sealed partial class PlannerWindow
                 this.saveConfiguration();
             }
         }
-        foreach (var fc in fleets) DrawOperationsFleetGroup(fc, fuel[fc.State.FcIdKey], now);
+        var headers = fleets.ToDictionary(fc => fc.State.FcIdKey,
+            fc => OperationsFcHeaderPresentation.Create(fc, false, now));
+        var layout = CalculateCompactOperationsHeaderLayout(headers.Values, fuel.Values,
+            ImGui.GetContentRegionAvail().X - FavoriteControlWidth);
+        if (fleets.Count > 0)
+        {
+            ImGui.Spacing();
+            DrawCompactFcHeaderLegend(layout, ["FC tag", "World", "Role", "Next action / return", "Fuel"]);
+        }
+        foreach (var fc in fleets)
+            DrawOperationsFleetGroup(fc, fuel[fc.State.FcIdKey], now, headers[fc.State.FcIdKey], layout);
     }
 
     private void DrawAttentionCounters(OperationsAttentionSummary counts)
@@ -86,14 +96,14 @@ public sealed partial class PlannerWindow
         ImGui.Spacing();
     }
 
-    private void DrawOperationsFleetGroup(FcOperationalProjection fc, FleetFuelPresentation fuel, DateTimeOffset now)
+    private void DrawOperationsFleetGroup(FcOperationalProjection fc, FleetFuelPresentation fuel, DateTimeOffset now,
+        OperationsFcHeaderPresentation presentation, CompactFcHeaderLayout layout)
     {
         ImGui.Spacing();
         DrawFavoriteControl(fc.State.FcIdKey);
         if (this.viewState.ExpansionOverride is { } expansion) ImGui.SetNextItemOpen(expansion, ImGuiCond.Always);
-        var presentation = OperationsFcHeaderPresentation.Create(fc, false, now);
         var progress = CurrentVoyageProgressFormatter.CreateForFc(fc.State.Submarines, this.catalog, now);
-        var open = DrawCompactOperationsHeader(fc, presentation, progress, fuel);
+        var open = DrawCompactOperationsHeader(fc, presentation, progress, fuel, layout);
         if (!open) return;
         DrawFcShortcuts(fc.State.FcIdKey);
         PlannerUi.WrappedText(OperationsCompletionPresentation.Create(fc).Label, PlannerUi.Muted);
@@ -109,36 +119,42 @@ public sealed partial class PlannerWindow
             DrawOperationsEntry(fc, submarine, fuel, now, narrow);
     }
 
+    private static CompactFcHeaderLayout CalculateCompactOperationsHeaderLayout(
+        IEnumerable<OperationsFcHeaderPresentation> presentations, IEnumerable<FleetFuelPresentation> fuels,
+        float availableWidth)
+    {
+        var values = presentations.ToArray();
+        return CalculateCompactFcHeaderLayout(
+            [
+                MeasureHeaderColumn(values.Select(value => value.FreeCompany), "FC tag", 70f, 135f),
+                MeasureHeaderColumn(values.Select(value => value.World), "World", 90f, 150f),
+                MeasureHeaderColumn(values.Select(value => value.Mode), "Role", 85f, 145f),
+                MeasureHeaderColumn(values.Select(value => value.Attention), "Next action / return", 135f, 185f),
+                MeasureHeaderColumn(fuels.Select(fuel => CompactFuelLabel(fuel, true)), "Fuel", 155f, 210f),
+            ],
+            [0.5f, 0.8f, 0.6f, 1f, 1f], 3, availableWidth);
+    }
+
     private bool DrawCompactOperationsHeader(FcOperationalProjection fc, OperationsFcHeaderPresentation presentation,
-        FcCurrentVoyageProgressPresentation progress, FleetFuelPresentation fuel)
+        FcCurrentVoyageProgressPresentation progress, FleetFuelPresentation fuel, CompactFcHeaderLayout layout)
     {
         var origin = ImGui.GetCursorScreenPos();
-        var width = ImGui.GetContentRegionAvail().X;
-        var scale = ImGuiHelpers.GlobalScale;
-        var twoLines = width < 760f * scale;
-        var line = ImGui.GetTextLineHeight();
-        var height = twoLines ? line * 2 + 12f * scale : ImGui.GetFrameHeight();
-        DrawFcProgressBackground(progress, height);
-        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(ImGui.GetStyle().FramePadding.X, (height - line) / 2));
+        DrawFcProgressBackground(progress, layout.HeaderHeight);
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(ImGui.GetStyle().FramePadding.X,
+            (layout.HeaderHeight - ImGui.GetTextLineHeight()) / 2));
         ImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
         var open = ImGui.CollapsingHeader($"###operations-fc-{fc.State.FcIdKey}");
         ImGui.PopStyleColor();
         ImGui.PopStyleVar();
-        var text = new[] { fc.State.DisplayName, presentation.Mode, presentation.Attention, CompactFuelLabel(fuel, true) };
-        var contentWidth = Math.Max(1, width - 26f * scale);
-        var fractions = twoLines ? new[] { .6f, .4f, .5f, .5f } : new[] { .32f, .18f, .27f, .23f };
-        var x = origin.X + 26f * scale;
-        for (var i = 0; i < text.Length; i++)
-        {
-            if (twoLines && i == 2) x = origin.X + 26f * scale;
-            var y = origin.Y + 5f * scale + (twoLines && i >= 2 ? line + 2f * scale : 0);
-            var cellWidth = contentWidth * fractions[i];
-            var color = i == 3 ? FuelStatusColor(fuel) : i == 2 && presentation.HasImmediateActions ? PlannerUi.Amber : ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
-            ImGui.GetWindowDrawList().AddText(new Vector2(x, y), ImGui.ColorConvertFloat4ToU32(color),
-                FitHeaderText(text[i], Math.Max(1, cellWidth - 8f * scale)));
-            x += cellWidth;
-        }
-        PlannerUi.Tooltip(string.Join("\n", text) + (fuel.HasFarming ? "\n" + CompactFuelLabel(fuel) : ""));
+        var normal = ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
+        DrawCompactFcHeaderCell(origin, layout, 0, presentation.FreeCompany, normal);
+        DrawCompactFcHeaderCell(origin, layout, 1, presentation.World, normal);
+        DrawCompactFcHeaderCell(origin, layout, 2, presentation.Mode, normal);
+        DrawCompactFcHeaderCell(origin, layout, 3, presentation.Attention,
+            presentation.HasImmediateActions ? PlannerUi.Amber : normal);
+        DrawCompactFcHeaderCell(origin, layout, 4, CompactFuelLabel(fuel, true), FuelStatusColor(fuel));
+        PlannerUi.Tooltip($"{presentation.FreeCompany} · {presentation.World}\n{presentation.Mode}\n{presentation.Attention}" +
+            (fuel.HasFarming ? "\n" + CompactFuelLabel(fuel) : ""));
         return open;
     }
 

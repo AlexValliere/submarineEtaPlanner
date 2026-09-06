@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.46.0
+
+- Restored Operations fleet column titles and separate, aligned FC tag and world columns.
+- Aligned Income numeric headings with their values, restored separate FC tag and world columns, and replaced oversized proportional columns with content-based widths.
+- Shared column boundaries between legends and fleet rows, retaining compact wrapped layouts in narrow windows.
+
 ## 0.5.45.0 — compact interface refresh
 
 - Reduced the decorative header, wrapped narrow controls and explanatory text, and softened table styling.
