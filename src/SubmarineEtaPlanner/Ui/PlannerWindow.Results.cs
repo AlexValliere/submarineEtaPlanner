@@ -1205,11 +1205,17 @@ public sealed partial class PlannerWindow
         PlannerUi.EndTooltip();
     }
 
-    private static float CalculateTableHeight(int rowCount, bool hasHorizontalScrollbar)
+    private static float CalculateTableHeight(
+        int rowCount,
+        bool hasHorizontalScrollbar,
+        bool includeRowItemSpacing = false)
     {
         var style = ImGui.GetStyle();
         var headerHeight = ImGui.GetTextLineHeight() + (style.CellPadding.Y * 2f);
-        var rowHeight = ImGui.GetFrameHeight() + (style.CellPadding.Y * 2f);
+        var rowContentHeight = includeRowItemSpacing
+            ? ImGui.GetFrameHeightWithSpacing()
+            : ImGui.GetFrameHeight();
+        var rowHeight = rowContentHeight + (style.CellPadding.Y * 2f);
         return headerHeight
                + (Math.Max(0, rowCount) * rowHeight)
                + (hasHorizontalScrollbar ? style.ScrollbarSize : 0f)

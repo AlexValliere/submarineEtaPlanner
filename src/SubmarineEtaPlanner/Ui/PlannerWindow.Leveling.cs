@@ -114,7 +114,10 @@ public sealed partial class PlannerWindow
         var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit;
         if (layout.RequiresHorizontalScroll)
             flags |= ImGuiTableFlags.ScrollX;
-        var tableHeight = CalculateTableHeight(projection.Submarines.Count, layout.RequiresHorizontalScroll);
+        var tableHeight = CalculateTableHeight(
+            projection.Submarines.Count,
+            layout.RequiresHorizontalScroll,
+            includeRowItemSpacing: true);
         if (!ImGui.BeginTable(
                 $"leveling-projection-table-{projection.State.FcIdKey}",
                 8,

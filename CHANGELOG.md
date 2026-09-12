@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.54.0
+
+- Fixed expanded Leveling FC tables clipping the fourth submarine row at scaled UI sizes.
+- Accounted for the selectable row spacing while retaining horizontal scrolling, row expansion, and the surrounding page layout.
+
 ## 0.5.53.0
 
 - Fixed Operations' submarine expand/collapse arrows appearing as unsupported characters with some body fonts.

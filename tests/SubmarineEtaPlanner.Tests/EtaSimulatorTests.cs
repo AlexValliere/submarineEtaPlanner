@@ -1264,12 +1264,12 @@ public sealed class EtaSimulatorTests
         Assert.Equal("SubmarineEtaPlanner", repoManifest.GetProperty("InternalName").GetString());
         Assert.Equal(expectedPunchline, repoManifest.GetProperty("Punchline").GetString());
         Assert.Equal(expectedDescription, repoManifest.GetProperty("Description").GetString());
-        Assert.Equal("0.5.53.0", repoManifest.GetProperty("AssemblyVersion").GetString());
+        Assert.Equal("0.5.54.0", repoManifest.GetProperty("AssemblyVersion").GetString());
         Assert.Equal("https://github.com/AlexValliere/submarineEtaPlanner", repoManifest.GetProperty("RepoUrl").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkInstall").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkUpdate").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoManifest.GetProperty("IconUrl").GetString());
-        Assert.Contains("expand/collapse arrows", repoManifest.GetProperty("Changelog").GetString());
+        Assert.Contains("fourth submarine row", repoManifest.GetProperty("Changelog").GetString());
         Assert.Equal(sourceManifest.GetProperty("Changelog").GetString(), repoManifest.GetProperty("Changelog").GetString());
         Assert.Equal(15, repoManifest.GetProperty("DalamudApiLevel").GetInt32());
     }

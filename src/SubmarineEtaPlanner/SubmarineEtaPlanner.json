@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Fixes Operations submarine expand/collapse arrows appearing as unsupported characters with some fonts. Arrows are now drawn independently of the body font, with the existing row clicks, tooltips, and details preserved.",
+  "Changelog": "Fixes expanded Leveling FC tables clipping the fourth submarine row at scaled UI sizes. Selectable row spacing is now included while preserving horizontal scrolling and row expansion.",
   "Tags": [
     "Submarine",
     "ETA",
