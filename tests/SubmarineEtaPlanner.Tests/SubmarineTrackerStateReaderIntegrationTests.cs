@@ -263,6 +263,39 @@ public sealed class SubmarineTrackerStateReaderIntegrationTests
         finally { directory.Delete(recursive: true); }
     }
 
+    [Fact]
+    public void HiddenFcSuppressesItsDecodeWarningsWhileRemainingDiscoverable()
+    {
+        var directory = Directory.CreateTempSubdirectory("seta-tracker-hidden-warning-");
+        try
+        {
+            var databasePath = Path.Combine(directory.FullName, "submarine-sqlite.db");
+            CreateDatabase(databasePath);
+            Execute(databasePath, "UPDATE freecompany SET UnlockedSectors = X'C1', ExploredSectors = X'C1'");
+            Execute(databasePath, "UPDATE submarine SET Route = X'C1'");
+            var settings = EtaSettings.CreateDefault() with { SubmarineTrackerDatabasePathOverride = databasePath };
+            var warnings = new List<string>();
+            var fcIdKey = Convert.ToHexString(MessagePackSerializer.Serialize(GameFreeCompanyId));
+
+            var fc = Assert.Single(new SubmarineTrackerStateReader().Read(
+                settings,
+                warnings,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { fcIdKey.ToLowerInvariant() }));
+
+            Assert.Equal(fcIdKey, fc.FcIdKey);
+            Assert.Single(fc.Submarines);
+            Assert.Empty(fc.UnlockedPoints);
+            Assert.Empty(fc.ExploredPoints);
+            Assert.Empty(Assert.Single(fc.Submarines).CurrentRoute);
+            Assert.Empty(Assert.Single(fc.Submarines).VoyageHistory);
+            Assert.Empty(warnings);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
     private static void CreateDatabase(string path, byte[]? freeCompanyId = null)
     {
         SQLiteConnection.CreateFile(path);

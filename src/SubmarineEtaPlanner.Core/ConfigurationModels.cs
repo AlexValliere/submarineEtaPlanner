@@ -30,6 +30,8 @@ public sealed class SubmarinePreferences
 [Serializable]
 public sealed class FcPreferences
 {
+    public bool Hidden { get; set; }
+
     public bool Favorite { get; set; }
 
     public int? TargetRankOverride { get; set; }

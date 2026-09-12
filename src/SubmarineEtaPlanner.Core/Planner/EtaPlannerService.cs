@@ -54,8 +54,11 @@ public sealed class EtaPlannerService(
         var warnings = new List<string>();
         if (dataDiagnostics is not null)
             warnings.AddRange(dataDiagnostics.GetPlannerDataWarnings());
-        var fcStates = stateReader.Read(settings, warnings)
+        var trackedFcStates = stateReader.Read(settings, warnings, request.HiddenFreeCompanyIds)
             .Select(EnsureFingerprint)
+            .ToArray();
+        var fcStates = trackedFcStates
+            .Where(fc => !request.HiddenFreeCompanyIds.Contains(fc.FcIdKey))
             .ToArray();
         var settingsFingerprint = CalculationSettingsFingerprint.Create(settings);
         var calculationOverrides = fcStates.ToDictionary(
@@ -169,11 +172,11 @@ public sealed class EtaPlannerService(
                   progressArray.FirstOrDefault(item => item.Status is FcCalculationStatus.TimedOut or FcCalculationStatus.Failed)?.Message ??
                   resultArray.FirstOrDefault(result => !result.IsComplete)?.IncompleteReason ??
                   warnings.FirstOrDefault(IsIncompleteWarning) ??
-                  "Calculation stopped before every tracked FC completed.";
+                  "Calculation stopped before every visible FC completed.";
             var routeMetrics = routeSearchDiagnostics?.GetRouteSearchMetrics() ?? new RouteSearchMetrics(0, 0, 0);
             return new EtaPlannerSnapshot(
                 now,
-                fcStates,
+                trackedFcStates,
                 resultArray,
                 warnings.ToArray(),
                 status,

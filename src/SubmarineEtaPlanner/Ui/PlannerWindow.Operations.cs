@@ -15,6 +15,7 @@ public sealed partial class PlannerWindow
         var currentSnapshot = EnsureFleetSnapshot();
         if (currentSnapshot is null) return;
         DrawFleetNotices(currentSnapshot);
+        if (DrawNoVisibleFreeCompanies(currentSnapshot)) return;
         DrawSearch("Search FC, world, or submarine…");
         PlannerUi.SameLineIfFits("All fleets");
         DrawOperationsViewButton("All fleets", OperationsView.AllFleets);
@@ -48,7 +49,7 @@ public sealed partial class PlannerWindow
             OperationsSort.FcName => FleetPresentationOrdering.ByName(filtered, IsFavorite),
             _ => FleetPresentationOrdering.ActionsFirst(filtered, IsFavorite),
         };
-        PlannerUi.WrappedText($"{fleets.Count} fleets shown of {all.Count} tracked", PlannerUi.Muted);
+        PlannerUi.WrappedText($"{fleets.Count} fleets shown of {all.Count} visible", PlannerUi.Muted);
         if (fleets.Count == 0)
         {
             PlannerUi.WrappedText("No fleets match these filters.");

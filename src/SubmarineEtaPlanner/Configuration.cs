@@ -75,6 +75,15 @@ public sealed class Configuration : IPluginConfiguration
         return preferences;
     }
 
+    public bool IsFcVisible(string fcIdKey)
+        => !GetFcPreferences(fcIdKey).Hidden;
+
+    public IReadOnlySet<string> GetHiddenFreeCompanyIds()
+        => FreeCompanyPreferences
+            .Where(pair => pair.Value?.Hidden == true)
+            .Select(pair => pair.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     public IReadOnlyDictionary<string, FcSimulationOverride> GetSimulationOverrides()
         => FreeCompanyPreferences
             .Select(pair => new

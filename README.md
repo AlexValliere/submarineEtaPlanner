@@ -5,7 +5,7 @@
 
 Submarine ETA Planner turns local SubmarineTracker data into a Free Company fleet-operations workspace. It highlights returns and next actions, forecasts leveling and sector unlock progress, reports recorded salvage income, and projects recurring farming cycles and ceruleum fuel runway.
 
-The plugin is read-only with respect to the game and SubmarineTracker: it does not collect submarines, resend voyages, buy fuel, or modify tracker data. Its Operations, Leveling, Unlocks, Income, and FC Setup views organize every tracked FC while Settings provides global simulation and display controls.
+The plugin is read-only with respect to the game and SubmarineTracker: it does not collect submarines, resend voyages, buy fuel, or modify tracker data. Its Operations, Leveling, Unlocks, Income, and FC Setup views organize the tracked FCs you choose to show while Settings provides global simulation and display controls.
 
 ## Features
 
@@ -13,12 +13,12 @@ The plugin is read-only with respect to the game and SubmarineTracker: it does n
 - **Leveling:** forecast every assigned leveling submarine to an FC-specific target rank, with route, EXP, rank, and likely completion details.
 - **Unlocks:** inspect FC-specific unlocked, explored, discoverable, locked, and actively attempted sectors on schematic maps with complete discovery paths.
 - **Income:** compare recorded gross NPC salvage value across FCs, submarines, routes, and 7-, 30-, 90-, 365-day, or lifetime periods.
-- **FC Setup:** save favorites, target ranks, leveling strategies, submarine roles, pinned farming routes, fuel-stock sources, safety stock, and collection delays.
+- **FC Setup:** choose which tracked FCs are visible, and save favorites, target ranks, leveling strategies, submarine roles, pinned farming routes, fuel-stock sources, safety stock, and collection delays.
 - **Settings:** tune global simulation, route, data-source, build-profile, calculation-limit, and display preferences.
 - Distinguish active voyages from conditional next routes, and coordinate shared unlock attempts across the whole FC fleet.
 - Model sector-discovery RNG with median ETAs and P10-P90 likely ranges without presenting locked sectors as guaranteed.
 - Project recurring farming dispatch cycles, fuel per voyage, remaining full-fleet sends, approximate runway, and refill deadlines.
-- List every tracked FC immediately, publish forecasts progressively, and reuse unchanged results when only part of SubmarineTracker's data changes.
+- List every visible tracked FC immediately, publish forecasts progressively, and reuse unchanged results when only part of SubmarineTracker's data changes.
 
 ## Installation
 
@@ -41,7 +41,7 @@ Submarine ETA Planner requires [XIVLauncher](https://goatcorp.github.io/) and Da
 ## Quick start
 
 1. Open the planner with `/seta`; it starts on **Operations**. Use the **Ready to collect**, **Returning within 4h**, **Low fuel**, and **Needs setup** counters to focus the fleet list. Adjust the return window with the dropdown beside its counter.
-2. Pin an FC with its star, or expand the FC and use **Setup** to edit its target rank, strategy, and submarine assignments. Stars save automatically; setup edits use **Save changes**.
+2. Open **FC Setup** to choose which tracked FCs are visible. Visibility and stars save automatically; target, strategy, and submarine-assignment edits use **Save changes**.
 3. For farming submarines, optionally pin a route, adjust collection delay, select the FC's local fuel-stock source, and set its safety stock.
 4. Use **Leveling** for progression forecasts and **Unlocks** for FC-specific sector status and remaining discovery paths.
 5. Use **Income** for historical SubmarineTracker salvage results. Farming-cycle and fuel forecasts remain projections, not recorded earnings or game actions.
@@ -67,11 +67,11 @@ Operations and Income fleet headings keep **FC tag** and **World** in separate a
 
 Income also shows one collapsible chart below the summary cards. It follows the selected fleets, FC scope, and existing rolling period; its gross total matches the summary. Short periods use daily bars, 1 year uses calendar weeks starting Monday, and Lifetime switches from days to weeks to months as its span grows. Hover a bar or gap for exact gil, recorded returns, contributing FCs, and days with/without entries. Dates use your local timezone; today and partly included boundary periods are marked incomplete. Dots show recorded returns worth **0 gil**, while hatching marks days **without recorded returns**—absent entries are not assumed to be zero income or complete history. Chart return counts include zero-salvage returns; the existing summary voyage count and average coverage still begin with salvage returns. Click the chart heading to collapse it; visibility is **Saved automatically** and does not change staged settings or refresh forecasts.
 
-Favorites and display preferences are labeled **Saved automatically**. Other edits use **Save changes** and **Discard changes**. **Use global target and strategy** changes only those two FC overrides. Global **Reset defaults** remains a staged, confirmed preview.
+FC visibility, favorites, and display preferences are labeled **Saved automatically**. Hidden FCs remain in FC Setup’s visibility list and selector, but are excluded from every other fleet page, total, chart, warning, and forecast. **Show all** restores every tracked FC, including when all are hidden. Other edits use **Save changes** and **Discard changes**. **Use global target and strategy** changes only those two FC overrides. Global **Reset defaults** remains a staged, confirmed preview.
 
 ## Progressive calculations
 
-Forecasts run one FC at a time so a difficult fleet cannot consume the entire refresh deadline. Forecast-backed views list all tracked FCs immediately, mark each one as queued or calculating, and publish completed results without waiting for the remaining FCs. FCs already at the target rank are handled first, followed by leveling FCs closest to the target.
+Forecasts run one visible FC at a time so a difficult fleet cannot consume the entire refresh deadline. Forecast-backed views list all visible tracked FCs immediately, mark each one as queued or calculating, and publish completed results without waiting for the remaining FCs. FCs already at the target rank are handled first, followed by leveling FCs closest to the target.
 
 The **Limits → Per-FC time limit** setting bounds each FC independently. If an FC reaches that limit, its partial or previous result remains visible and calculation continues with the next FC. Probability sampling stops early after at least 64 trials when the P10, P50, and P90 estimates have stabilized; uncertain forecasts may continue up to 256 trials.
 

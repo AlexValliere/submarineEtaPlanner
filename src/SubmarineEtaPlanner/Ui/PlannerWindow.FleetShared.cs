@@ -50,9 +50,10 @@ public sealed partial class PlannerWindow
 
     private IReadOnlyList<FcOperationalProjection> CreateProjections(EtaPlannerSnapshot currentSnapshot, DateTimeOffset now)
     {
-        this.fuelPresentationCache.Retain(currentSnapshot.FreeCompanies.Select(fc => fc.FcIdKey).ToHashSet());
+        var visibleFreeCompanies = VisibleFreeCompanies(currentSnapshot);
+        this.fuelPresentationCache.Retain(visibleFreeCompanies.Select(fc => fc.FcIdKey).ToHashSet());
         var results = currentSnapshot.Results.ToDictionary(result => Convert.ToHexString(result.FcId));
-        return currentSnapshot.FreeCompanies.Select(fc =>
+        return visibleFreeCompanies.Select(fc =>
         {
             var preferences = this.configuration.GetFcPreferences(fc.FcIdKey);
             var effective = EffectiveEtaSettingsResolver.Resolve(
@@ -70,6 +71,29 @@ public sealed partial class PlannerWindow
                 now,
                 assignments);
         }).ToArray();
+    }
+
+    private FcState[] VisibleFreeCompanies(EtaPlannerSnapshot currentSnapshot)
+        => currentSnapshot.FreeCompanies
+            .Where(fc => this.configuration.IsFcVisible(fc.FcIdKey))
+            .ToArray();
+
+    private bool DrawNoVisibleFreeCompanies(EtaPlannerSnapshot currentSnapshot)
+    {
+        if (currentSnapshot.FreeCompanies.Count == 0)
+            return false;
+        if (VisibleFreeCompanies(currentSnapshot).Length > 0)
+            return false;
+
+        PlannerUi.Callout(
+            "all-fcs-hidden",
+            FontAwesomeIcon.EyeSlash,
+            "All free companies are hidden",
+            "Choose which tracked free companies should appear in the planner from FC Setup.",
+            PlannerUi.Muted);
+        if (ImGui.Button("Manage FC visibility"))
+            this.currentPage = PlannerPage.FcSetup;
+        return true;
     }
 
     private void DrawSearch(string hint)

@@ -146,9 +146,11 @@ public sealed partial class PlannerWindow
         if (this.refreshTask is { IsCompleted: false })
         {
             var done = current.FcProgress.Count(fc => fc.Status is not (FcCalculationStatus.Queued or FcCalculationStatus.Calculating));
-            return $"Calculating · {done}/{current.FreeCompanies.Count} FCs processed";
+            return $"Calculating · {done}/{current.FcProgress.Count} FCs processed";
         }
         if (this.trackerDataChanged) return "New tracker data available · refresh to update";
+        if (current.FreeCompanies.Count > 0 && current.FcProgress.Count == 0)
+            return "No visible FCs · manage in FC Setup";
         var waiting = current.FcProgress.Count(fc => fc.Status == FcCalculationStatus.AwaitingTrackerUpdate);
         if (waiting > 0) return $"Waiting for SubmarineTracker · {waiting} FCs";
         var age = DateTimeOffset.UtcNow - current.GeneratedAtUtc;

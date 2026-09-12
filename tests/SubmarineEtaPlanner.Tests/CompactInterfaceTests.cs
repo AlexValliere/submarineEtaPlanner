@@ -285,14 +285,16 @@ public sealed class CompactInterfaceTests
     [Fact]
     public void FavoriteSurvivesDiscardingOrSavingUnrelatedDraft()
     {
-        var preferences = new FcPreferences { TargetRankOverride = 90 };
+        var preferences = new FcPreferences { Hidden = true, TargetRankOverride = 90 };
         var staged = FcSetupDraft.Capture(preferences, []) with { TargetRankOverride = 100 };
         preferences.Favorite = true;
         var discarded = FcSetupDraft.Capture(preferences, []);
         Assert.Equal(90, discarded.TargetRankOverride);
         Assert.True(preferences.Favorite);
+        Assert.True(preferences.Hidden);
         staged.ApplyTo(preferences);
         Assert.True(preferences.Favorite);
+        Assert.True(preferences.Hidden);
         Assert.Equal(100, preferences.TargetRankOverride);
     }
 

@@ -84,6 +84,17 @@ public sealed record PlannerCalculationRequest(
     EtaSettings GlobalSettings,
     IReadOnlyDictionary<string, FcSimulationOverride> FreeCompanyOverrides)
 {
+    private IReadOnlySet<string> hiddenFreeCompanyIds
+        = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlySet<string> HiddenFreeCompanyIds
+    {
+        get => this.hiddenFreeCompanyIds;
+        init => this.hiddenFreeCompanyIds = new HashSet<string>(
+            (IEnumerable<string>?)value ?? Array.Empty<string>(),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
     public static PlannerCalculationRequest FromGlobalSettings(EtaSettings settings)
         => new(settings, new Dictionary<string, FcSimulationOverride>(StringComparer.OrdinalIgnoreCase));
 }

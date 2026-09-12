@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.55.0
+
+- Added independently saved FC visibility controls to FC Setup, including a compact all-FC manager and Show all recovery action.
+- Excluded hidden FCs from Operations, Leveling, Unlocks, Income, totals, charts, warnings, and forecast work while preserving their tracker data and planner preferences.
+- Added a recoverable all-hidden empty state and kept incremental refreshes from restoring stale hidden-FC results.
+
 ## 0.5.54.0
 
 - Fixed expanded Leveling FC tables clipping the fourth submarine row at scaled UI sizes.

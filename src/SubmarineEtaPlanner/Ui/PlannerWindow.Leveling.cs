@@ -15,6 +15,8 @@ public sealed partial class PlannerWindow
             return;
 
         DrawFleetNotices(currentSnapshot);
+        if (DrawNoVisibleFreeCompanies(currentSnapshot))
+            return;
         PlannerUi.WrappedText($"Global target R{this.configuration.Settings.TargetRank} · {EtaModelLabels[(int)this.configuration.Settings.EtaModel]}", PlannerUi.Muted);
         DrawSearch("Search all leveling fleets…");
         PlannerUi.SameLineIfFits("", 210f * ImGuiHelpers.GlobalScale);

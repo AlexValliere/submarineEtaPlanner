@@ -105,6 +105,8 @@ public sealed partial class PlannerWindow
         var currentSnapshot = this.snapshot;
         if (currentSnapshot is null)
             return;
+        if (DrawNoVisibleFreeCompanies(currentSnapshot))
+            return;
 
         DrawSummaryCards(currentSnapshot);
         ImGui.Spacing();
@@ -154,7 +156,8 @@ public sealed partial class PlannerWindow
 
         var resultsByFc = currentSnapshot.Results.ToDictionary(result => Convert.ToHexString(result.FcId));
         var progressByFc = currentSnapshot.FcProgress.ToDictionary(progress => progress.FcIdKey);
-        var visibleEntries = currentSnapshot.FreeCompanies
+        var visibleFreeCompanies = VisibleFreeCompanies(currentSnapshot);
+        var visibleEntries = visibleFreeCompanies
             .Where(fc => ShouldIncludeFc(fc, this.configuration.Settings.TargetRank, this.configuration.ResultsFilter))
             .Where(fc => string.IsNullOrWhiteSpace(this.fcSearch) ||
                          fc.DisplayName.Contains(this.fcSearch, StringComparison.OrdinalIgnoreCase))
@@ -166,7 +169,7 @@ public sealed partial class PlannerWindow
             .ToArray();
 
         ImGui.Spacing();
-        ImGui.TextColored(PlannerUi.Muted, $"{visibleEntries.Length} shown of {currentSnapshot.FreeCompanies.Count} tracked free companies");
+        ImGui.TextColored(PlannerUi.Muted, $"{visibleEntries.Length} shown of {visibleFreeCompanies.Length} visible free companies");
         ImGui.Spacing();
 
         if (currentSnapshot.FreeCompanies.Count == 0)
@@ -215,11 +218,12 @@ public sealed partial class PlannerWindow
 
     private void DrawSummaryCards(EtaPlannerSnapshot currentSnapshot)
     {
-        var total = currentSnapshot.FreeCompanies.Count;
-        var leveling = currentSnapshot.FreeCompanies.Count(fc =>
+        var visibleFreeCompanies = VisibleFreeCompanies(currentSnapshot);
+        var total = visibleFreeCompanies.Length;
+        var leveling = visibleFreeCompanies.Count(fc =>
             !ResultsViewState.IsReady(fc, this.configuration.Settings.TargetRank));
         var ready = total - leveling;
-        var recordedGil = currentSnapshot.FreeCompanies.Sum(fc => fc.RecordedSalvageGil);
+        var recordedGil = visibleFreeCompanies.Sum(fc => fc.RecordedSalvageGil);
         var warnings = currentSnapshot.FcProgress.Count(progress =>
             progress.Status is FcCalculationStatus.Partial or FcCalculationStatus.TimedOut or FcCalculationStatus.Failed or FcCalculationStatus.AwaitingTrackerUpdate);
 
@@ -227,7 +231,7 @@ public sealed partial class PlannerWindow
             return;
 
         ImGui.TableNextColumn();
-        PlannerUi.MetricCard(this.typography, "metric-tracked", FontAwesomeIcon.Ship, total.ToString(), "Tracked FCs", PlannerUi.Cyan);
+        PlannerUi.MetricCard(this.typography, "metric-tracked", FontAwesomeIcon.Ship, total.ToString(), "Visible FCs", PlannerUi.Cyan);
         ImGui.TableNextColumn();
         PlannerUi.MetricCard(this.typography, "metric-leveling", FontAwesomeIcon.ChartLine, leveling.ToString(), "Leveling", PlannerUi.Teal);
         ImGui.TableNextColumn();

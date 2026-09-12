@@ -295,7 +295,7 @@ public sealed partial class PlannerWindow : Window
         PlannerPage.Leveling => "Every leveling FC and submarine in one progression view.",
         PlannerPage.Unlocks => "FC-wide destination progress and sector discovery paths.",
         PlannerPage.Income => "Gross NPC salvage value from recorded SubmarineTracker returns.",
-        PlannerPage.FcSetup => "Favorites, targets, strategies, submarine roles, and pinned farming routes.",
+        PlannerPage.FcSetup => "Visibility, favorites, targets, strategies, submarine roles, and pinned farming routes.",
         PlannerPage.Settings => "Global simulation, route, data, build, and display preferences.",
         _ => string.Empty,
     };
@@ -351,7 +351,10 @@ public sealed partial class PlannerWindow : Window
         {
         }
         var settings = CloneSettings(this.configuration.Settings);
-        var calculationRequest = new PlannerCalculationRequest(settings, this.configuration.GetSimulationOverrides());
+        var calculationRequest = new PlannerCalculationRequest(settings, this.configuration.GetSimulationOverrides())
+        {
+            HiddenFreeCompanyIds = this.configuration.GetHiddenFreeCompanyIds(),
+        };
         this.refreshDataFingerprint = this.plannerService.GetDataFingerprint(settings);
         var now = DateTimeOffset.UtcNow;
         Plugin.Log.Information("Starting submarine ETA calculation.");
@@ -429,7 +432,7 @@ public sealed partial class PlannerWindow : Window
         var results = progress.Results.ToDictionary(result => Convert.ToHexString(result.FcId));
         if (this.refreshBaseSnapshot is not null)
         {
-            var currentFcIds = progress.FreeCompanies.Select(fc => fc.FcIdKey).ToHashSet();
+            var currentFcIds = progress.FcProgress.Select(fc => fc.FcIdKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var previous in this.refreshBaseSnapshot.Results)
             {
                 var key = Convert.ToHexString(previous.FcId);
@@ -524,7 +527,9 @@ public sealed partial class PlannerWindow : Window
             .Where(progress => progress.Status == FcCalculationStatus.AwaitingTrackerUpdate)
             .Select(progress => progress.FcIdKey)
             .ToHashSet();
-        return snapshot.FreeCompanies.Any(fc =>
+        return snapshot.FreeCompanies
+            .Where(fc => this.configuration.IsFcVisible(fc.FcIdKey))
+            .Any(fc =>
             !awaitingFcIds.Contains(fc.FcIdKey) &&
             fc.Submarines.Any(submarine =>
                 submarine.Rank < EffectiveEtaSettingsResolver.Resolve(

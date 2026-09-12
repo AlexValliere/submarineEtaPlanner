@@ -73,6 +73,7 @@ public sealed class FarmingConfigurationMigrationTests
         Assert.Equal(0, preferences.ManualCeruleumTanks);
         Assert.Null(preferences.FuelHolderCharacterId);
         Assert.Null(preferences.CeruleumReserve);
+        Assert.False(preferences.Hidden);
     }
 
     [Fact]
@@ -220,6 +221,7 @@ public sealed class FarmingConfigurationMigrationTests
     {
         var preferences = new FcPreferences
         {
+            Hidden = true,
             FuelStockMode = FuelStockMode.Character,
             FuelHolderCharacterId = 76561198000000001,
             ManualCeruleumTanks = 450,
@@ -239,6 +241,7 @@ public sealed class FarmingConfigurationMigrationTests
         var restored = JsonSerializer.Deserialize<FcPreferences>(json);
 
         Assert.NotNull(restored);
+        Assert.True(restored.Hidden);
         Assert.Equal(FuelStockMode.Character, restored.FuelStockMode);
         Assert.Equal(preferences.FuelHolderCharacterId, restored.FuelHolderCharacterId);
         Assert.Equal(450, restored.ManualCeruleumTanks);
@@ -254,6 +257,7 @@ public sealed class FarmingConfigurationMigrationTests
     {
         var preferences = new FcPreferences
         {
+            Hidden = true,
             FuelStockMode = FuelStockMode.Manual,
             ManualCeruleumTanks = 500,
             FuelHolderCharacterId = 123,

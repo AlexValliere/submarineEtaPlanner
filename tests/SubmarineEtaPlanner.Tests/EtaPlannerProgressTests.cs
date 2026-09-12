@@ -74,7 +74,11 @@ public sealed class EtaPlannerProgressTests
         public SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings)
             => SubmarineTrackerDataFingerprint.Capture("test.db");
 
-        public IReadOnlyList<FcState> Read(EtaSettings settings, ICollection<string> warnings) => freeCompanies;
+        public IReadOnlyList<FcState> Read(
+            EtaSettings settings,
+            ICollection<string> warnings,
+            IReadOnlySet<string>? hiddenFreeCompanyIds = null)
+            => freeCompanies;
     }
 
     private sealed class StubDataDiagnostics(IReadOnlyList<string> warnings) : IPlannerDataDiagnostics

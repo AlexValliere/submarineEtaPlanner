@@ -39,20 +39,30 @@ public sealed partial class PlannerWindow
             SelectSetupFc(ordered[0].FcIdKey);
         var selected = ordered.First(fc => fc.FcIdKey == this.selectedSetupFcId);
 
+        DrawFcVisibilityManager(ordered);
+        ImGui.Spacing();
+
         ImGui.SetNextItemWidth(Math.Min(420f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X));
-        if (ImGui.BeginCombo("Free company##setup-fc", selected.DisplayName))
+        var selectedHidden = this.configuration.GetFcPreferences(selected.FcIdKey).Hidden;
+        if (ImGui.BeginCombo(
+                "Free company##setup-fc",
+                selectedHidden ? $"{selected.DisplayName} · Hidden" : selected.DisplayName))
         {
             foreach (var fc in ordered)
             {
-                var favoritePrefix = this.configuration.GetFcPreferences(fc.FcIdKey).Favorite ? "★ " : string.Empty;
-                if (ImGui.Selectable($"{favoritePrefix}{fc.DisplayName}##select-{fc.FcIdKey}", fc.FcIdKey == selected.FcIdKey))
+                var fcPreferences = this.configuration.GetFcPreferences(fc.FcIdKey);
+                var favoritePrefix = fcPreferences.Favorite ? "★ " : string.Empty;
+                var hiddenSuffix = fcPreferences.Hidden ? " · Hidden" : string.Empty;
+                if (ImGui.Selectable(
+                        $"{favoritePrefix}{fc.DisplayName}{hiddenSuffix}##select-{fc.FcIdKey}",
+                        fc.FcIdKey == selected.FcIdKey))
                     RequestSetupFcSelection(fc.FcIdKey);
             }
             ImGui.EndCombo();
         }
 
         ImGui.Spacing();
-        BeginSettingsCard("fc-preference-card", selected.DisplayName, "Favorites: Saved automatically. Target, strategy, assignment, and pinned-route changes remain staged until Save changes.");
+        BeginSettingsCard("fc-preference-card", selected.DisplayName, "Visibility and favorites are saved automatically. Target, strategy, assignment, and pinned-route changes remain staged until Save changes.");
         var preferences = this.configuration.GetFcPreferences(selected.FcIdKey);
         var favorite = preferences.Favorite;
         using (PlannerUi.SettingRow("Favorite", "Favorite FCs remain above non-favorites on Operations, Leveling, and Income."))
@@ -103,6 +113,103 @@ public sealed partial class PlannerWindow
         DrawCeruleumStockCard(selected);
         DrawPinnedRoutePicker();
         DrawForgetFuelObservationModal();
+    }
+
+    private void DrawFcVisibilityManager(IReadOnlyList<FcState> freeCompanies)
+    {
+        var visibleCount = freeCompanies.Count(fc => this.configuration.IsFcVisible(fc.FcIdKey));
+        BeginSettingsCard(
+            "fc-visibility-card",
+            "FC visibility",
+            $"{visibleCount} of {freeCompanies.Count} tracked free companies are visible. Hidden FCs are excluded from every fleet page, total, and forecast. Changes are saved automatically.");
+
+        ImGui.BeginDisabled(visibleCount == freeCompanies.Count);
+        if (PlannerUi.IconButtonWithText("show-all-fcs", FontAwesomeIcon.Eye, "Show all"))
+            ShowAllFreeCompanies(freeCompanies);
+        ImGui.EndDisabled();
+        ImGui.Spacing();
+
+        var tableFlags = ImGuiTableFlags.BordersOuter |
+                         ImGuiTableFlags.BordersV |
+                         ImGuiTableFlags.RowBg |
+                         ImGuiTableFlags.ScrollY |
+                         ImGuiTableFlags.SizingStretchProp;
+        var rowHeight = ImGui.GetFrameHeightWithSpacing();
+        var tableHeight = Math.Min(
+            240f * ImGuiHelpers.GlobalScale,
+            rowHeight * (freeCompanies.Count + 1) + ImGui.GetStyle().CellPadding.Y * 2);
+        if (ImGui.BeginTable("fc-visibility-table", 3, tableFlags, new Vector2(-1, tableHeight)))
+        {
+            ImGui.TableSetupColumn("Visible", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("FC tag", ImGuiTableColumnFlags.WidthStretch, 1f);
+            ImGui.TableSetupColumn("World", ImGuiTableColumnFlags.WidthStretch, 1.2f);
+            ImGui.TableSetupScrollFreeze(0, 1);
+            ImGui.TableHeadersRow();
+
+            foreach (var fc in freeCompanies)
+            {
+                var visible = this.configuration.IsFcVisible(fc.FcIdKey);
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                if (ImGui.Checkbox($"##visible-{fc.FcIdKey}", ref visible))
+                    SetFreeCompanyVisible(fc.FcIdKey, visible);
+                PlannerUi.Tooltip(visible
+                    ? "Visible in the planner · saved automatically"
+                    : "Hidden from the planner · saved automatically");
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(fc.FreeCompanyTag);
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(fc.World);
+            }
+            ImGui.EndTable();
+        }
+        EndSettingsCard();
+    }
+
+    private void ShowAllFreeCompanies(IEnumerable<FcState> freeCompanies)
+    {
+        var changed = false;
+        foreach (var fc in freeCompanies)
+        {
+            var preferences = this.configuration.GetFcPreferences(fc.FcIdKey);
+            if (!preferences.Hidden)
+                continue;
+            preferences.Hidden = false;
+            changed = true;
+        }
+        if (changed)
+            SaveVisibilityAndRefresh();
+    }
+
+    private void SetFreeCompanyVisible(string fcIdKey, bool visible)
+    {
+        var preferences = this.configuration.GetFcPreferences(fcIdKey);
+        if (preferences.Hidden == !visible)
+            return;
+
+        preferences.Hidden = !visible;
+        if (!visible)
+        {
+            if (string.Equals(this.incomeFcScope, fcIdKey, StringComparison.OrdinalIgnoreCase))
+            {
+                this.incomeFcScope = null;
+                this.expandIncomeFc = null;
+            }
+            if (string.Equals(this.selectedUnlockFcId, fcIdKey, StringComparison.OrdinalIgnoreCase))
+            {
+                this.selectedUnlockFcId = null;
+                this.selectedUnlockMapId = null;
+                this.selectedUnlockSectorId = null;
+                this.unlockSearch = string.Empty;
+            }
+        }
+        SaveVisibilityAndRefresh();
+    }
+
+    private void SaveVisibilityAndRefresh()
+    {
+        this.saveConfiguration();
+        QueueRefresh(ForecastRefreshMode.Incremental);
     }
 
     private void DrawFcSetupActionBar()

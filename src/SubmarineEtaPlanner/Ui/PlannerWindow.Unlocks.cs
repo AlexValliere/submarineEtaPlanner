@@ -22,7 +22,9 @@ public sealed partial class PlannerWindow
             return;
 
         DrawFleetNotices(currentSnapshot);
-        var orderedFcs = currentSnapshot.FreeCompanies
+        if (DrawNoVisibleFreeCompanies(currentSnapshot))
+            return;
+        var orderedFcs = VisibleFreeCompanies(currentSnapshot)
             .OrderByDescending(fc => this.configuration.GetFcPreferences(fc.FcIdKey).Favorite)
             .ThenBy(fc => fc.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();

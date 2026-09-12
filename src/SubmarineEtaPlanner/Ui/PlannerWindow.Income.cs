@@ -15,11 +15,13 @@ public sealed partial class PlannerWindow
             return;
 
         DrawFleetNotices(currentSnapshot);
+        if (DrawNoVisibleFreeCompanies(currentSnapshot))
+            return;
         PlannerUi.WrappedText("Recorded gross NPC salvage value · summary coverage begins with tracked salvaged accessories.", PlannerUi.Muted);
         PlannerUi.Tooltip("Recorded average spreads historical gross gil over the covered period. Costs are not deducted; these are past observations, not guaranteed income.");
         if (this.incomeFcScope is { } scope)
         {
-            var selected = currentSnapshot.FreeCompanies.FirstOrDefault(fc => fc.FcIdKey == scope);
+            var selected = VisibleFreeCompanies(currentSnapshot).FirstOrDefault(fc => fc.FcIdKey == scope);
             if (selected is null) this.incomeFcScope = null;
             else
             {
@@ -68,7 +70,7 @@ public sealed partial class PlannerWindow
         };
         ImGui.TextColored(
             PlannerUi.Muted,
-            $"{metrics.Count} FC{(metrics.Count == 1 ? string.Empty : "s")} shown of {allProjections.Count} tracked · {modeLabel}");
+            $"{metrics.Count} FC{(metrics.Count == 1 ? string.Empty : "s")} shown of {allProjections.Count} visible · {modeLabel}");
         if (metrics.Count == 0)
         {
             ImGui.Spacing();

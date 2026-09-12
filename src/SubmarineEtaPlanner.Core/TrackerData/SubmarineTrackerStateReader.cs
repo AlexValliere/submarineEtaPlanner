@@ -8,7 +8,10 @@ public interface ISubmarineTrackerStateReader
 {
     SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings);
 
-    IReadOnlyList<FcState> Read(EtaSettings settings, ICollection<string> warnings);
+    IReadOnlyList<FcState> Read(
+        EtaSettings settings,
+        ICollection<string> warnings,
+        IReadOnlySet<string>? hiddenFreeCompanyIds = null);
 }
 
 public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageValueCatalog = null) : ISubmarineTrackerStateReader
@@ -19,7 +22,10 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
     public SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings)
         => SubmarineTrackerDataFingerprint.Capture(ResolveDatabasePath(settings));
 
-    public IReadOnlyList<FcState> Read(EtaSettings settings, ICollection<string> warnings)
+    public IReadOnlyList<FcState> Read(
+        EtaSettings settings,
+        ICollection<string> warnings,
+        IReadOnlySet<string>? hiddenFreeCompanyIds = null)
     {
         var dbPath = ResolveDatabasePath(settings);
         if (!File.Exists(dbPath))
@@ -32,9 +38,15 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
         {
             using var connection = OpenReadOnly(dbPath);
             using var transaction = connection.BeginTransaction();
-            var fcs = ReadFreeCompanies(connection, transaction, warnings);
-            var voyageHistory = ReadVoyageHistory(connection, transaction, warnings);
-            var subs = ReadSubmarines(connection, transaction, settings, warnings, voyageHistory.Observations)
+            var fcs = ReadFreeCompanies(connection, transaction, warnings, hiddenFreeCompanyIds);
+            var voyageHistory = ReadVoyageHistory(connection, transaction, warnings, hiddenFreeCompanyIds);
+            var subs = ReadSubmarines(
+                    connection,
+                    transaction,
+                    settings,
+                    warnings,
+                    voyageHistory.Observations,
+                    hiddenFreeCompanyIds)
                 .GroupBy(s => Convert.ToHexString(s.FcId))
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<SubmarineState>)g.OrderBy(s => s.Name).ToArray());
 
@@ -66,7 +78,8 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
     private static IReadOnlyList<FcState> ReadFreeCompanies(
         SQLiteConnection connection,
         SQLiteTransaction transaction,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        IReadOnlySet<string>? hiddenFreeCompanyIds)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -77,11 +90,12 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
         while (reader.Read())
         {
             var fcId = (byte[])reader["FreeCompanyId"];
-            var unlocked = DecodeDictionaryKeys((byte[])reader["UnlockedSectors"], warnings, "UnlockedSectors");
-            var explored = DecodeDictionaryKeys((byte[])reader["ExploredSectors"], warnings, "ExploredSectors");
+            var fcWarnings = WarningsForFc(fcId, warnings, hiddenFreeCompanyIds);
+            var unlocked = DecodeDictionaryKeys((byte[])reader["UnlockedSectors"], fcWarnings, "UnlockedSectors");
+            var explored = DecodeDictionaryKeys((byte[])reader["ExploredSectors"], fcWarnings, "ExploredSectors");
             var unlockDataKnown = unlocked.Count > 0;
             if (!unlockDataKnown)
-                warnings.Add($"Unlock data is missing for {reader.GetString(1)}; its leveling ETA is incomplete.");
+                fcWarnings.Add($"Unlock data is missing for {reader.GetString(1)}; its leveling ETA is incomplete.");
 
             fcs.Add(new FcState(
                 fcId,
@@ -104,7 +118,8 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
         SQLiteTransaction transaction,
         EtaSettings settings,
         ICollection<string> warnings,
-        IReadOnlyDictionary<TrackedSubmarineKey, IReadOnlyList<VoyageObservation>> voyageHistory)
+        IReadOnlyDictionary<TrackedSubmarineKey, IReadOnlyList<VoyageObservation>> voyageHistory,
+        IReadOnlySet<string>? hiddenFreeCompanyIds)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -117,11 +132,13 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
         var subs = new List<SubmarineState>();
         while (reader.Read())
         {
-            var route = DecodeRoute((byte[])reader["Route"], warnings);
+            var fcId = (byte[])reader["FreeCompanyId"];
+            var route = DecodeRoute(
+                (byte[])reader["Route"],
+                WarningsForFc(fcId, warnings, hiddenFreeCompanyIds));
             var returnSeconds = Convert.ToInt64(reader["Return"]);
             var hasValidReturn = returnSeconds > 0;
             var returnAt = UnixSecondsToUtc(returnSeconds);
-            var fcId = (byte[])reader["FreeCompanyId"];
             var name = reader.GetString(3);
             var submarineId = Convert.ToInt64(reader["SubmarineId"]);
             var manualOverride = GetManualOverride(settings, fcId, submarineId);
@@ -168,7 +185,8 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
     private VoyageHistoryReadResult ReadVoyageHistory(
         SQLiteConnection connection,
         SQLiteTransaction transaction,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        IReadOnlySet<string>? hiddenFreeCompanyIds)
     {
         try
         {
@@ -201,8 +219,11 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
+                var fcId = (byte[])reader["FreeCompanyId"];
+                if (hiddenFreeCompanyIds?.Contains(Convert.ToHexString(fcId)) == true)
+                    continue;
                 rows.Add(new VoyageObservationRawRow(
-                    (byte[])reader["FreeCompanyId"],
+                    fcId,
                     Convert.ToInt64(reader["SubmarineId"]),
                     UnixSecondsToUtc(Convert.ToInt64(reader["Return"])),
                     Convert.ToUInt32(reader["Sector"]),
@@ -273,6 +294,14 @@ public sealed class SubmarineTrackerStateReader(ISalvageValueCatalog? salvageVal
         command.Parameters.AddWithValue("@name", tableName);
         return Convert.ToInt32(command.ExecuteScalar()) > 0;
     }
+
+    private static ICollection<string> WarningsForFc(
+        byte[] fcId,
+        ICollection<string> warnings,
+        IReadOnlySet<string>? hiddenFreeCompanyIds)
+        => hiddenFreeCompanyIds?.Contains(Convert.ToHexString(fcId)) == true
+            ? new List<string>()
+            : warnings;
 
     private static SQLiteConnection OpenReadOnly(string dbPath)
     {

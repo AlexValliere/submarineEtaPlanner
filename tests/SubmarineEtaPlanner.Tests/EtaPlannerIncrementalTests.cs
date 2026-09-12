@@ -45,7 +45,7 @@ public sealed class EtaPlannerIncrementalTests
     public void FullRefreshAlwaysCalculatesEveryFc()
     {
         var now = DateTimeOffset.UnixEpoch.AddDays(100);
-        var reader = new MutableStateReader([CreateFc(1, 50, now.AddDays(1)), CreateFc(2, 60, now.AddDays(1))]);
+        var reader = new MutableStateReader([CreateFc(1, 50, now.AddDays(1)), CreateFc(0xab, 60, now.AddDays(1))]);
         var simulator = new RecordingSimulator();
         var service = new EtaPlannerService(reader, simulator);
         var settings = Settings();
@@ -312,6 +312,93 @@ public sealed class EtaPlannerIncrementalTests
         Assert.Equal(["02", "03"], refreshed.Results.Select(result => Convert.ToHexString(result.FcId)).Order().ToArray());
     }
 
+    [Fact]
+    public void HiddenFcRemainsTrackedButIsExcludedFromForecastWork()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(100);
+        var reader = new MutableStateReader([CreateFc(1, 50, now.AddDays(1)), CreateFc(0xab, 60, now.AddDays(1))]);
+        var simulator = new RecordingSimulator();
+        var service = new EtaPlannerService(reader, simulator);
+        var request = PlannerCalculationRequest.FromGlobalSettings(Settings()) with
+        {
+            HiddenFreeCompanyIds = new HashSet<string> { "ab" },
+        };
+
+        var snapshot = service.Calculate(request, now, CancellationToken.None);
+
+        Assert.Equal(["01"], simulator.Calls);
+        Assert.Equal(["01", "AB"], snapshot.FreeCompanies.Select(fc => fc.FcIdKey).Order().ToArray());
+        Assert.Equal("01", Convert.ToHexString(Assert.Single(snapshot.Results).FcId));
+        Assert.Equal("01", Assert.Single(snapshot.FcProgress).FcIdKey);
+        Assert.Equal(["01"], snapshot.FcCalculationSettingsFingerprints.Keys);
+        Assert.Equal(1, snapshot.Metrics!.CalculatedFreeCompanies);
+        Assert.True(reader.LastHiddenFreeCompanyIds.Contains("AB"));
+    }
+
+    [Fact]
+    public void HidingAndUnhidingFcUpdatesIncrementalCalculationScope()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(100);
+        var reader = new MutableStateReader([CreateFc(1, 50, now.AddDays(1)), CreateFc(2, 60, now.AddDays(1))]);
+        var simulator = new RecordingSimulator();
+        var service = new EtaPlannerService(reader, simulator);
+        var settings = Settings();
+        var initial = service.Calculate(settings, now);
+        simulator.Calls.Clear();
+
+        var hiddenRequest = PlannerCalculationRequest.FromGlobalSettings(settings) with
+        {
+            HiddenFreeCompanyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "02" },
+        };
+        var hidden = service.Calculate(
+            hiddenRequest,
+            now.AddMinutes(5),
+            CancellationToken.None,
+            previousSnapshot: initial,
+            refreshMode: ForecastRefreshMode.Incremental);
+
+        Assert.Empty(simulator.Calls);
+        Assert.Equal("01", Convert.ToHexString(Assert.Single(hidden.Results).FcId));
+        Assert.Equal("01", Assert.Single(hidden.FcProgress).FcIdKey);
+        Assert.Equal(1, hidden.Metrics!.ReusedFreeCompanies);
+
+        simulator.Calls.Clear();
+        var restored = service.Calculate(
+            PlannerCalculationRequest.FromGlobalSettings(settings),
+            now.AddMinutes(10),
+            CancellationToken.None,
+            previousSnapshot: hidden,
+            refreshMode: ForecastRefreshMode.Incremental);
+
+        Assert.Equal(["02"], simulator.Calls);
+        Assert.Equal(["01", "02"], restored.Results.Select(result => Convert.ToHexString(result.FcId)).Order().ToArray());
+        Assert.Equal(1, restored.Metrics!.ReusedFreeCompanies);
+        Assert.Equal(1, restored.Metrics.CalculatedFreeCompanies);
+    }
+
+    [Fact]
+    public void AllHiddenFcsProduceACompleteEmptyForecast()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(100);
+        var reader = new MutableStateReader([CreateFc(1, 50, now.AddDays(1)), CreateFc(2, 60, now.AddDays(1))]);
+        var simulator = new RecordingSimulator();
+        var service = new EtaPlannerService(reader, simulator);
+        var request = PlannerCalculationRequest.FromGlobalSettings(Settings()) with
+        {
+            HiddenFreeCompanyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "01", "02" },
+        };
+
+        var snapshot = service.Calculate(request, now, CancellationToken.None);
+
+        Assert.True(snapshot.IsComplete);
+        Assert.Equal(2, snapshot.FreeCompanies.Count);
+        Assert.Empty(snapshot.Results);
+        Assert.Empty(snapshot.FcProgress);
+        Assert.Empty(snapshot.FcCalculationSettingsFingerprints);
+        Assert.Empty(simulator.Calls);
+        Assert.Equal(0, snapshot.Metrics!.CalculatedFreeCompanies);
+    }
+
     private static FcCalculationProgress Progress(EtaPlannerSnapshot snapshot, string key)
         => snapshot.FcProgress.Single(progress => progress.FcIdKey == key);
 
@@ -341,10 +428,20 @@ public sealed class EtaPlannerIncrementalTests
     {
         public IReadOnlyList<FcState> FreeCompanies { get; set; } = freeCompanies;
 
+        public IReadOnlySet<string> LastHiddenFreeCompanyIds { get; private set; }
+            = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         public SubmarineTrackerDataFingerprint GetDataFingerprint(EtaSettings settings)
             => SubmarineTrackerDataFingerprint.Capture("test.db");
 
-        public IReadOnlyList<FcState> Read(EtaSettings settings, ICollection<string> warnings) => FreeCompanies;
+        public IReadOnlyList<FcState> Read(
+            EtaSettings settings,
+            ICollection<string> warnings,
+            IReadOnlySet<string>? hiddenFreeCompanyIds = null)
+        {
+            LastHiddenFreeCompanyIds = hiddenFreeCompanyIds ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return FreeCompanies;
+        }
     }
 
     private sealed class RecordingSimulator : IEtaSimulator
