@@ -1,163 +1,110 @@
 # Submarine ETA Planner
 
 [![Build](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml/badge.svg)](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml)
+[![Version: 1.0.0](https://img.shields.io/badge/version-1.0.0-teal.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-teal.svg)](LICENSE)
 
-Submarine ETA Planner turns local SubmarineTracker data into a Free Company fleet-operations workspace. It highlights returns and next actions, forecasts leveling and sector unlock progress, reports recorded salvage income, and projects recurring farming cycles and ceruleum fuel runway.
+Plan your Free Company submarine fleets from one place. See what is ready to collect, what returns next, when leveling fleets should reach their target, and how long your farming fuel will last.
 
-The plugin is read-only with respect to the game and SubmarineTracker: it does not collect submarines, resend voyages, buy fuel, or modify tracker data. Its Operations, Leveling, Unlocks, Income, and FC Setup views organize the tracked FCs you choose to show while Settings provides global simulation and display controls.
+**1.0.0 is the first stable release**, shaped by player use and in-game validation. Six connected views bring daily operations, progression, income, and fleet setup into a compact graphite-and-teal interface that adapts to your window size. Existing users keep their saved settings and fleet preferences when updating.
 
-## Features
+The planner uses local [Submarine Tracker](https://github.com/Infiziert90/SubmarineTracker) data. It does not collect submarines, send voyages, buy fuel, or modify tracker data; you perform workshop actions in game. The plugin makes no runtime web requests, and your fleet data stays local.
 
-- **Operations:** prioritize fleets that need attention, follow current returns, review recommended next actions, and filter mixed leveling and farming fleets.
-- **Leveling:** forecast every assigned leveling submarine to an FC-specific target rank, with route, EXP, rank, and likely completion details.
-- **Unlocks:** inspect FC-specific unlocked, explored, discoverable, locked, and actively attempted sectors on schematic maps with complete discovery paths.
-- **Income:** compare recorded gross NPC salvage value across FCs, submarines, routes, and 7-, 30-, 90-, 365-day, or lifetime periods.
-- **FC Setup:** choose which tracked FCs are visible, and save favorites, target ranks, leveling strategies, submarine roles, pinned farming routes, fuel-stock sources, safety stock, and collection delays.
-- **Settings:** tune global simulation, route, data-source, build-profile, calculation-limit, and display preferences.
-- Distinguish active voyages from conditional next routes, and coordinate shared unlock attempts across the whole FC fleet.
-- Model sector-discovery RNG with median ETAs and P10-P90 likely ranges without presenting locked sectors as guaranteed.
-- Project recurring farming dispatch cycles, fuel per voyage, remaining full-fleet sends, approximate runway, and refill deadlines.
-- List every visible tracked FC immediately, publish forecasts progressively, and reuse unchanged results when only part of SubmarineTracker's data changes.
+## Your fleet at a glance
+
+| View | What you can do |
+| --- | --- |
+| **Operations** | Prioritize ready submarines, upcoming returns, low fuel, and fleets needing setup. Inspect current voyages and recommended next actions. |
+| **Leveling** | Forecast progress toward each FC's target rank, with routes, EXP, expected completion dates, and likely ranges. |
+| **Unlocks** | Explore sector maps, follow discovery prerequisites, and see unlock attempts shared across your FC fleet. |
+| **Income** | Compare recorded gross NPC salvage value by FC, submarine, route, and period, with a history chart. |
+| **FC Setup** | Choose visible FCs and favorites; set targets, strategies, submarine roles, farming routes, collection delays, and fuel reserves. |
+| **Settings** | Adjust global simulation, route, data-source, build-profile, calculation-limit, and display preferences. |
+
+Forecasts appear progressively as each FC finishes calculating. Unchanged fleets reuse their results, while missing data and uncertain unlocks remain clearly identified.
 
 ## Installation
 
-Submarine ETA Planner requires [XIVLauncher](https://goatcorp.github.io/) and Dalamud.
-
-[Submarine Tracker](https://github.com/Infiziert90/SubmarineTracker) must also be installed and enabled. If it is unavailable, the planner keeps existing results visible, blocks refreshes, and provides a shortcut to its Dalamud installer page.
+Requires **XIVLauncher with Dalamud** and **Submarine Tracker installed and enabled**.
 
 1. Type `/xlsettings` in the FFXIV chat box.
-2. Open the **Experimental** tab and scroll to **Custom Plugin Repositories**.
-3. Paste the repository URL below into an empty field, press the **+** button, and ensure it is enabled.
+2. Open **Experimental** and scroll to **Custom Plugin Repositories**.
+3. Paste the repository URL below into an empty field, press **+**, and ensure it is enabled.
 4. Select **Save and Close**.
 5. Type `/xlplugins`, search for **Submarine ETA Planner**, and select **Install**.
 6. Install and enable **Submarine Tracker** from the plugin installer if needed.
 7. Type `/seta` to open the planner.
 
-### Repository URL
+```text
+https://alexvalliere.github.io/submarineEtaPlanner/repo.json
+```
 
-`https://alexvalliere.github.io/submarineEtaPlanner/repo.json`
+If Submarine Tracker is unavailable, the planner keeps existing results visible, blocks refreshes, and provides a shortcut to its installer page.
 
 ## Quick start
 
-1. Open the planner with `/seta`; it starts on **Operations**. Use the **Ready to collect**, **Returning within 4h**, **Low fuel**, and **Needs setup** counters to focus the fleet list. Adjust the return window with the dropdown beside its counter.
-2. Open **FC Setup** to choose which tracked FCs are visible. Visibility and stars save automatically; target, strategy, and submarine-assignment edits use **Save changes**.
-3. For farming submarines, optionally pin a route, adjust collection delay, select the FC's local fuel-stock source, and set its safety stock.
-4. Use **Leveling** for progression forecasts and **Unlocks** for FC-specific sector status and remaining discovery paths.
-5. Use **Income** for historical SubmarineTracker salvage results. Farming-cycle and fuel forecasts remain projections, not recorded earnings or game actions.
-6. Use **Settings** when you need global simulation, route, data-source, build-profile, calculation-limit, or display controls, then select **Save changes**.
+1. Open `/seta` and review **Operations**. Use **Ready to collect**, **Returning within 4h**, **Low fuel**, and **Needs setup** to focus the fleet list. The return-window dropdown offers 1, 2, 4, 8, or 24 hours.
+2. Open **FC Setup** and choose the FCs you want to see. Set each fleet's target and assign submarine roles. Visibility and favorites save automatically; target, strategy, and assignment edits use **Save changes**.
+3. For farming submarines, optionally pin a route, adjust collection delay, choose a fuel-stock source, and set safety stock.
+4. Check **Leveling** for readiness forecasts, **Unlocks** for discovery paths, and **Income** for recorded salvage returns.
+5. Use **Settings** for global preferences. Select **Save changes** to apply staged edits or **Discard changes** to abandon them.
 
-Fresh installations start with target rank 90, Recommended leveling, FC-wide fleet simulation, a 120-minute collection delay, no voyage-duration cap, a 33% unlock chance, and a 20-second per-FC calculation limit. Existing saved settings are never replaced during an update.
+New installations start with target rank **90**, **Recommended** leveling, FC-wide simulation, a **120-minute** collection delay, and a **20-second per-FC** calculation limit. Updates preserve existing settings. **Reset defaults** opens a confirmed, staged preview that you can review before saving.
 
-**Reset defaults** asks for confirmation before loading defaults across every settings category. The reset remains staged so you can inspect each tab, adjust values, select **Save changes**, or use **Discard changes** without changing the saved configuration.
+## Understanding the numbers
 
-## Compact fleet workspace
+- **Forecasts are estimates.** Unlocks use a configurable 33% discovery chance per eligible visit by default. Expected dates and likely ranges describe modeled outcomes; locked sectors are never guaranteed.
+- **Income is recorded gross salvage value.** It uses Submarine Tracker's local loot history and NPC sale prices. It is not net profit or proof of a sale, and missing history cannot be reconstructed.
+- **Fuel runway is a projection.** It depends on your farming routes, collection delays, reserves, and last known stock. Fuel observations come from the character currently being played and remain available locally after switching characters.
 
-Operations shows submarine, status, return time, route, and next action. Expand a submarine to inspect rank, build, expected EXP, target ETA, uncertainty, and missing-data explanations. At narrow widths, route and action move beneath the submarine row. Current voyages and proposed or pinned next routes are labeled separately; workshop actions must still be performed in game.
-
-Attention counters apply after the FC search and role filter. Selecting one filters FC groups while retaining their submarine companions; selecting it again clears it. Voyage counters count submarines (including paused assignments with relevant voyage states). **Returning within 4h** counts known current-voyage returns after now and up to the selected number of elapsed hours ahead, including the exact upper boundary. Already collectible submarines appear only under **Ready to collect**. Choose **1h, 2h, 4h, 8h, or 24h** with the adjacent dropdown; the default is **4h**. The window advances automatically across midnight and clock changes. Its duration is **Saved automatically** for all fleets and remembered across plugin restarts; clearing filters preserves it. Changing the duration updates the counter, filtered fleets, and highlighted submarines together without refreshing forecasts or changing staged settings. Fuel/setup counters count FCs with active farming assignments; missing or stale information is not treated as zero stock.
-
-FC headers include independent favorite stars. Expanded groups provide **Setup**, **Unlock map**, and **Income** shortcuts for that FC. An Income shortcut temporarily shows one FC regardless of the saved role filter; **Show all FCs** restores the overview. Ordinary navigation retains unsaved edits. Opening a different FC's setup offers **Save changes**, **Discard changes**, or **Cancel**.
-
-Healthy fuel appears as a short expandable summary. Low, critical, and unavailable fuel remain visible in collapsed Operations headers. Expand **Fuel details** for stock source, observation age, reserve, consumption, and refill deadlines; **Fuel setup** opens the matching settings. FCs without active farming submarines do not show a farming-fuel panel.
-
-On **Unlocks**, search sector codes or names across all maps, click a sector to keep its details open, and follow prerequisite links between maps. **Remaining only** keeps required path context and any explicitly selected sector visible. Unknown tracker unlock state disables this filter.
-
-Operations and Income fleet headings keep **FC tag** and **World** in separate aligned columns. Income keeps those identity columns sized to their text, with gross gil, recorded average/day, and voyage count spread evenly across the remaining width. These three headings and number groups are centered within their columns; numbers align to a shared right edge within each group. Narrow windows wrap the figures below FC tag and World. Expand an FC for the full submarine table and history coverage. Detail columns size automatically to the contents and window, with horizontal scrolling when needed to keep submarine names readable. These remain recorded gross NPC salvage values, with the existing calculation rules.
-
-Income also shows one collapsible chart below the summary cards. It follows the selected fleets, FC scope, and existing rolling period; its gross total matches the summary. Short periods use daily bars, 1 year uses calendar weeks starting Monday, and Lifetime switches from days to weeks to months as its span grows. Hover a bar or gap for exact gil, recorded returns, contributing FCs, and days with/without entries. Dates use your local timezone; today and partly included boundary periods are marked incomplete. Dots show recorded returns worth **0 gil**, while hatching marks days **without recorded returns**—absent entries are not assumed to be zero income or complete history. Chart return counts include zero-salvage returns; the existing summary voyage count and average coverage still begin with salvage returns. Click the chart heading to collapse it; visibility is **Saved automatically** and does not change staged settings or refresh forecasts.
-
-FC visibility, favorites, and display preferences are labeled **Saved automatically**. Hidden FCs remain in FC Setup’s visibility list and selector, but are excluded from every other fleet page, total, chart, warning, and forecast. **Show all** restores every tracked FC, including when all are hidden. Other edits use **Save changes** and **Discard changes**. **Use global target and strategy** changes only those two FC overrides. Global **Reset defaults** remains a staged, confirmed preview.
-
-## Progressive calculations
-
-Forecasts run one visible FC at a time so a difficult fleet cannot consume the entire refresh deadline. Forecast-backed views list all visible tracked FCs immediately, mark each one as queued or calculating, and publish completed results without waiting for the remaining FCs. FCs already at the target rank are handled first, followed by leveling FCs closest to the target.
-
-The **Limits → Per-FC time limit** setting bounds each FC independently. If an FC reaches that limit, its partial or previous result remains visible and calculation continues with the next FC. Probability sampling stops early after at least 64 trials when the P10, P50, and P90 estimates have stabilized; uncertain forecasts may continue up to 256 trials.
-
-When SubmarineTracker's database changes, the planner compares a semantic fingerprint for each FC and recalculates only changed fleets. Unchanged complete forecasts appear immediately as **Up to date**. An FC with a voyage that has just returned is held as **Waiting for SubmarineTracker** until the tracker records its new rank and unlock outcome. The cache is memory-only, so reloading the plugin starts a full forecast. The header **Refresh** action and `/seta refresh` also intentionally perform a full recalculation.
-
-## Recorded income
-
-The Income view reads valid primary and additional loot entries from SubmarineTracker's local history and attributes them by FC, submarine, route, and voyage return. It reports gross gil, recorded gil per day, gil per voyage, voyage count, and history coverage. Voyage counts and coverage begin only with returns containing at least one of the tracked salvage items, so earlier leveling voyages do not dilute farming income. It totals only the eight market-prohibited salvage accessories used for direct NPC gil farming:
-
-| Item | NPC sale price |
-| --- | ---: |
-| Salvaged Ring | 8,000 gil |
-| Salvaged Bracelet | 9,000 gil |
-| Salvaged Earring | 10,000 gil |
-| Salvaged Necklace | 13,000 gil |
-| Extravagant Salvaged Ring | 27,000 gil |
-| Extravagant Salvaged Bracelet | 28,500 gil |
-| Extravagant Salvaged Earring | 30,000 gil |
-| Extravagant Salvaged Necklace | 34,500 gil |
-
-Prices are read from the installed game's item data, with the table above used as an offline fallback. The displayed amount is gross NPC sale value, not proof that the items were sold and not net profit after repairs or other expenses. It covers only voyages present in SubmarineTracker history; voyages from before the tracker recorded loot cannot be reconstructed.
-
-## Farming cycles and fuel runway
-
-Submarines assigned the Farming role use their pinned farming route or their current ordered SubmarineTracker route for recurring-cycle projections. The planner validates the effective route, build, sectors, fuel cost, and duration before forecasting departures. Current voyages are treated as already paid; future sends are grouped around their configured collection delays.
-
-FC Setup can resolve ceruleum stock automatically from one matching local observation, use a selected observed character, or use a manual value. Automatic safety stock reserves enough tanks for one complete resend of every active farming submarine; a fixed reserve can be used instead. Operations then shows tanks per full-fleet send, full-fleet sends remaining, approximate time above safety stock, and the estimated refill deadline. These are planning estimates based on the configured routes, timings, and last known stock, not automated workshop actions.
-
-The planner reads only the inventory of the character currently being played. It keeps a local `workshop-fuel-observations.json` file in its plugin configuration directory so that character's last observed ceruleum tank count remains available after switching characters. The file stores the character content ID, character name and world, FC ID, observed tank count, and observation timestamp. Stored observations can be forgotten from FC Setup and are never uploaded.
-
-## Probabilistic unlock forecasts
-
-Sector discovery is not guaranteed. The planner runs 64 to 256 deterministic, repeatable simulations using the FC-wide unlocked-sector state and every known active voyage. It stops when the percentile estimates stabilize or the per-FC calculation deadline is reached; insufficient samples produce an explicit partial forecast. It reports:
-
-- **P50 / Median**: half of modeled outcomes finish by this time.
-- **P10-P90**: the likely range containing the middle 80% of modeled outcomes.
-- **Unlocks in progress**: the submarines currently visiting an unlock source and their combined modeled chance.
-- **Conditional routes**: routes that become available only in simulation outcomes where the required sector was discovered.
-
-The default discovery chance is **33% per eligible source visit**. This is a community-informed forecasting assumption, not an official game value, and can be changed under **Routes → Unlock chance per visit**. Square Enix confirms that discovering sectors can require repeated voyages in the [official Patch 4.2 notes](https://fr.finalfantasyxiv.com/lodestone/topics/detail/75c691f90f4a7da3907f0671ac33e139e9792abf); the [FFXIV Submarine Builders guidance](https://ffxivarchive.neocities.org/submarine) describes sector unlocking as flat RNG unaffected by submarine stats.
-
-The plugin performs no runtime web requests. Loot history and all calculated gil totals remain local; the plugin does not learn from, upload, or otherwise transmit them.
-
-## Transparency
-
-The project is licensed under the [MIT License](LICENSE). SubmarineTracker attribution, its complete MIT notice, and the exact provenance of the bundled route data are recorded in [Third Party Notices](THIRD_PARTY_NOTICES.md) and [Route Data Provenance](docs/ROUTE_DATA_PROVENANCE.md).
-
-Development used substantial AI assistance under human direction and in-game validation. The installer icon was generated with AI image tooling. See [AI Usage Disclosure](AI_USAGE.md) for the complete declaration.
+See the [user guide](docs/USER_GUIDE.md) for detailed filters and save behavior, income-chart coverage, calculation limits, unlock probabilities, fuel observations, and data handling.
 
 ## Chat commands
 
-- `/seta` toggles the planner on the Operations view.
-- `/seta settings` opens Settings.
-- `/seta refresh` opens Operations and refreshes the forecasts.
-- `/seta help` lists the available commands.
+| Command | Action |
+| --- | --- |
+| `/seta` | Toggle the planner on Operations. |
+| `/seta settings` | Open Settings. |
+| `/seta refresh` | Open Operations and fully recalculate forecasts. |
+| `/seta help` | List available commands. |
 
-## Data source
+## Data and support
 
-The plugin looks for Submarine Tracker data at the standard XIVLauncher config path:
+The planner reads Submarine Tracker's database from the standard XIVLauncher configuration path:
 
-`pluginConfigs\SubmarineTracker\submarine-sqlite.db`
+```text
+pluginConfigs\SubmarineTracker\submarine-sqlite.db
+```
 
-You can override the database path in the plugin's Data Source settings.
+You can override the database path in **Settings → Data Source**.
 
-## Support
+Report bugs or request features through [GitHub Issues](https://github.com/AlexValliere/submarineEtaPlanner/issues). Include the plugin version, any warning shown by the planner, and whether Submarine Tracker is installed and enabled.
 
-Report bugs or request features through [GitHub Issues](https://github.com/AlexValliere/submarineEtaPlanner/issues). Please include the plugin version, any warning shown by the planner, and whether Submarine Tracker is installed and enabled.
+## Credits and transparency
 
-## Acknowledgements
+Submarine ETA Planner uses data and calculation concepts adapted from [Submarine Tracker](https://github.com/Infiziert90/SubmarineTracker). Thank you to the players who use the planner and help improve it through feedback and in-game validation.
 
-Submarine ETA Planner uses data and calculation concepts adapted from [Submarine Tracker](https://github.com/Infiziert90/SubmarineTracker). See [Third Party Notices](THIRD_PARTY_NOTICES.md) for attribution and licensing details.
+The project uses the [MIT License](LICENSE). See [Third Party Notices](THIRD_PARTY_NOTICES.md) and [Route Data Provenance](docs/ROUTE_DATA_PROVENANCE.md) for attribution, the complete SubmarineTracker MIT notice, and bundled-data provenance.
+
+Development used substantial AI assistance under human direction and in-game validation. The installer icon was generated with AI image tooling. See [AI Usage Disclosure](AI_USAGE.md) for the complete declaration.
 
 ## Development
 
-```powershell
-dotnet restore
-dotnet test
-dotnet build -c Release
-```
-
-Public release verification is documented in [Public Release Checklist](docs/PUBLIC_RELEASE_CHECKLIST.md). The official Dalamud testing-track manifest and disclosure text are prepared in [D17 Submission Template](docs/D17_SUBMISSION.md).
-
-Release history is available in the [Changelog](CHANGELOG.md).
-
-Dalamud API 15 currently targets .NET 10. If your machine only has the .NET 9 SDK, validate the planner core with:
+The projects target **.NET 10**; the plugin uses **Dalamud API 15**. Building the plugin also requires the matching Dalamud development libraries. See the [build workflow](.github/workflows/build.yml) for the development-library setup used in CI.
 
 ```powershell
-dotnet test .\tests\SubmarineEtaPlanner.Tests\SubmarineEtaPlanner.Tests.csproj
+dotnet restore SubmarineEtaPlanner.sln
+dotnet test tests/SubmarineEtaPlanner.Tests/SubmarineEtaPlanner.Tests.csproj --configuration Release --no-restore
+dotnet build src/SubmarineEtaPlanner/SubmarineEtaPlanner.csproj --configuration Release --no-restore
+pwsh -NoProfile -File ./tools/Verify-RouteData.ps1
 ```
+
+For core-only validation with the .NET 10 SDK:
+
+```powershell
+dotnet test tests/SubmarineEtaPlanner.Tests/SubmarineEtaPlanner.Tests.csproj --configuration Release
+```
+
+Release preparation is documented in the [Public Release Checklist](docs/PUBLIC_RELEASE_CHECKLIST.md); official Dalamud submission guidance is in the [D17 Submission Template](docs/D17_SUBMISSION.md). The public release is named **1.0.0**, with **1.0.0.0** used in the plugin's four-part assembly and repository version fields.
+
+See the [Changelog](CHANGELOG.md) for release history.

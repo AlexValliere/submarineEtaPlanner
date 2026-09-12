@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Adds independently saved FC visibility controls. Hidden FCs are excluded from fleet pages, totals, charts, warnings, and forecasts while remaining available in FC Setup.",
+  "Changelog": "Version 1.0.0 marks the first stable release: fleet operations, leveling and unlock forecasts, recorded salvage income, farming routes, fuel planning, and FC visibility controls in a unified interface. Existing settings are preserved.",
   "Tags": [
     "Submarine",
     "ETA",

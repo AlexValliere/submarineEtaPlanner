@@ -1264,7 +1264,7 @@ public sealed class EtaSimulatorTests
         Assert.Equal("SubmarineEtaPlanner", repoManifest.GetProperty("InternalName").GetString());
         Assert.Equal(expectedPunchline, repoManifest.GetProperty("Punchline").GetString());
         Assert.Equal(expectedDescription, repoManifest.GetProperty("Description").GetString());
-        Assert.Equal("0.5.55.0", repoManifest.GetProperty("AssemblyVersion").GetString());
+        Assert.Equal("1.0.0.0", repoManifest.GetProperty("AssemblyVersion").GetString());
         Assert.Equal("https://github.com/AlexValliere/submarineEtaPlanner", repoManifest.GetProperty("RepoUrl").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkInstall").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkUpdate").GetString());

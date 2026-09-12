@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0 — first stable release
+
+- Marks the feature-complete 1.0 milestone, shaped by player use and in-game validation.
+- Brings together Operations, Leveling, Unlocks, Income, FC Setup, and Settings in a consistent, responsive graphite-and-teal interface.
+- Includes fleet attention filters, leveling and probabilistic unlock forecasts, recorded salvage income and charts, farming routes, ceruleum fuel planning, and independently saved FC visibility controls.
+- Preserves existing settings and fleet preferences; this milestone requires no configuration reset.
+- Refreshes the README for installation and first steps, with detailed behavior and forecasting assumptions preserved in the user guide.
+
 ## 0.5.55.0
 
 - Added independently saved FC visibility controls to FC Setup, including a compact all-FC manager and Show all recovery action.
