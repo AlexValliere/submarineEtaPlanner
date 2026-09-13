@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- Fixed inflated daily income averages for newly farming FCs by using a minimum averaging period of 24 hours for submarine, FC, and summary totals.
+- Clarified the averaging period in Income tooltips, summary labels, and the user guide. Recorded totals and existing settings are preserved.
+- Added regression coverage for first-day returns, period filters, fractional elapsed days, and mixed new and established fleets.
+
 ## 1.0.0 — first stable release
 
 - Marks the feature-complete 1.0 milestone, shaped by player use and in-game validation.

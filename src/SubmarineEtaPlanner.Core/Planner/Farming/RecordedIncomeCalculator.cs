@@ -80,8 +80,7 @@ public static class IncomeMetricsCalculator
             var recordedResources = AggregateRecordedResources(recordedVoyages);
             var first = voyages.FirstOrDefault()?.ReturnAtUtc;
             var last = voyages.LastOrDefault()?.ReturnAtUtc;
-            var coveredStart = first is null ? (DateTimeOffset?)null : windowStart is null ? first : Max(first.Value, windowStart.Value);
-            var coveredDays = coveredStart is null ? 0d : Math.Max((now - coveredStart.Value).TotalDays, 1d / 24d);
+            var coveredDays = CalculateAveragingDays(first, now, windowStart);
             var gil = voyages.Sum(voyage => voyage.GrossNpcGil);
             var recordedAverageGilPerDay = coveredDays <= 0 ? 0 : gil / coveredDays;
             return new IncomeSubmarineMetrics(
@@ -108,8 +107,7 @@ public static class IncomeMetricsCalculator
         }).ToArray();
         var fcFirst = submarines.Where(item => item.FirstReturnAtUtc is not null).Select(item => item.FirstReturnAtUtc).Min();
         var fcLast = submarines.Where(item => item.LastReturnAtUtc is not null).Select(item => item.LastReturnAtUtc).Max();
-        var fcCoveredStart = fcFirst is null ? (DateTimeOffset?)null : windowStart is null ? fcFirst : Max(fcFirst.Value, windowStart.Value);
-        var fcCoveredDays = fcCoveredStart is null ? 0d : Math.Max((now - fcCoveredStart.Value).TotalDays, 1d / 24d);
+        var fcCoveredDays = CalculateAveragingDays(fcFirst, now, windowStart);
         var gross = submarines.Sum(item => item.GrossGil);
         var voyageCount = submarines.Sum(item => item.VoyageCount);
         var recordedResources = AggregateRecordedResources(
@@ -167,7 +165,20 @@ public static class IncomeMetricsCalculator
             grossGilByRouteSignature);
     }
 
-    private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right) => left > right ? left : right;
+    private static double CalculateAveragingDays(
+        DateTimeOffset? firstReturnAtUtc,
+        DateTimeOffset now,
+        DateTimeOffset? windowStart)
+    {
+        if (firstReturnAtUtc is null)
+            return 0d;
+
+        var start = windowStart is { } boundary && boundary > firstReturnAtUtc.Value
+            ? boundary
+            : firstReturnAtUtc.Value;
+        // A new salvage return must not be extrapolated from a fraction of a day.
+        return Math.Max((now - start).TotalDays, 1d);
+    }
 
     public static IncomeSummaryMetrics Summarize(
         IReadOnlyList<IncomeFcMetrics> metrics,
@@ -180,12 +191,8 @@ public static class IncomeMetricsCalculator
             .Where(item => item.FirstReturnAtUtc is not null)
             .Select(item => item.FirstReturnAtUtc)
             .Min();
-        var start = first is null
-            ? (DateTimeOffset?)null
-            : period is null
-                ? first
-                : first > now - period ? first : now - period;
-        var days = start is null ? 0 : Math.Max((now - start.Value).TotalDays, 1d / 24d);
+        var windowStart = period is null ? (DateTimeOffset?)null : now - period.Value;
+        var days = CalculateAveragingDays(first, now, windowStart);
         return new IncomeSummaryMetrics(
             gross,
             voyages,

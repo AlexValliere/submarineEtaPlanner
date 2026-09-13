@@ -1,6 +1,6 @@
 # Submarine ETA Planner user guide
 
-Detailed behavior, forecasting assumptions, and data handling for version 1.0.0. For installation and first steps, see the [README](../README.md).
+Detailed behavior, forecasting assumptions, and data handling for version 1.0.1. For installation and first steps, see the [README](../README.md).
 
 ## Defaults and saved settings
 
@@ -35,6 +35,8 @@ The **Limits → Per-FC time limit** setting bounds each FC independently. If an
 When SubmarineTracker's database changes, the planner compares a semantic fingerprint for each FC and recalculates only changed fleets. Unchanged complete forecasts appear immediately as **Up to date**. An FC with a voyage that has just returned is held as **Waiting for SubmarineTracker** until the tracker records its new rank and unlock outcome. The cache is memory-only, so reloading the plugin starts a full forecast. The header **Refresh** action and `/seta refresh` also intentionally perform a full recalculation.
 
 ## Recorded income
+
+Daily averages divide recorded gross gil by elapsed days since the first tracked salvage return within the selected period, using a minimum averaging period of **24 hours**. For example, an FC with 587,500 gil from its first returns shows 587,500 gil/day during the first 24 hours; after 48 hours with no further salvage, it shows 293,750 gil/day. After the first day, fractional elapsed days are used. FC and summary averages use one shared period starting with their earliest included salvage return. The summary's averaging period includes this minimum; the first and last return dates show the actual recorded history. Empty salvage history has no coverage or daily income.
 
 The Income view reads valid primary and additional loot entries from SubmarineTracker's local history and attributes them by FC, submarine, route, and voyage return. It reports gross gil, recorded gil per day, gil per voyage, voyage count, and history coverage. Voyage counts and coverage begin only with returns containing at least one of the tracked salvage items, so earlier leveling voyages do not dilute farming income. It totals only the eight market-prohibited salvage accessories used for direct NPC gil farming:
 

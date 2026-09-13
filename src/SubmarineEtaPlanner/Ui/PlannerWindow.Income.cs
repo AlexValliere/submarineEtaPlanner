@@ -18,7 +18,7 @@ public sealed partial class PlannerWindow
         if (DrawNoVisibleFreeCompanies(currentSnapshot))
             return;
         PlannerUi.WrappedText("Recorded gross NPC salvage value · summary coverage begins with tracked salvaged accessories.", PlannerUi.Muted);
-        PlannerUi.Tooltip("Recorded average spreads historical gross gil over the covered period. Costs are not deducted; these are past observations, not guaranteed income.");
+        PlannerUi.Tooltip("Recorded average divides historical gross gil by elapsed days since the first tracked salvage return in the selected period, with a minimum averaging period of 24 hours. Costs are not deducted; these are past observations, not guaranteed income.");
         if (this.incomeFcScope is { } scope)
         {
             var selected = VisibleFreeCompanies(currentSnapshot).FirstOrDefault(fc => fc.FcIdKey == scope);
@@ -188,7 +188,7 @@ public sealed partial class PlannerWindow
         ImGui.TableNextColumn(); PlannerUi.MetricCard(this.typography, "income-gross", FontAwesomeIcon.Coins, ResultsViewState.FormatCompactGil(summary.GrossGil), "Gross gil", PlannerUi.Green);
         ImGui.TableNextColumn(); PlannerUi.MetricCard(this.typography, "income-recorded-average", FontAwesomeIcon.CalendarDay, summary.CoveredDays == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.RecordedAverageGilPerDay), "Recorded avg / day", PlannerUi.Teal);
         ImGui.TableNextColumn(); PlannerUi.MetricCard(this.typography, "income-voyage", FontAwesomeIcon.Ship, summary.VoyageCount == 0 ? "—" : ResultsViewState.FormatCompactGil((long)summary.GilPerVoyage), "Gil / voyage", PlannerUi.Cyan);
-        ImGui.TableNextColumn(); PlannerUi.MetricCard(this.typography, "income-fcs", FontAwesomeIcon.Building, summary.FcCount.ToString(), $"FCs shown · {summary.CoveredDays:0.#} days", PlannerUi.Muted);
+        ImGui.TableNextColumn(); PlannerUi.MetricCard(this.typography, "income-fcs", FontAwesomeIcon.Building, summary.FcCount.ToString(), $"FCs shown · averaging period: {summary.CoveredDays:0.#} days", PlannerUi.Muted);
         ImGui.EndTable();
     }
 

@@ -1,7 +1,7 @@
 # Submarine ETA Planner
 
 [![Build](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml/badge.svg)](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml)
-[![Version: 1.0.0](https://img.shields.io/badge/version-1.0.0-teal.svg)](CHANGELOG.md)
+[![Version: 1.0.1](https://img.shields.io/badge/version-1.0.1-teal.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-teal.svg)](LICENSE)
 
 Plan your Free Company submarine fleets from one place. See what is ready to collect, what returns next, when leveling fleets should reach their target, and how long your farming fuel will last.
@@ -105,6 +105,6 @@ For core-only validation with the .NET 10 SDK:
 dotnet test tests/SubmarineEtaPlanner.Tests/SubmarineEtaPlanner.Tests.csproj --configuration Release
 ```
 
-Release preparation is documented in the [Public Release Checklist](docs/PUBLIC_RELEASE_CHECKLIST.md); official Dalamud submission guidance is in the [D17 Submission Template](docs/D17_SUBMISSION.md). The public release is named **1.0.0**, with **1.0.0.0** used in the plugin's four-part assembly and repository version fields.
+Release preparation is documented in the [Public Release Checklist](docs/PUBLIC_RELEASE_CHECKLIST.md); official Dalamud submission guidance is in the [D17 Submission Template](docs/D17_SUBMISSION.md). The current public release is named **1.0.1**, with **1.0.1.0** used in the plugin's four-part assembly and repository version fields.
 
 See the [Changelog](CHANGELOG.md) for release history.

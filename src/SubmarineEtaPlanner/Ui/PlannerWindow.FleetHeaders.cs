@@ -349,6 +349,7 @@ public sealed partial class PlannerWindow
         ImGui.Separator();
         ImGui.TextColored(PlannerUi.Green, $"Gross NPC salvage value: {metric.GrossGil:N0} gil");
         ImGui.TextUnformatted($"Recorded average per day: {metric.RecordedAverageGilPerDay:N0} gil");
+        ImGui.TextColored(PlannerUi.Muted, "Daily averages use a minimum averaging period of 24 hours.");
         ImGui.TextUnformatted($"Gil per voyage: {metric.GilPerVoyage:N0}");
         ImGui.TextColored(PlannerUi.Muted, $"Coverage: {FormatIncomeDate(metric.FirstReturnAtUtc)} – {FormatIncomeDate(metric.LastReturnAtUtc)}");
         ImGui.Separator();

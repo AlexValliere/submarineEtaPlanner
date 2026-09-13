@@ -7,6 +7,92 @@ public sealed class RecordedIncomeCalculatorTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.UnixEpoch.AddDays(1_000);
 
+    public static IEnumerable<object?[]> NewFarmingCases()
+    {
+        foreach (int? periodDays in new int?[] { 7, 30, 90, 365, null })
+        foreach (var (minutes, expectedDays) in new (int, double)[]
+                 { (0, 1), (30, 1), (60, 1), (1439, 1), (1440, 1), (2160, 1.5), (2880, 2) })
+            yield return [periodDays, minutes, expectedDays];
+    }
+
+    [Theory]
+    [MemberData(nameof(NewFarmingCases))]
+    public void NewFarmingReturnsUseAtLeastOneDayAtEveryLevel(
+        int? periodDays, int elapsedMinutes, double expectedDays)
+    {
+        var fc = CreateFc(
+            1,
+            CreateSubmarine(1, "Sous-marin -1", (10, 0), (0, 332_500), (-7, 99_999)),
+            CreateSubmarine(2, "Sous-marin -2", (0, 255_000)),
+            CreateSubmarine(3, "Sous-marin -3", (10, 0)),
+            CreateSubmarine(4, "Sous-marin -4"));
+        var now = Now.AddMinutes(elapsedMinutes);
+        var period = periodDays is { } days ? TimeSpan.FromDays(days) : (TimeSpan?)null;
+
+        var metrics = IncomeMetricsCalculator.Calculate(fc, now, period);
+        var summary = IncomeMetricsCalculator.Summarize([metrics], now, period);
+
+        Assert.Equal(587_500, metrics.GrossGil);
+        Assert.Equal(2, metrics.VoyageCount);
+        Assert.Equal(293_750, metrics.GilPerVoyage);
+        Assert.Equal(expectedDays, metrics.CoveredDays);
+        Assert.Equal(587_500 / expectedDays, metrics.RecordedAverageGilPerDay);
+        Assert.Equal(Now, metrics.FirstReturnAtUtc);
+        Assert.Equal(Now, metrics.LastReturnAtUtc);
+        Assert.Equal(metrics.GrossGil, summary.GrossGil);
+        Assert.Equal(metrics.VoyageCount, summary.VoyageCount);
+        Assert.Equal(metrics.GilPerVoyage, summary.GilPerVoyage);
+        Assert.Equal(expectedDays, summary.CoveredDays);
+        Assert.Equal(metrics.RecordedAverageGilPerDay, summary.RecordedAverageGilPerDay);
+
+        foreach (var (submarine, expectedGil) in metrics.Submarines.Take(2).Zip(new long[] { 332_500, 255_000 }))
+        {
+            Assert.Equal(expectedGil, submarine.GrossGil);
+            Assert.Equal(1, submarine.VoyageCount);
+            Assert.Equal((double)expectedGil, submarine.GilPerVoyage);
+            Assert.Equal(expectedDays, submarine.CoveredDays);
+            Assert.Equal(expectedGil / expectedDays, submarine.RecordedAverageGilPerDay);
+            Assert.Equal(Now, submarine.FirstReturnAtUtc);
+            Assert.Equal(Now, submarine.LastReturnAtUtc);
+        }
+
+        Assert.All(metrics.Submarines.Skip(2), submarine =>
+        {
+            Assert.Equal(0, submarine.GrossGil);
+            Assert.Equal(0, submarine.VoyageCount);
+            Assert.Equal(0, submarine.CoveredDays);
+            Assert.Equal(0, submarine.RecordedAverageGilPerDay);
+            Assert.Null(submarine.FirstReturnAtUtc);
+            Assert.Null(submarine.LastReturnAtUtc);
+        });
+    }
+
+    [Fact]
+    public void NewAndEstablishedFleetsKeepSharedCoverageAndSortByCorrectedAverage()
+    {
+        var established = IncomeMetricsCalculator.Calculate(
+            CreateFc(1,
+                CreateSubmarine(1, "Established", (2, 2_400_000)),
+                CreateSubmarine(2, "New", (0, 332_500))),
+            Now, period: null);
+        var newcomer = IncomeMetricsCalculator.Calculate(
+            CreateFc(2, CreateSubmarine(3, "New FC", (0, 255_000))),
+            Now, period: null);
+
+        var summary = IncomeMetricsCalculator.Summarize([established, newcomer], Now, period: null);
+        var ordered = IncomeMetricsOrdering.Order(
+            [newcomer, established], IncomeSort.RecordedAverageGilPerDay, _ => false);
+
+        Assert.Equal(2, established.CoveredDays);
+        Assert.Equal(1_366_250, established.RecordedAverageGilPerDay);
+        Assert.Equal(332_500, established.Submarines[1].RecordedAverageGilPerDay);
+        Assert.Equal(255_000, newcomer.RecordedAverageGilPerDay);
+        Assert.Equal(2, summary.CoveredDays);
+        Assert.Equal(2_987_500, summary.GrossGil);
+        Assert.Equal(1_493_750, summary.RecordedAverageGilPerDay);
+        Assert.Equal([established.FcIdKey, newcomer.FcIdKey], ordered.Select(metric => metric.FcIdKey));
+    }
+
     [Fact]
     public void StaggeredSubmarinesAndMultipleFcsUseOneSharedRecordedAverage()
     {
@@ -98,14 +184,23 @@ public sealed class RecordedIncomeCalculatorTests
         Assert.Equal(100, metrics.RecordedAverageGilPerDay);
     }
 
-    [Fact]
-    public void NoObservationsProducesNoCoverageOrIncome()
+    [Theory]
+    [InlineData(7)]
+    [InlineData(30)]
+    [InlineData(90)]
+    [InlineData(365)]
+    [InlineData(null)]
+    public void NoQualifyingObservationsProducesNoCoverageOrIncome(int? periodDays)
     {
+        var period = periodDays is { } days ? TimeSpan.FromDays(days) : (TimeSpan?)null;
         var metrics = IncomeMetricsCalculator.Calculate(
-            CreateFc(1, CreateSubmarine(1, "Empty")),
+            CreateFc(1,
+                CreateSubmarine(1, "Empty"),
+                CreateSubmarine(2, "No salvage", (1, 0)),
+                CreateSubmarine(3, "Future only", (-1, 500_000))),
             Now,
-            TimeSpan.FromDays(30));
-        var summary = IncomeMetricsCalculator.Summarize([metrics], Now, TimeSpan.FromDays(30));
+            period);
+        var summary = IncomeMetricsCalculator.Summarize([metrics], Now, period);
 
         Assert.Equal(0, metrics.GrossGil);
         Assert.Equal(0, metrics.VoyageCount);

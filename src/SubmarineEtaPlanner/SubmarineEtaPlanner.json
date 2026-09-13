@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Version 1.0.0 marks the first stable release: fleet operations, leveling and unlock forecasts, recorded salvage income, farming routes, fuel planning, and FC visibility controls in a unified interface. Existing settings are preserved.",
+  "Changelog": "Version 1.0.1 fixes inflated daily income averages for newly farming FCs by using a minimum averaging period of 24 hours across submarines, FCs, and summaries. Clarifies averaging periods in the Income view. Existing settings and recorded income are preserved.",
   "Tags": [
     "Submarine",
     "ETA",
