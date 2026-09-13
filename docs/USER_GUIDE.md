@@ -1,6 +1,6 @@
 # Submarine ETA Planner user guide
 
-Detailed behavior, forecasting assumptions, and data handling for version 1.0.1. For installation and first steps, see the [README](../README.md).
+Detailed behavior, forecasting assumptions, and data handling for version 1.0.2. For installation and first steps, see the [README](../README.md).
 
 ## Defaults and saved settings
 

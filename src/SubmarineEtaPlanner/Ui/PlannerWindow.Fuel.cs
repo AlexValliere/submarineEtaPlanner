@@ -32,7 +32,7 @@ public sealed partial class PlannerWindow
         if (!fuel.HasFarming) return "Fuel: —";
         var forecast = fuel.Forecast;
         if (forecast.Status == FuelRunwayStatus.Unavailable) return shortLabel ? "Fuel unavailable" : $"Fuel unavailable · {fuel.UnavailableReason}";
-        var refill = forecast.RefillBeforeUtc is { } time ? $" · refill before {time.LocalDateTime:ddd d MMM HH:mm}" : "";
+        var refill = forecast.RefillBeforeUtc is { } time ? $" · refill before {FuelDeadlinePresentation.FormatCompact(time)}" : "";
         return $"{(forecast.Status == FuelRunwayStatus.Healthy ? "Fuel" : $"Fuel {forecast.Status.ToString().ToLowerInvariant()}")}: {forecast.FullFleetSendsRemaining} sends" +
             (shortLabel ? "" : refill);
     }

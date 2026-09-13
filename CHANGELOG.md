@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- Added the year to compact fuel refill deadlines in Operations summaries and tooltips so deadlines in the next calendar year are unambiguous.
+- Preserved localized dates, local-time conversion, fuel calculations, and existing settings.
+- Added regression coverage for the compact refill deadline format.
+
 ## 1.0.1
 
 - Fixed inflated daily income averages for newly farming FCs by using a minimum averaging period of 24 hours for submarine, FC, and summary totals.

@@ -1,3 +1,4 @@
+using System.Globalization;
 using SubmarineEtaPlanner.Planner;
 using Xunit;
 
@@ -165,6 +166,17 @@ public sealed class CompactInterfaceTests
         Assert.True(Fuel(FuelRunwayStatus.Critical).LowFuel);
         Assert.False((missing with { Routes = [] }).NeedsSetup);
         Assert.False((Fuel(FuelRunwayStatus.Critical) with { Routes = [] }).LowFuel);
+    }
+
+    [Fact]
+    public void CompactFuelDeadlineIncludesYearWithWeekdayMonthAndTime()
+    {
+        var localDeadline = new DateTime(2027, 12, 24, 18, 14, 0, DateTimeKind.Unspecified);
+        var deadline = new DateTimeOffset(localDeadline, TimeZoneInfo.Local.GetUtcOffset(localDeadline));
+
+        var formatted = FuelDeadlinePresentation.FormatCompact(deadline, CultureInfo.InvariantCulture);
+
+        Assert.Equal("Fri 24 Dec 2027 18:14", formatted);
     }
 
     [Fact]

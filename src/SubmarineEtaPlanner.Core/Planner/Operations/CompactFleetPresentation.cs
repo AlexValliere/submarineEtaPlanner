@@ -14,6 +14,12 @@ internal sealed record FleetFuelPresentation(
     public string UnavailableReason => Forecast.Warnings.FirstOrDefault() ?? "Fuel stock is unavailable.";
 }
 
+internal static class FuelDeadlinePresentation
+{
+    public static string FormatCompact(DateTimeOffset deadline, IFormatProvider? formatProvider = null)
+        => deadline.LocalDateTime.ToString("ddd d MMM yyyy HH:mm", formatProvider);
+}
+
 internal sealed record OperationsAttentionSummary(int Collect, int ReturningSoon, int LowFuel, int NeedsSetup)
 {
     public static OperationsAttentionSummary Create(
