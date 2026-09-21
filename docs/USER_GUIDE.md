@@ -1,6 +1,6 @@
 # Submarine ETA Planner user guide
 
-Detailed behavior, forecasting assumptions, and data handling for version 1.1.0. For installation and first steps, see the [README](../README.md).
+Detailed behavior, forecasting assumptions, and data handling for version 1.1.1. For installation and first steps, see the [README](../README.md).
 
 ## Defaults and saved settings
 
@@ -55,17 +55,28 @@ Prices are read from the installed game's item data, with the table above used a
 
 ## Projected income
 
-Open **Income → Projection** to estimate gross NPC salvage value over **30, 90, or 365 days** at your current farming pace. The default horizon is **365 days**. History retains its existing calculations and controls. The History/Projection selection, projection horizon, and projection-chart visibility are **Saved automatically**, independently of staged FC or global settings.
+Open **Income → Projection** to estimate gross NPC salvage value over **30, 90, or 365 days** at your current farming pace. The default horizon is **365 days**. History retains its existing calculations and controls. The History/Projection selection, projection horizon, projection-chart visibility, and **Allow previous-rank approximations** toggle are **Saved automatically**, independently of staged FC or global settings. The approximation toggle is enabled by default, including when upgrading an existing configuration.
 
 Only submarines whose effective role is **Farming** contribute. Mixed FCs include their farmers; leveling and paused submarines are excluded. The planner uses each farmer's pinned route, or its current ordered SubmarineTracker route, with its current build. The full cycle includes voyage duration plus the saved submarine collection delay, falling back to the global delay.
 
-The estimate uses valid recorded returns from the **last 90 days**, including returns worth **0 gil**, that match the route's sector set and exact surveillance, retrieval, and favor values. Historical sector order is unknown; the ordered current/pinned route determines duration. At least **10 matching returns** are required. When the submarine has fewer than 10, matching history from all visible FCs is pooled, including its own returns once. Historical returns remain usable even if their submarine is now leveling or paused. Hidden FCs never contribute. An FC's Income shortcut narrows displayed totals while retaining the visible-FC comparison pool.
+The estimate uses valid recorded returns from the **last 90 days**, including returns worth **0 gil**. The route's unordered sector set must match; the ordered current/pinned route determines duration. At least **10 matching returns** are required in the chosen sample. The planner chooses the first sufficient sample in this order:
 
-Average gil per voyage is the sample's gross salvage value divided by all matching returns. Estimated gil per day divides that average by the full cycle length in days; the period total multiplies by 30, 90, or 365. Fractional cycles are intentional: this is a steady estimate, not an exact collection schedule. For example, four submarines averaging 100,000 gil each per 48-hour cycle produce an estimated **73 million gil over 365 days**.
+1. This submarine's history matching its exact current surveillance, retrieval, and favor.
+2. History matching those current stats pooled across all visible FCs.
+3. This submarine's compatible history from the immediately previous rank, when approximations are enabled.
+4. Compatible previous-rank history pooled across all visible FCs.
 
-Missing setup or fewer than 10 matching returns produces an unavailable estimate, not zero income. Totals are marked **Partial** when only some farmers can be estimated, with coverage such as “6 of 8 farming submarines estimated.” Expand an FC for per-submarine values and reasons; hover the figures or sample count for sample dates, contributing FC count, and own/pooled provenance. Sample counts describe supporting history, not statistical confidence. A rank/build change can make earlier returns ineligible until sufficient matching history exists.
+For a previous-rank approximation, the planner resolves today's parts at **current rank minus one**. Only returns recorded at that rank, with exactly those surveillance/retrieval/favor values and the same sector set, qualify. For example, a rank-144 submarine with stats **203/254/223** can use rank-143 history with **203/252/222** if that is what its current parts resolve to at rank 143. This matches recorded stats; it does not reconstruct or assert identical historical parts. The planner does not search older ranks or combine insufficient exact and previous-rank samples to reach ten. Disable the toggle to require exact current stats only.
 
-The collapsible chart uses daily bars for 30/90 days and calendar months for 365 days. Bars distribute the same estimated daily rate across elapsed time, with partial boundary periods marked `*`; the total matches the summary. Dates use your local timezone. Calendar months, leap days, and daylight-saving changes are prorated by elapsed time. These bars are estimates, not recorded income or scheduled collections.
+Pooling includes this submarine's returns exactly once. Historical returns remain usable even if their submarine is now leveling or paused. Hidden FCs never contribute. An FC's Income shortcut narrows displayed totals while retaining the visible-FC comparison pool. Exact matches always take priority; an approximation automatically switches to exact matching once enough exact history is available.
+
+Average gil per voyage is the sample's gross salvage value divided by all matching returns. Estimated gil per day divides that average by the **current** full cycle length in days; the period total multiplies by 30, 90, or 365. A previous-rank approximation reuses its historical average without adjusting for changed stats, and still uses today's speed, ordered route, and collection delay. Fractional cycles are intentional: this is a steady estimate, not an exact collection schedule. For example, four submarines averaging 100,000 gil each per 48-hour cycle produce an estimated **73 million gil over 365 days**.
+
+Missing setup or fewer than 10 returns in every eligible sample produces an unavailable estimate, not zero income. Route changes can still leave too little history: four returns on a new route remain insufficient even when the old route has many recorded voyages. A build change, a larger rank gap, or history older than 90 days can also prevent a fallback.
+
+Submarine rows identify **Exact stats**, **Approximate**, or **Unavailable** in the Basis column. Overall and FC totals show the exact/approximate coverage breakdown, including collapsed FCs. **Partial** means some farmers remain unavailable; a partial total can also include approximations. Expand an FC for values and reasons; hover the figures, Basis, or sample count for current/sample stats, reference rank, sample dates, contributing FC count, and own/pooled provenance. Available sample counts describe only the returns actually used; separate pooled exact/previous-rank counts explain shortages. Sample counts describe supporting history, not statistical confidence, and “Exact stats” does not guarantee exact future earnings.
+
+The collapsible chart uses daily bars for 30/90 days and calendar months for 365 days. Bars distribute the same estimated daily rate across elapsed time, with partial boundary periods marked `*`; the total matches the summary, including approximations. The chart and its tooltips identify when previous-rank approximations contribute. Dates use your local timezone. Calendar months, leap days, and daylight-saving changes are prorated by elapsed time. These bars are estimates, not recorded income or scheduled collections.
 
 The projection assumes current ranks, builds, routes, and collection delays continue; fuel is replenished; and there is no additional downtime. It is independent of current fuel stock and leveling forecast completion. Future leveling, upgrades, newly unlocked routes, manual income overrides, and expenses are not modeled. Values remain gross NPC salvage value, not proof of sales or net profit. Incomplete history can affect the estimate, and all processing stays local.
 

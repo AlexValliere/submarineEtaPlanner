@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Version 1.1.0 adds Income → Projection with 30/90/365-day gross salvage estimates from current farming setups. Uses the last 90 days of matching history, requires 10 returns, and pools other visible FCs when needed. Includes partial totals, sample details, and daily/monthly charts. Existing History and saved fleet settings are preserved.",
+  "Changelog": "Version 1.1.1 improves Income → Projection with labelled previous-rank approximations when exact history is insufficient. Exact matches stay preferred; every selected sample still requires 10 returns from the last 90 days. Adds an enabled-by-default saved toggle, exact/approximate coverage, and reference-rank details in tooltips and charts.",
   "Tags": [
     "Submarine",
     "ETA",

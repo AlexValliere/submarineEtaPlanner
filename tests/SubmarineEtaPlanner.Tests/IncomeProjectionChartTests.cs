@@ -14,10 +14,12 @@ public sealed class IncomeProjectionChartTests
     public void BucketsPreserveExactSummaryTotalsAndCoverEntireHorizon(int days, string start)
     {
         var now = DateTimeOffset.Parse(start);
-        var totals = new IncomeProjectionTotals(123_456.789012345678901234m, 2, 3);
+        var totals = new IncomeProjectionTotals(123_456.789012345678901234m, 2, 3, 1);
         var horizon = (IncomeProjectionHorizon)days;
         var series = IncomeProjectionChartBuilder.Build(totals, horizon, now, TimeZoneInfo.FindSystemTimeZoneById("Europe/Paris"));
         Assert.Equal(totals.ProjectedGil(horizon), series.EstimatedGil);
+        Assert.True(series.Totals.IsPartial);
+        Assert.True(series.Totals.IncludesApproximations);
         Assert.Equal(now, series.Buckets[0].StartAtUtc);
         Assert.Equal(now.AddDays(days), series.Buckets[^1].EndAtUtc);
         Assert.Equal(days == 365, series.Monthly);

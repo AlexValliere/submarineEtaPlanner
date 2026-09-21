@@ -10,7 +10,7 @@ repository = "https://github.com/AlexValliere/submarineEtaPlanner.git"
 commit = "<exact-public-release-commit>"
 owners = ["AlexValliere"]
 project_path = "src/SubmarineEtaPlanner"
-changelog = "Version 1.1.0 adds current-farming income projections with matching local history, FC breakdowns, and charts."
+changelog = "Version 1.1.1 adds labelled previous-rank income approximations, a saved toggle, and exact/approximate coverage while retaining the 10-return minimum."
 ```
 
 Copy `images/icon.png` to the D17 submission's `images/icon.png`. The current icon is 512×512 and AI-generated; either replace it with a genuinely human-created icon or keep the disclosure below.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- Added a labelled previous-rank approximation in Income → Projection when exact matching history is insufficient, with an enabled-by-default saved toggle.
+- Prefer exact own or pooled history before compatible history from the immediately previous rank. Every selected sample still requires 10 returns from the last 90 days; separate insufficient samples are never combined.
+- Show exact/approximate coverage, reference-rank and stat details, and chart provenance. Approximations automatically switch to exact matching when enough new history is available.
+
 ## 1.1.0
 
 - Added Income → Projection with 30/90/365-day estimates from current farming routes, builds, and collection delays.

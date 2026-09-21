@@ -40,6 +40,8 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool ShowIncomeProjectionChart { get; set; } = true;
 
+    public bool AllowPreviousRankIncomeApproximations { get; set; } = true;
+
     public bool Migrate()
     {
         var changed = false;

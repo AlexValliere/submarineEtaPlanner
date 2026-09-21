@@ -19,6 +19,8 @@ public sealed partial class PlannerWindow
             this.configuration.ShowIncomeProjectionChart = open;
             this.saveConfiguration();
         }
+        if (totals.IncludesApproximations)
+            PlannerUi.WrappedText($"Chart includes previous-rank approximations · {totals.MatchCoverage}.", PlannerUi.Amber);
         var series = this.incomeProjectionChartCache.Get(open, totals, horizon, now, TimeZoneInfo.Local);
         if (series is null) return;
         if (series.EstimatedGil is null)
@@ -102,6 +104,8 @@ public sealed partial class PlannerWindow
             : $"{selected.StartDate:d} – {selected.EndDate:d}", PlannerUi.Cyan);
         PlannerUi.WrappedText($"Estimated gross NPC value: {selected.EstimatedGil:N0} gil");
         PlannerUi.WrappedText(series.Totals.Coverage);
+        PlannerUi.WrappedText(series.Totals.MatchCoverage);
+        if (series.Totals.IncludesApproximations) PlannerUi.WrappedText("Includes previous-rank approximations.", PlannerUi.Amber);
         if (series.Totals.IsPartial) PlannerUi.WrappedText("Partial: includes only submarines with an estimate.", PlannerUi.Amber);
         if (selected.IsPartial) PlannerUi.WrappedText("The selected horizon includes only part of this calendar period.", PlannerUi.Muted);
         PlannerUi.WrappedText($"From {selected.StartAtUtc.LocalDateTime:g} to {selected.EndAtUtc.LocalDateTime:g}. Current pace is assumed throughout; this is not a collection schedule.");

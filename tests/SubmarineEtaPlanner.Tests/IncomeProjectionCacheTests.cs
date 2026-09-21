@@ -1,11 +1,98 @@
 using SubmarineEtaPlanner.Planner;
 using Xunit;
 using static SubmarineEtaPlanner.Tests.IncomeProjectionTestData;
+using static SubmarineEtaPlanner.Tests.PreviousRankProjectionTestData;
 
 namespace SubmarineEtaPlanner.Tests;
 
 public sealed class IncomeProjectionCacheTests
 {
+    [Fact]
+    public void FallbackToggleInvalidatesWithoutChangingTheHistorySnapshot()
+    {
+        var cache = new IncomeProjectionCache();
+        var catalog = RankCatalog();
+        var prefs = new Dictionary<string, FcPreferences>();
+        FcState[] snapshot = [Fc(1, Farmer(1, previous: 10))];
+        var first = cache.Get(snapshot, prefs, Settings, catalog, catalog, Now);
+        Assert.True(first.FreeCompanies[0].Submarines[0].IsApproximate);
+        var disabled = cache.Get(snapshot, prefs, Settings, catalog, catalog, Now, allowPreviousRankFallback: false);
+        Assert.False(disabled.FreeCompanies[0].Submarines[0].IsAvailable);
+        Assert.Null(disabled.FreeCompanies[0].Submarines[0].PreviousRankMatchingReturnCount);
+        var enabled = cache.Get(snapshot, prefs, Settings, catalog, catalog, Now);
+        Assert.True(enabled.FreeCompanies[0].Submarines[0].IsApproximate);
+        Assert.Equal(3, cache.BuildCount);
+    }
+
+    [Fact]
+    public void HistoryPromotesApproximationToExactEvenWhenRateDoesNotChange()
+    {
+        var cache = new IncomeProjectionCache();
+        var chartCache = new IncomeProjectionChartCache();
+        var catalog = RankCatalog();
+        var prefs = new Dictionary<string, FcPreferences>();
+        var oldFc = Fc(1, Farmer(1, exact: 9, previous: 10, exactGil: 120_000));
+        var newFc = Fc(1, Farmer(1, exact: 10, previous: 10, exactGil: 120_000));
+        Assert.Equal(FcDataFingerprint.Create(oldFc), FcDataFingerprint.Create(newFc));
+        var first = cache.Get([oldFc], prefs, Settings, catalog, catalog, Now).FreeCompanies[0];
+        var firstChart = chartCache.Get(true, first.Totals, IncomeProjectionHorizon.Days365, Now, TimeZoneInfo.Utc)!;
+        var second = cache.Get([newFc], prefs, Settings, catalog, catalog, Now).FreeCompanies[0];
+        var secondChart = chartCache.Get(true, second.Totals, IncomeProjectionHorizon.Days365, Now, TimeZoneInfo.Utc)!;
+        Assert.Equal(first.Totals.GilPerDay, second.Totals.GilPerDay);
+        Assert.True(first.Totals.IncludesApproximations);
+        Assert.False(second.Totals.IncludesApproximations);
+        Assert.Equal(IncomeProjectionMatchKind.ExactStats, second.Submarines[0].Sample.MatchKind);
+        Assert.Null(second.Submarines[0].Sample.ReferenceRank);
+        Assert.NotSame(firstChart, secondChart);
+        Assert.Equal(firstChart.EstimatedGil, secondChart.EstimatedGil);
+        Assert.False(secondChart.Totals.IncludesApproximations);
+    }
+
+    [Fact]
+    public void PreviousRankExpiryFutureEntryAndRollbackReevaluateEligibility()
+    {
+        var cache = new IncomeProjectionCache();
+        var catalog = RankCatalog();
+        var prefs = new Dictionary<string, FcPreferences>();
+        var sub = Farmer(1, previous: 9);
+        var sample = sub.VoyageHistory[0];
+        sub = sub with { VoyageHistory = sub.VoyageHistory.Concat(new[]
+        {
+            sample with { ReturnAtUtc = Now.AddDays(-90) }, sample with { ReturnAtUtc = Now.AddSeconds(10) },
+        }).ToArray() };
+        FcState[] snapshot = [Fc(1, sub)];
+        Assert.True(cache.Get(snapshot, prefs, Settings, catalog, catalog, Now).FreeCompanies[0].Submarines[0].IsApproximate);
+        Assert.False(cache.Get(snapshot, prefs, Settings, catalog, catalog, Now.AddTicks(1)).FreeCompanies[0].Submarines[0].IsAvailable);
+        var future = cache.Get(snapshot, prefs, Settings, catalog, catalog, Now.AddSeconds(10));
+        Assert.True(future.FreeCompanies[0].Submarines[0].IsApproximate);
+        var rollback = cache.Get(snapshot, prefs, Settings, catalog, catalog, Now.AddSeconds(5));
+        Assert.False(rollback.FreeCompanies[0].Submarines[0].IsAvailable);
+        Assert.Equal(4, cache.BuildCount);
+    }
+
+    [Fact]
+    public void ApproximationScopeAndFavoritesReuseCachedHistory()
+    {
+        var cache = new IncomeProjectionCache();
+        var catalog = RankCatalog();
+        var prefs = new Dictionary<string, FcPreferences>();
+        FcState[] snapshot = [Fc(1, Farmer(1, previous: 5)), Fc(2, Farmer(2, previous: 5))];
+        var first = cache.Get(snapshot, prefs, Settings, catalog, catalog, Now);
+        prefs["02"] = new() { Favorite = true };
+        foreach (var scope in new[] { "01", "02", null })
+        {
+            var current = cache.Get(snapshot, prefs, Settings, catalog, catalog, Now.AddSeconds(1));
+            Assert.Same(first, current);
+            var scoped = IncomeProjectionPresentation.Select(current, scope, id => id == "02");
+            Assert.All(scoped.SelectMany(fc => fc.Submarines), sub => Assert.Equal(10, sub.Sample.ReturnCount));
+        }
+        Assert.Equal(1, cache.BuildCount);
+        prefs["02"].Hidden = true;
+        var hidden = cache.Get(snapshot, prefs, Settings, catalog, catalog, Now.AddSeconds(2));
+        Assert.False(hidden.FreeCompanies[0].Submarines[0].IsAvailable);
+        Assert.Equal(2, cache.BuildCount);
+    }
+
     [Fact]
     public void ScopeFavoritesAndFuelDoNotRebuildTheSamplePool()
     {

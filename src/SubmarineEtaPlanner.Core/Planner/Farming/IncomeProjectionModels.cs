@@ -3,6 +3,13 @@ namespace SubmarineEtaPlanner.Planner;
 public enum IncomeDisplayMode { History, Projection }
 public enum IncomeProjectionHorizon { Days30 = 30, Days90 = 90, Days365 = 365 }
 public enum IncomeProjectionSampleSource { Own, Pooled }
+public enum IncomeProjectionMatchKind { ExactStats, PreviousRank }
+
+public readonly record struct IncomeProjectionStats(int Surveillance, int Retrieval, int Favor)
+{
+    public static IncomeProjectionStats From(SubmarineBuild build)
+        => new(build.Surveillance, build.Retrieval, build.Favor);
+}
 
 public static class IncomeProjectionPreferences
 {
@@ -18,7 +25,10 @@ public sealed record IncomeProjectionSample(
     int ReturnCount,
     int ContributingFcCount,
     DateTimeOffset? FirstReturnAtUtc,
-    DateTimeOffset? LastReturnAtUtc);
+    DateTimeOffset? LastReturnAtUtc,
+    IncomeProjectionMatchKind MatchKind = IncomeProjectionMatchKind.ExactStats,
+    int? ReferenceRank = null,
+    IncomeProjectionStats? MatchedStats = null);
 
 public sealed record IncomeSubmarineProjection(
     long SubmarineId,
@@ -35,24 +45,33 @@ public sealed record IncomeSubmarineProjection(
     IncomeProjectionSample Sample,
     string? UnavailableReason)
 {
+    public IncomeProjectionStats? CurrentStats { get; init; }
+    public int ExactMatchingReturnCount { get; init; }
+    // Null means the fallback is disabled or its reference build/route cannot be resolved.
+    public int? PreviousRankMatchingReturnCount { get; init; }
     public bool IsAvailable => GilPerDay.HasValue;
+    public bool IsApproximate => IsAvailable && Sample.MatchKind == IncomeProjectionMatchKind.PreviousRank;
     public decimal? ProjectedGil(IncomeProjectionHorizon horizon)
         => GilPerDay * (int)IncomeProjectionPreferences.Normalize(horizon);
 }
 
-public sealed record IncomeProjectionTotals(decimal? GilPerDay, int EstimatedSubmarines, int FarmingSubmarines)
+public sealed record IncomeProjectionTotals(decimal? GilPerDay, int EstimatedSubmarines, int FarmingSubmarines,
+    int ApproximateSubmarines = 0)
 {
+    public int ExactSubmarines => EstimatedSubmarines - ApproximateSubmarines;
+    public bool IncludesApproximations => ApproximateSubmarines > 0;
     public bool IsPartial => EstimatedSubmarines > 0 && EstimatedSubmarines < FarmingSubmarines;
     public decimal? ProjectedGil(IncomeProjectionHorizon horizon)
         => GilPerDay * (int)IncomeProjectionPreferences.Normalize(horizon);
     public string Coverage => $"{EstimatedSubmarines} of {FarmingSubmarines} farming submarines estimated";
+    public string MatchCoverage => $"{ExactSubmarines} exact · {ApproximateSubmarines} approximate";
 
     public static IncomeProjectionTotals From(IEnumerable<IncomeSubmarineProjection> submarines)
     {
         var all = submarines.ToArray();
         var available = all.Where(submarine => submarine.IsAvailable).ToArray();
         return new(available.Length == 0 ? null : available.Sum(submarine => submarine.GilPerDay!.Value),
-            available.Length, all.Length);
+            available.Length, all.Length, available.Count(submarine => submarine.IsApproximate));
     }
 }
 

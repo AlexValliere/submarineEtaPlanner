@@ -12,13 +12,15 @@ internal sealed class IncomeProjectionCache
 
     public IncomeProjectionResult Get(IReadOnlyList<FcState> snapshot,
         IReadOnlyDictionary<string, FcPreferences> preferences, EtaSettings settings,
-        ISubmarineCatalog submarineCatalog, IRouteOperationalCatalog routeCatalog, DateTimeOffset now)
+        ISubmarineCatalog submarineCatalog, IRouteOperationalCatalog routeCatalog, DateTimeOffset now,
+        bool allowPreviousRankFallback = true)
     {
         var key = FcDataFingerprint.Hash(writer =>
         {
             writer.Write(settings.TargetRank);
             writer.Write(settings.CollectionDelayMinutes);
             writer.Write(submarineCatalog.MaximumRank);
+            writer.Write(allowPreviousRankFallback);
             foreach (var state in snapshot.OrderBy(fc => fc.FcIdKey, StringComparer.OrdinalIgnoreCase))
             {
                 var fc = preferences.GetValueOrDefault(state.FcIdKey) ?? new FcPreferences();
@@ -43,7 +45,8 @@ internal sealed class IncomeProjectionCache
             && now >= this.result.GeneratedAtUtc && now < this.result.NextRefreshAtUtc)
             return this.result;
 
-        this.result = IncomeProjectionCalculator.Calculate(snapshot, preferences, settings, submarineCatalog, routeCatalog, now);
+        this.result = IncomeProjectionCalculator.Calculate(snapshot, preferences, settings, submarineCatalog, routeCatalog, now,
+            allowPreviousRankFallback);
         this.source = snapshot;
         this.catalog = submarineCatalog;
         this.operationalCatalog = routeCatalog;

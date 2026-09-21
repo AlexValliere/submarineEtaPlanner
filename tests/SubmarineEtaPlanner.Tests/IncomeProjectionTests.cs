@@ -71,7 +71,8 @@ public sealed class IncomeProjectionTests
         {
             var sub = Assert.Single(fc.Submarines);
             Assert.Equal(150_000m, sub.AverageGilPerVoyage);
-            Assert.Equal(new IncomeProjectionSample(IncomeProjectionSampleSource.Pooled, 10, 2, Now.AddDays(-5), Now.AddDays(-1)), sub.Sample);
+            Assert.Equal(new IncomeProjectionSample(IncomeProjectionSampleSource.Pooled, 10, 2, Now.AddDays(-5), Now.AddDays(-1),
+                MatchedStats: new(100, 110, 120)), sub.Sample);
         });
     }
 
@@ -281,20 +282,29 @@ internal static class IncomeProjectionTestData
     internal sealed class ProjectionCatalog : ISubmarineCatalog, IRouteOperationalCatalog
     {
         public Func<IReadOnlyList<uint>, TimeSpan> Duration { get; set; } = _ => TimeSpan.FromHours(46);
+        public Func<SubmarineBuildParts, int, SubmarineBuild?>? Build { get; set; }
+        public Func<IReadOnlyList<uint>, SubmarineBuild, TimeSpan>? BuildDuration { get; set; }
+        public HashSet<uint> KnownSectors { get; set; } = [1, 2, 3, 4];
+        public Dictionary<(SubmarineBuildParts Parts, int Rank), int> BuildCalls { get; } = [];
         public int AnalysisCalls { get; private set; }
         public int MaximumRank => 200;
         public IReadOnlyList<UnlockRule> UnlockRules => [];
         public SubmarineBuild ResolveBuild(string buildCode, int rank) => new(buildCode, rank, 100, 110, 120, 100, 100);
         public SubmarineBuild? ResolveBuild(SubmarineBuildParts parts, int rank)
-            => parts == SubmarineBuildParts.Empty ? null : ResolveBuild("SSUW", rank);
+        {
+            var key = (parts, rank);
+            BuildCalls[key] = BuildCalls.GetValueOrDefault(key) + 1;
+            return parts == SubmarineBuildParts.Empty ? null
+                : Build is null ? ResolveBuild("SSUW", rank) : Build(parts, rank);
+        }
         public RouteSearchResult FindBestRoute(RouteSearchRequest request) => throw new InvalidOperationException("Income must not run leveling route searches.");
         public uint CalculateExp(IReadOnlyList<uint> route, SubmarineBuild build, ExpMode expMode) => throw new InvalidOperationException();
-        public TimeSpan CalculateDuration(IReadOnlyList<uint> route, SubmarineBuild build) => Duration(route);
+        public TimeSpan CalculateDuration(IReadOnlyList<uint> route, SubmarineBuild build) => BuildDuration?.Invoke(route, build) ?? Duration(route);
         public (int Rank, uint CurrentExp, uint NextLevelExp) ApplyExp(int rank, uint exp, uint gained, int target) => throw new InvalidOperationException();
         public string PointName(uint point) => point.ToString();
         public int GetPointRequiredRank(uint point) => 1;
         public RouteFuelProfile CalculateFuel(IReadOnlyCollection<uint> sectors)
-            => new(sectors.Distinct().Count() * 5, sectors.All(id => id is >= 1 and <= 4), sectors.Where(id => id > 4).ToArray());
+            => new(sectors.Distinct().Count() * 5, sectors.All(KnownSectors.Contains), sectors.Where(id => !KnownSectors.Contains(id)).ToArray());
         public OrderedRouteOperationalProfile AnalyzeOrderedRoute(IReadOnlyList<uint> route, SubmarineBuild build)
         {
             AnalysisCalls++;

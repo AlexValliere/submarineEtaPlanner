@@ -1,7 +1,7 @@
 # Submarine ETA Planner
 
 [![Build](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml/badge.svg)](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml)
-[![Version: 1.1.0](https://img.shields.io/badge/version-1.1.0-teal.svg)](CHANGELOG.md)
+[![Version: 1.1.1](https://img.shields.io/badge/version-1.1.1-teal.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-teal.svg)](LICENSE)
 
 Plan your Free Company submarine fleets from one place. See what is ready to collect, what returns next, when leveling fleets should reach their target, how much your current farmers could earn, and how long your farming fuel will last.
@@ -55,7 +55,7 @@ New installations start with target rank **90**, **Recommended** leveling, FC-wi
 
 - **Forecasts are estimates.** Unlocks use a configurable 33% discovery chance per eligible visit by default. Expected dates and likely ranges describe modeled outcomes; locked sectors are never guaranteed.
 - **Income is recorded gross salvage value.** It uses Submarine Tracker's local loot history and NPC sale prices. It is not net profit or proof of a sale, and missing history cannot be reconstructed.
-- **Income projections assume your current farming pace continues.** They use the last 90 days of matching history, require 10 returns, and can borrow matching samples from your other visible FCs. Partial coverage is labeled; future leveling and expenses are excluded.
+- **Income projections assume your current farming pace continues.** They use the last 90 days of matching history, require 10 returns, and can borrow matching samples from your other visible FCs. When exact history is insufficient, a saved toggle allows labelled approximations from the immediately previous rank. Partial coverage and approximations are identified separately; future leveling and expenses are excluded.
 - **Fuel runway is a projection.** It depends on your farming routes, collection delays, reserves, and last known stock. Fuel observations come from the character currently being played and remain available locally after switching characters.
 
 See the [user guide](docs/USER_GUIDE.md) for detailed filters and save behavior, income-chart coverage, calculation limits, unlock probabilities, fuel observations, and data handling.
@@ -106,6 +106,6 @@ For core-only validation with the .NET 10 SDK:
 dotnet test tests/SubmarineEtaPlanner.Tests/SubmarineEtaPlanner.Tests.csproj --configuration Release
 ```
 
-Release preparation is documented in the [Public Release Checklist](docs/PUBLIC_RELEASE_CHECKLIST.md); official Dalamud submission guidance is in the [D17 Submission Template](docs/D17_SUBMISSION.md). This release is named **1.1.0**, with **1.1.0.0** used in the plugin's four-part assembly and repository version fields.
+Release preparation is documented in the [Public Release Checklist](docs/PUBLIC_RELEASE_CHECKLIST.md); official Dalamud submission guidance is in the [D17 Submission Template](docs/D17_SUBMISSION.md). This release is named **1.1.1**, with **1.1.1.0** used in the plugin's four-part assembly and repository version fields.
 
 See the [Changelog](CHANGELOG.md) for release history.
