@@ -137,9 +137,6 @@ public sealed partial class PlannerWindow
             if (fc.Totals.IsPartial) PlannerUi.WrappedText("Partial: this total includes only submarines with an estimate.", PlannerUi.Amber);
             PlannerUi.EndTooltip();
         }
-        // Keep the breakdown visible when collapsed, with wrapping at compact widths.
-        PlannerUi.WrappedText(fc.Totals.MatchCoverage + (fc.Totals.IsPartial ? " · Partial" : string.Empty),
-            fc.Totals.IncludesApproximations || fc.Totals.IsPartial ? PlannerUi.Amber : PlannerUi.Muted);
         if (!open) return;
         ImGui.Spacing();
         DrawFcShortcuts(fc.FcIdKey);

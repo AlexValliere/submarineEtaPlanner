@@ -1,12 +1,12 @@
 # Current-farming income projection verification
 
-Release version: **1.1.1** (assembly and repository version **1.1.1.0**), including previous-rank approximations.
+Release version: **1.1.2** (assembly and repository version **1.1.2.0**), with compact FC projection rows and previous-rank approximations.
 
 ## Local checks — 2026-09-21–22
 
 - Release test suite with previous-rank fallback: **628 passed, 0 failed, 0 skipped**.
 - Release plugin build with the installed Dalamud development libraries: **0 warnings, 0 errors**.
-- Release 1.1.1 revalidation: project, compiled assembly, generated manifest, repository manifest, and packaged `latest.zip` report **1.1.1.0**. Packaged plugin/Core assemblies, manifest, and route data are present; generated and repository changelogs match.
+- Release 1.1.2 revalidation: project, compiled assembly, generated manifest, repository manifest, and packaged `latest.zip` report **1.1.2.0**. Packaged plugin/Core assemblies, manifest, and route data are present; generated and repository changelogs match.
 - Bundled route data verified with SHA-256 `24996254FAB3FFC4A74F1AFA2C9212732888A0C6387DAB026B75EA566B6D67FF`.
 - `git diff --check`: passed.
 
@@ -36,7 +36,7 @@ git diff --check
 
 ## UI verification status
 
-The plugin compiles against the installed ImGui/Dalamud bindings. Source review confirms projection details use the existing responsive table allocator with horizontal scrolling, compact FC headings, wrapping controls/text, and scaled chart drawing. The added Basis column uses that allocator; exact/approximate FC breakdowns remain visible as wrapped text below collapsed headings. History calculations and its chart renderer are unchanged; projection settings are top-level automatic preferences, outside FC/global drafts.
+The plugin compiles against the installed ImGui/Dalamud bindings. Source review confirms projection details use the existing responsive table allocator with horizontal scrolling, compact FC headings, wrapping controls/text, and scaled chart drawing. In 1.1.2, the standalone FC exact/approximate line is removed entirely: collapsed rows return immediately after their header/tooltip, and expanded rows proceed to the existing detail content without reserving space for that line. The Basis column, header figures/colors and tooltips, overall summary, and chart information remain available. History calculations and its chart renderer are unchanged; projection settings are top-level automatic preferences, outside FC/global drafts.
 
 **In-game visual and interaction acceptance is pending.** The automated test host does not render ImGui, and these checks do not certify appearance or input behavior in FFXIV.
 
@@ -45,7 +45,8 @@ Check the installed candidate at **1040 × 700** and **780 × 520**, each at **1
 - Switch History/Projection and all three horizons; check summary wrapping and saved selections after reopening/reloading.
 - Toggle **Allow previous-rank approximations** and reload the plugin; verify its saved value, immediate recalculation, and independence from staged FC/global edits.
 - Inspect long FC/submarine names, large amounts, mixed fleets, partial totals, all-unavailable results, supported zero estimates, and a scoped FC with no farmers.
-- Inspect **Approximate** submarine Basis cells and exact/approximate breakdowns for overall and collapsed FC totals, including totals that are both Partial and include approximations. Confirm disabled/unresolvable fallback and both history shortages have readable explanations.
+- Check collapsed and expanded FC rows contain no standalone exact/approximate breakdown line or leftover space. Check exact-only, approximate, partial, and unavailable fleets, and confirm expanding/collapsing restores compact list spacing.
+- Inspect **Approximate** submarine Basis cells and exact/approximate breakdowns in the overall summary, chart, and FC header tooltips, including totals that are both Partial and include approximations. Confirm disabled/unresolvable fallback and both history shortages have readable explanations.
 - Expand FCs and scroll the detail table horizontally; verify complete rows, readable columns, setup shortcuts, and provenance/reason tooltips.
 - Check rank-transition tooltips for current/sample stats, reference rank, selected sample count, and own/pooled source. After enough exact returns arrive, confirm the approximation label disappears even when the monetary rate stays the same.
 - Collapse/expand charts; inspect daily/monthly bars, partial boundaries, tooltips, and chart-total parity.

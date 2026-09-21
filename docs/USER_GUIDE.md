@@ -1,6 +1,6 @@
 # Submarine ETA Planner user guide
 
-Detailed behavior, forecasting assumptions, and data handling for version 1.1.1. For installation and first steps, see the [README](../README.md).
+Detailed behavior, forecasting assumptions, and data handling for version 1.1.2. For installation and first steps, see the [README](../README.md).
 
 ## Defaults and saved settings
 
@@ -74,7 +74,7 @@ Average gil per voyage is the sample's gross salvage value divided by all matchi
 
 Missing setup or fewer than 10 returns in every eligible sample produces an unavailable estimate, not zero income. Route changes can still leave too little history: four returns on a new route remain insufficient even when the old route has many recorded voyages. A build change, a larger rank gap, or history older than 90 days can also prevent a fallback.
 
-Submarine rows identify **Exact stats**, **Approximate**, or **Unavailable** in the Basis column. Overall and FC totals show the exact/approximate coverage breakdown, including collapsed FCs. **Partial** means some farmers remain unavailable; a partial total can also include approximations. Expand an FC for values and reasons; hover the figures, Basis, or sample count for current/sample stats, reference rank, sample dates, contributing FC count, and own/pooled provenance. Available sample counts describe only the returns actually used; separate pooled exact/previous-rank counts explain shortages. Sample counts describe supporting history, not statistical confidence, and “Exact stats” does not guarantee exact future earnings.
+Submarine rows identify **Exact stats**, **Approximate**, or **Unavailable** in the Basis column. The overall summary and chart show the exact/approximate coverage breakdown; each FC's breakdown is available in its header tooltip. FC lists stay compact without a separate breakdown line beneath each header. **Partial** means some farmers remain unavailable; a partial total can also include approximations. Expand an FC for values and reasons; hover the figures, Basis, or sample count for current/sample stats, reference rank, sample dates, contributing FC count, and own/pooled provenance. Available sample counts describe only the returns actually used; separate pooled exact/previous-rank counts explain shortages. Sample counts describe supporting history, not statistical confidence, and “Exact stats” does not guarantee exact future earnings.
 
 The collapsible chart uses daily bars for 30/90 days and calendar months for 365 days. Bars distribute the same estimated daily rate across elapsed time, with partial boundary periods marked `*`; the total matches the summary, including approximations. The chart and its tooltips identify when previous-rank approximations contribute. Dates use your local timezone. Calendar months, leap days, and daylight-saving changes are prorated by elapsed time. These bars are estimates, not recorded income or scheduled collections.
 

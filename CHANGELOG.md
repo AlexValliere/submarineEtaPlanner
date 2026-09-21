@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2
+
+- Removed redundant standalone exact/approximate breakdown lines beneath FC rows in Income → Projection, reducing list height and scrolling.
+- Estimate basis remains available in the expanded submarine table and tooltips. Header figures, overall summary, and chart coverage are preserved.
+
 ## 1.1.1
 
 - Added a labelled previous-rank approximation in Income → Projection when exact matching history is insufficient, with an enabled-by-default saved toggle.

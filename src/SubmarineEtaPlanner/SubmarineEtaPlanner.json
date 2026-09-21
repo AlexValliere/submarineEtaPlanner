@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Version 1.1.1 improves Income → Projection with labelled previous-rank approximations when exact history is insufficient. Exact matches stay preferred; every selected sample still requires 10 returns from the last 90 days. Adds an enabled-by-default saved toggle, exact/approximate coverage, and reference-rank details in tooltips and charts.",
+  "Changelog": "Version 1.1.2 makes Income → Projection FC lists more compact by removing redundant standalone exact/approximate breakdown lines. Estimate details remain in the expanded table's Basis column and tooltips; summary and chart coverage are preserved.",
   "Tags": [
     "Submarine",
     "ETA",
