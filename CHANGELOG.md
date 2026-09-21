@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- Added Income → Projection with 30/90/365-day estimates from current farming routes, builds, and collection delays.
+- Estimate voyage earnings from the last 90 days of matching history, requiring 10 returns and pooling other visible FCs when needed. Include zero-gil returns and identify unavailable or partial estimates.
+- Added daily/monthly projection charts, sample provenance, and independently saved projection preferences. Existing History behavior and settings are preserved.
+
 ## 1.0.2
 
 - Added the year to compact fuel refill deadlines in Operations summaries and tooltips so deadlines in the next calendar year are unambiguous.

@@ -34,6 +34,12 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool ShowIncomeChart { get; set; } = true;
 
+    public IncomeDisplayMode IncomeDisplayMode { get; set; } = IncomeDisplayMode.History;
+
+    public IncomeProjectionHorizon IncomeProjectionHorizon { get; set; } = IncomeProjectionHorizon.Days365;
+
+    public bool ShowIncomeProjectionChart { get; set; } = true;
+
     public bool Migrate()
     {
         var changed = false;
@@ -111,6 +117,10 @@ public sealed class Configuration : IPluginConfiguration
         if (IncomeSort != normalizedIncomeSort) { IncomeSort = normalizedIncomeSort; changed = true; }
         var normalizedIncomeView = IncomeViewPreferences.Normalize(IncomeView);
         if (IncomeView != normalizedIncomeView) { IncomeView = normalizedIncomeView; changed = true; }
+        var normalizedIncomeMode = IncomeProjectionPreferences.Normalize(IncomeDisplayMode);
+        if (IncomeDisplayMode != normalizedIncomeMode) { IncomeDisplayMode = normalizedIncomeMode; changed = true; }
+        var normalizedProjectionHorizon = IncomeProjectionPreferences.Normalize(IncomeProjectionHorizon);
+        if (IncomeProjectionHorizon != normalizedProjectionHorizon) { IncomeProjectionHorizon = normalizedProjectionHorizon; changed = true; }
         if (!Enum.IsDefined(ResultsFilter)) { ResultsFilter = FcResultFilter.Leveling; changed = true; }
         foreach (var key in FreeCompanyPreferences.Keys.ToArray())
         {

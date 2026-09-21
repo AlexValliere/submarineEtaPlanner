@@ -18,6 +18,7 @@
 - [ ] Test a stale database, active voyages, unknown routes, incomplete unlock data, per-FC timeout, and no-deadline mode.
 - [ ] Verify 100% and 150% UI scaling at the minimum window size.
 - [ ] Confirm the displayed percentile and unlock assumptions remain understandable without reading the README.
+- [ ] Check Income History and Projection, including mixed roles, insufficient samples, partial totals, FC scope, and saved display preferences; follow `docs/INCOME_PROJECTION_VERIFICATION.md` for the projection acceptance matrix.
 
 ## Publishing
 

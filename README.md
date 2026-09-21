@@ -1,10 +1,10 @@
 # Submarine ETA Planner
 
 [![Build](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml/badge.svg)](https://github.com/AlexValliere/submarineEtaPlanner/actions/workflows/build.yml)
-[![Version: 1.0.2](https://img.shields.io/badge/version-1.0.2-teal.svg)](CHANGELOG.md)
+[![Version: 1.1.0](https://img.shields.io/badge/version-1.1.0-teal.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-teal.svg)](LICENSE)
 
-Plan your Free Company submarine fleets from one place. See what is ready to collect, what returns next, when leveling fleets should reach their target, and how long your farming fuel will last.
+Plan your Free Company submarine fleets from one place. See what is ready to collect, what returns next, when leveling fleets should reach their target, how much your current farmers could earn, and how long your farming fuel will last.
 
 **1.0.0 is the first stable release**, shaped by player use and in-game validation. Six connected views bring daily operations, progression, income, and fleet setup into a compact graphite-and-teal interface that adapts to your window size. Existing users keep their saved settings and fleet preferences when updating.
 
@@ -17,7 +17,7 @@ The planner uses local [Submarine Tracker](https://github.com/Infiziert90/Submar
 | **Operations** | Prioritize ready submarines, upcoming returns, low fuel, and fleets needing setup. Inspect current voyages and recommended next actions. |
 | **Leveling** | Forecast progress toward each FC's target rank, with routes, EXP, expected completion dates, and likely ranges. |
 | **Unlocks** | Explore sector maps, follow discovery prerequisites, and see unlock attempts shared across your FC fleet. |
-| **Income** | Compare recorded gross NPC salvage value by FC, submarine, route, and period, with a history chart. |
+| **Income** | Compare recorded gross NPC salvage value and project 30/90/365-day earnings from your current farming setup, with FC details and charts. |
 | **FC Setup** | Choose visible FCs and favorites; set targets, strategies, submarine roles, farming routes, collection delays, and fuel reserves. |
 | **Settings** | Adjust global simulation, route, data-source, build-profile, calculation-limit, and display preferences. |
 
@@ -46,7 +46,7 @@ If Submarine Tracker is unavailable, the planner keeps existing results visible,
 1. Open `/seta` and review **Operations**. Use **Ready to collect**, **Returning within 4h**, **Low fuel**, and **Needs setup** to focus the fleet list. The return-window dropdown offers 1, 2, 4, 8, or 24 hours.
 2. Open **FC Setup** and choose the FCs you want to see. Set each fleet's target and assign submarine roles. Visibility and favorites save automatically; target, strategy, and assignment edits use **Save changes**.
 3. For farming submarines, optionally pin a route, adjust collection delay, choose a fuel-stock source, and set safety stock.
-4. Check **Leveling** for readiness forecasts, **Unlocks** for discovery paths, and **Income** for recorded salvage returns.
+4. Check **Leveling** for readiness forecasts, **Unlocks** for discovery paths, and **Income** for recorded salvage returns and current-farming income projections.
 5. Use **Settings** for global preferences. Select **Save changes** to apply staged edits or **Discard changes** to abandon them.
 
 New installations start with target rank **90**, **Recommended** leveling, FC-wide simulation, a **120-minute** collection delay, and a **20-second per-FC** calculation limit. Updates preserve existing settings. **Reset defaults** opens a confirmed, staged preview that you can review before saving.
@@ -55,6 +55,7 @@ New installations start with target rank **90**, **Recommended** leveling, FC-wi
 
 - **Forecasts are estimates.** Unlocks use a configurable 33% discovery chance per eligible visit by default. Expected dates and likely ranges describe modeled outcomes; locked sectors are never guaranteed.
 - **Income is recorded gross salvage value.** It uses Submarine Tracker's local loot history and NPC sale prices. It is not net profit or proof of a sale, and missing history cannot be reconstructed.
+- **Income projections assume your current farming pace continues.** They use the last 90 days of matching history, require 10 returns, and can borrow matching samples from your other visible FCs. Partial coverage is labeled; future leveling and expenses are excluded.
 - **Fuel runway is a projection.** It depends on your farming routes, collection delays, reserves, and last known stock. Fuel observations come from the character currently being played and remain available locally after switching characters.
 
 See the [user guide](docs/USER_GUIDE.md) for detailed filters and save behavior, income-chart coverage, calculation limits, unlock probabilities, fuel observations, and data handling.
@@ -105,6 +106,6 @@ For core-only validation with the .NET 10 SDK:
 dotnet test tests/SubmarineEtaPlanner.Tests/SubmarineEtaPlanner.Tests.csproj --configuration Release
 ```
 
-Release preparation is documented in the [Public Release Checklist](docs/PUBLIC_RELEASE_CHECKLIST.md); official Dalamud submission guidance is in the [D17 Submission Template](docs/D17_SUBMISSION.md). The current public release is named **1.0.2**, with **1.0.2.0** used in the plugin's four-part assembly and repository version fields.
+Release preparation is documented in the [Public Release Checklist](docs/PUBLIC_RELEASE_CHECKLIST.md); official Dalamud submission guidance is in the [D17 Submission Template](docs/D17_SUBMISSION.md). This release is named **1.1.0**, with **1.1.0.0** used in the plugin's four-part assembly and repository version fields.
 
 See the [Changelog](CHANGELOG.md) for release history.

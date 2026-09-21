@@ -17,8 +17,16 @@ public sealed partial class PlannerWindow
         DrawFleetNotices(currentSnapshot);
         if (DrawNoVisibleFreeCompanies(currentSnapshot))
             return;
-        PlannerUi.WrappedText("Recorded gross NPC salvage value · summary coverage begins with tracked salvaged accessories.", PlannerUi.Muted);
-        PlannerUi.Tooltip("Recorded average divides historical gross gil by elapsed days since the first tracked salvage return in the selected period, with a minimum averaging period of 24 hours. Costs are not deducted; these are past observations, not guaranteed income.");
+        foreach (var mode in new[] { IncomeDisplayMode.History, IncomeDisplayMode.Projection })
+        {
+            if (mode != IncomeDisplayMode.History) PlannerUi.SameLineIfFits("Projection");
+            if (PlannerUi.SegmentedButton($"income-mode-{mode}", mode.ToString(), this.configuration.IncomeDisplayMode == mode))
+            {
+                this.configuration.IncomeDisplayMode = mode;
+                this.saveConfiguration();
+            }
+        }
+        ImGui.Spacing();
         if (this.incomeFcScope is { } scope)
         {
             var selected = VisibleFreeCompanies(currentSnapshot).FirstOrDefault(fc => fc.FcIdKey == scope);
@@ -29,6 +37,13 @@ public sealed partial class PlannerWindow
                 if (ImGui.SmallButton("Show all FCs##clear-income-scope")) this.incomeFcScope = null;
             }
         }
+        if (this.configuration.IncomeDisplayMode == IncomeDisplayMode.Projection)
+        {
+            DrawIncomeProjection(currentSnapshot);
+            return;
+        }
+        PlannerUi.WrappedText("Recorded gross NPC salvage value · summary coverage begins with tracked salvaged accessories.", PlannerUi.Muted);
+        PlannerUi.Tooltip("Recorded average divides historical gross gil by elapsed days since the first tracked salvage return in the selected period, with a minimum averaging period of 24 hours. Costs are not deducted; these are past observations, not guaranteed income.");
         ImGui.BeginDisabled(this.incomeFcScope is not null);
         DrawIncomeViewButton("All fleets", IncomeView.AllFleets);
         PlannerUi.SameLineIfFits("Leveling");

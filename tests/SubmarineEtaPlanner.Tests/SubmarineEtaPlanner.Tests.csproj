@@ -19,6 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Configuration.cs"
+             Link="Runtime\Configuration.cs" />
     <Compile Include="..\..\src\SubmarineEtaPlanner\Fuel\ICurrentCharacterFuelReader.cs"
              Link="Runtime\Fuel\ICurrentCharacterFuelReader.cs" />
     <Compile Include="..\..\src\SubmarineEtaPlanner\Fuel\CurrentCharacterFuelReader.cs"

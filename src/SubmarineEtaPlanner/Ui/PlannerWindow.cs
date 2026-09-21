@@ -283,7 +283,7 @@ public sealed partial class PlannerWindow : Window
         PlannerPage.Operations => "Fleet operations",
         PlannerPage.Leveling => "Leveling fleets",
         PlannerPage.Unlocks => "Sector unlocks",
-        PlannerPage.Income => "Recorded income",
+        PlannerPage.Income => this.configuration.IncomeDisplayMode == IncomeDisplayMode.Projection ? "Projected income" : "Recorded income",
         PlannerPage.FcSetup => "Free company setup",
         PlannerPage.Settings => "Settings",
         _ => "Submarine ETA Planner",
@@ -294,7 +294,9 @@ public sealed partial class PlannerWindow : Window
         PlannerPage.Operations => "Actions first, then every known return across the fleet.",
         PlannerPage.Leveling => "Every leveling FC and submarine in one progression view.",
         PlannerPage.Unlocks => "FC-wide destination progress and sector discovery paths.",
-        PlannerPage.Income => "Gross NPC salvage value from recorded SubmarineTracker returns.",
+        PlannerPage.Income => this.configuration.IncomeDisplayMode == IncomeDisplayMode.Projection
+            ? "Estimated gross NPC salvage value at your current farming pace."
+            : "Gross NPC salvage value from recorded SubmarineTracker returns.",
         PlannerPage.FcSetup => "Visibility, favorites, targets, strategies, submarine roles, and pinned farming routes.",
         PlannerPage.Settings => "Global simulation, route, data, build, and display preferences.",
         _ => string.Empty,
