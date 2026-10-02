@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3
+
+- Added a compact rank group such as `[R84·88·90·90]` beside Role in Operations fleet headings, visible even when the FC is collapsed.
+- Hovering over the heading shows each submarine's name, current rank, and role in the same stable submarine ID order as the rank group.
+- Narrow windows wrap the rank group onto the heading's second line alongside return and fuel information.
+
 ## 1.1.2
 
 - Removed redundant standalone exact/approximate breakdown lines beneath FC rows in Income → Projection, reducing list height and scrolling.

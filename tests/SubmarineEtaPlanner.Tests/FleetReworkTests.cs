@@ -268,7 +268,7 @@ public sealed class FleetReworkTests
         Assert.Equal("4 farming", header.Mode);
         Assert.Equal("In 2h 0m", header.Attention);
         Assert.Equal("Ready", header.FarmReady);
-        Assert.Equal("R142 · R143 · R141 · R140", header.Ranks);
+        Assert.Equal("[R142·143·141·140]", header.Ranks);
         Assert.DoesNotContain("Named submarine", header.Ranks);
         Assert.True(header.IsFarming);
     }
@@ -289,7 +289,7 @@ public sealed class FleetReworkTests
 
         Assert.Equal("1 action now", header.Attention);
         Assert.Equal("1h 0m", header.FarmReady);
-        Assert.Equal("R50", header.Ranks);
+        Assert.Equal("[R50]", header.Ranks);
         Assert.True(header.HasImmediateActions);
         Assert.False(header.IsFarming);
     }
@@ -544,7 +544,7 @@ public sealed class FleetReworkTests
         Assert.Equal("WCSS · R115", header.Submarine2);
         Assert.Equal("WCUS · R116", header.Submarine3);
         Assert.Equal("SCUS++ · R114", header.Submarine4);
-        Assert.Equal("R115 · R115 · R116 · R114", OperationsFcHeaderPresentation.Create(projection, false, now).Ranks);
+        Assert.Equal("[R115·115·116·114]", OperationsFcHeaderPresentation.Create(projection, false, now).Ranks);
     }
 
     [Fact]

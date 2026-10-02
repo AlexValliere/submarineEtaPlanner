@@ -10,6 +10,8 @@ internal sealed record OperationsFcHeaderPresentation(
     bool HasImmediateActions,
     bool IsFarming)
 {
+    public string RanksTooltip { get; init; } = string.Empty;
+
     public static OperationsFcHeaderPresentation Create(
         FcOperationalProjection projection,
         bool favorite,
@@ -25,17 +27,23 @@ internal sealed record OperationsFcHeaderPresentation(
             : projection.CompletionP50AtUtc is { } eta
                 ? FormatFarmReady(eta - now)
                 : "Unavailable";
+        // Keep each position stable when the expanded list reorders by next action.
+        var submarines = projection.Submarines.OrderBy(submarine => submarine.SubmarineId).ToArray();
         return new OperationsFcHeaderPresentation(
             $"{(favorite ? "★ " : string.Empty)}{projection.State.FreeCompanyTag}",
             string.IsNullOrWhiteSpace(projection.State.World) ? "—" : projection.State.World,
             FcRoleSummaryFormatter.Format(projection.RoleSummary),
             attention,
             farmReady,
-            projection.Submarines.Count == 0
+            submarines.Length == 0
                 ? "—"
-                : string.Join(" · ", projection.Submarines.Select(submarine => $"R{submarine.Rank}")),
+                : $"[R{string.Join("·", submarines.Select(submarine => submarine.Rank))}]",
             projection.ImmediateActionCount > 0,
-            projection.RoleSummary is { HasFarming: true, HasLeveling: false, HasPaused: false });
+            projection.RoleSummary is { HasFarming: true, HasLeveling: false, HasPaused: false })
+        {
+            RanksTooltip = string.Join("\n", submarines.Select(submarine =>
+                $"{submarine.Name}: R{submarine.Rank} · {submarine.EffectiveRole}")),
+        };
     }
 
     private static string FormatFarmReady(TimeSpan remaining)

@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Version 1.1.2 makes Income → Projection FC lists more compact by removing redundant standalone exact/approximate breakdown lines. Estimate details remain in the expanded table's Basis column and tooltips; summary and chart coverage are preserved.",
+  "Changelog": "Version 1.1.3 adds compact submarine ranks such as [R84·88·90·90] to Operations fleet headings, visible while collapsed. Hover for each submarine's name, current rank, and role. Rank positions stay stable as voyage actions change, and narrow windows wrap the ranks below the fleet identity.",
   "Tags": [
     "Submarine",
     "ETA",

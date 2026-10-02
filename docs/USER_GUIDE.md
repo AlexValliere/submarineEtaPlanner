@@ -1,6 +1,6 @@
 # Submarine ETA Planner user guide
 
-Detailed behavior, forecasting assumptions, and data handling for version 1.1.2. For installation and first steps, see the [README](../README.md).
+Detailed behavior, forecasting assumptions, and data handling for version 1.1.3. For installation and first steps, see the [README](../README.md).
 
 ## Defaults and saved settings
 
@@ -11,6 +11,8 @@ Fresh installations start with target rank 90, Recommended leveling, FC-wide fle
 ## Compact fleet workspace
 
 Operations shows submarine, status, return time, route, and next action. Expand a submarine to inspect rank, build, expected EXP, target ETA, uncertainty, and missing-data explanations. At narrow widths, route and action move beneath the submarine row. Current voyages and proposed or pinned next routes are labeled separately; workshop actions must still be performed in game.
+
+Collapsed Operations fleet headings show current submarine ranks in a compact group such as `[R84·88·90·90]`, beside Role. The ranks stay in submarine ID order as actions and return times change. Hover over the heading for each submarine's name, current rank, and role in that same order. Narrow windows wrap ranks onto the heading's second line.
 
 Attention counters apply after the FC search and role filter. Selecting one filters FC groups while retaining their submarine companions; selecting it again clears it. Voyage counters count submarines (including paused assignments with relevant voyage states). **Returning within 4h** counts known current-voyage returns after now and up to the selected number of elapsed hours ahead, including the exact upper boundary. Already collectible submarines appear only under **Ready to collect**. Choose **1h, 2h, 4h, 8h, or 24h** with the adjacent dropdown; the default is **4h**. The window advances automatically across midnight and clock changes. Its duration is **Saved automatically** for all fleets and remembered across plugin restarts; clearing filters preserves it. Changing the duration updates the counter, filtered fleets, and highlighted submarines together without refreshing forecasts or changing staged settings. Fuel/setup counters count FCs with active farming assignments; missing or stale information is not treated as zero stock.
 
