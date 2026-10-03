@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.4
+
+- Padded each Operations fleet-header rank to three characters with leading spaces, such as `[R 84· 88· 90·144]`.
+- Rendered the compact rank group in a fixed-width font so each submarine's rank and the separators align across fleet rows.
+
 ## 1.1.3
 
 - Added a compact rank group such as `[R84·88·90·90]` beside Role in Operations fleet headings, visible even when the FC is collapsed.

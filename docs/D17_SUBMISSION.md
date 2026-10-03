@@ -10,7 +10,7 @@ repository = "https://github.com/AlexValliere/submarineEtaPlanner.git"
 commit = "<exact-public-release-commit>"
 owners = ["AlexValliere"]
 project_path = "src/SubmarineEtaPlanner"
-changelog = "Version 1.1.3 adds compact current submarine ranks to collapsed Operations fleet headings, with names and roles on hover and responsive wrapping."
+changelog = "Version 1.1.4 aligns Operations fleet ranks across rows using three-character values with leading spaces and a fixed-width font."
 ```
 
 Copy `images/icon.png` to the D17 submission's `images/icon.png`. The current icon is 512×512 and AI-generated; either replace it with a genuinely human-created icon or keep the disclosure below.

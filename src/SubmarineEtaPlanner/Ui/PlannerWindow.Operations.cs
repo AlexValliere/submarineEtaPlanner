@@ -161,12 +161,15 @@ public sealed partial class PlannerWindow
         float availableWidth)
     {
         var values = presentations.ToArray();
+        float ranksWidth;
+        using (Plugin.PluginInterface.UiBuilder.MonoFontHandle.Push())
+            ranksWidth = MeasureHeaderColumn(values.Select(value => value.Ranks), "Ranks", 110f, 160f);
         return CalculateCompactFcHeaderLayout(
             [
                 MeasureHeaderColumn(values.Select(value => value.FreeCompany), "FC tag", 70f, 135f),
                 MeasureHeaderColumn(values.Select(value => value.World), "World", 90f, 150f),
                 MeasureHeaderColumn(values.Select(value => value.Mode), "Role", 85f, 145f),
-                MeasureHeaderColumn(values.Select(value => value.Ranks), "Ranks", 110f, 160f),
+                ranksWidth,
                 MeasureHeaderColumn(values.Select(value => value.Attention), "Next action / return", 135f, 185f),
                 MeasureHeaderColumn(fuels.Select(fuel => CompactFuelLabel(fuel, true)), "Fuel", 155f, 210f),
             ],
@@ -188,7 +191,9 @@ public sealed partial class PlannerWindow
         DrawCompactFcHeaderCell(origin, layout, 0, presentation.FreeCompany, normal);
         DrawCompactFcHeaderCell(origin, layout, 1, presentation.World, normal);
         DrawCompactFcHeaderCell(origin, layout, 2, presentation.Mode, normal);
-        DrawCompactFcHeaderCell(origin, layout, 3, presentation.Ranks, normal);
+        // A fixed-width font makes leading spaces occupy the same width as digits.
+        using (Plugin.PluginInterface.UiBuilder.MonoFontHandle.Push())
+            DrawCompactFcHeaderCell(origin, layout, 3, presentation.Ranks, normal);
         DrawCompactFcHeaderCell(origin, layout, 4, presentation.Attention,
             presentation.HasImmediateActions ? PlannerUi.Amber : normal);
         DrawCompactFcHeaderCell(origin, layout, 5, CompactFuelLabel(fuel, true), FuelStatusColor(fuel));

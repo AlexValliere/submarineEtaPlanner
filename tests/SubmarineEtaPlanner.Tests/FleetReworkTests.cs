@@ -289,7 +289,7 @@ public sealed class FleetReworkTests
 
         Assert.Equal("1 action now", header.Attention);
         Assert.Equal("1h 0m", header.FarmReady);
-        Assert.Equal("[R50]", header.Ranks);
+        Assert.Equal("[R 50]", header.Ranks);
         Assert.True(header.HasImmediateActions);
         Assert.False(header.IsFarming);
     }
