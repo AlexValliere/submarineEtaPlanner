@@ -37,7 +37,7 @@ internal sealed record OperationsFcHeaderPresentation(
             farmReady,
             submarines.Length == 0
                 ? "—"
-                : $"[R{string.Join("·", submarines.Select(submarine => $"{submarine.Rank,3}"))}]",
+                : $"[R{string.Join("·", submarines.Select(submarine => submarine.Rank))}]",
             projection.ImmediateActionCount > 0,
             projection.RoleSummary is { HasFarming: true, HasLeveling: false, HasPaused: false })
         {

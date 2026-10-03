@@ -10,7 +10,7 @@ repository = "https://github.com/AlexValliere/submarineEtaPlanner.git"
 commit = "<exact-public-release-commit>"
 owners = ["AlexValliere"]
 project_path = "src/SubmarineEtaPlanner"
-changelog = "Version 1.1.4 aligns Operations fleet ranks across rows using three-character values with leading spaces and a fixed-width font."
+changelog = "Version 1.1.5 restores compact Operations rank groups in the original interface font, removing leading-space padding and the fixed-width font override."
 ```
 
 Copy `images/icon.png` to the D17 submission's `images/icon.png`. The current icon is 512×512 and AI-generated; either replace it with a genuinely human-created icon or keep the disclosure below.

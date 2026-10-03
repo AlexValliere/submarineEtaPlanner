@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Version 1.1.4 aligns submarine ranks across Operations fleet rows by padding each rank to three characters with leading spaces. The compact rank group uses a fixed-width font so digits and separators line up across one-, two-, and three-digit ranks.",
+  "Changelog": "Version 1.1.5 restores compact submarine ranks such as [R84·88·90·90] in Operations fleet headings using the original interface font. Removed leading-space padding and the fixed-width font override.",
   "Tags": [
     "Submarine",
     "ETA",

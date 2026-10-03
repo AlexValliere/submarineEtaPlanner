@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.5
+
+- Restored compact Operations rank groups such as `[R84·88·90·90]` in the original interface font.
+- Removed leading-space padding and the fixed-width font override, which made the rank labels too large.
+
 ## 1.1.4
 
 - Padded each Operations fleet-header rank to three characters with leading spaces, such as `[R 84· 88· 90·144]`.
