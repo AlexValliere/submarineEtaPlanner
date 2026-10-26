@@ -4,6 +4,7 @@ using Dalamud.Interface;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using SubmarineEtaPlanner.Fuel;
+using SubmarineEtaPlanner.Balances;
 using SubmarineEtaPlanner.Planner;
 using SubmarineEtaPlanner.SubmarineTrackerRuntime;
 using SubmarineEtaPlanner.SubmarineTrackerCompat;
@@ -42,12 +43,18 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService]
     internal static IFramework Framework { get; private set; } = null!;
 
+    [PluginService]
+    internal static IGameGui GameGui { get; private set; } = null!;
+
     private readonly PlannerWindow plannerWindow;
     private readonly PlannerTypography typography;
     private readonly FuelObservationCoordinator fuelObservationCoordinator;
+    private readonly BalanceObservationCoordinator balanceObservationCoordinator;
     private readonly List<string> fuelObservationWarnings = [];
+    private readonly List<string> balanceObservationWarnings = [];
     private readonly Dalamud.Interface.Windowing.WindowSystem windowSystem = new("SubmarineEtaPlanner");
     private int loggedFuelObservationWarningCount;
+    private int loggedBalanceObservationWarningCount;
 
     public Plugin()
     {
@@ -66,6 +73,13 @@ public sealed class Plugin : IDalamudPlugin
             new JsonFuelObservationStore(fuelObservationPath),
             this.fuelObservationWarnings);
         LogFuelObservationWarnings();
+
+        this.balanceObservationCoordinator = new BalanceObservationCoordinator(
+            new DalamudBalanceReader(ClientState, PlayerState, Framework, GameGui),
+            new JsonBalanceObservationStore(Path.Combine(
+                PluginInterface.GetPluginConfigDirectory(), "gil-balances.json")),
+            this.balanceObservationWarnings);
+        LogBalanceObservationWarnings();
 
         ISubmarineCatalog catalog = new DalamudSubmarineCatalog(Data, PluginInterface.AssemblyLocation.DirectoryName!, Log);
         var stateReader = new SubmarineTrackerStateReader(new DalamudSalvageValueCatalog(Data));
@@ -89,6 +103,7 @@ public sealed class Plugin : IDalamudPlugin
             catalog,
             () => this.fuelObservationCoordinator.Observations,
             characterId => this.fuelObservationCoordinator.ForgetObservation(characterId),
+            () => this.balanceObservationCoordinator.Snapshot,
             GetSubmarineTrackerState,
             OpenSubmarineTrackerInstaller);
         this.windowSystem.AddWindow(this.plannerWindow);
@@ -117,7 +132,9 @@ public sealed class Plugin : IDalamudPlugin
         this.windowSystem.RemoveAllWindows();
         this.typography.Dispose();
         this.fuelObservationCoordinator.Dispose();
+        this.balanceObservationCoordinator.Dispose();
         LogFuelObservationWarnings();
+        LogBalanceObservationWarnings();
     }
 
     private void OnFrameworkUpdate(IFramework framework)
@@ -131,6 +148,16 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Error(ex, "Failed to update locally observed workshop fuel stock.");
         }
+
+        try
+        {
+            this.balanceObservationCoordinator.Tick(DateTimeOffset.UtcNow);
+            LogBalanceObservationWarnings();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to update locally observed gil balances.");
+        }
     }
 
     private void LogFuelObservationWarnings()
@@ -139,6 +166,15 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Warning("{Warning}", this.fuelObservationWarnings[this.loggedFuelObservationWarningCount]);
             this.loggedFuelObservationWarningCount++;
+        }
+    }
+
+    private void LogBalanceObservationWarnings()
+    {
+        while (this.loggedBalanceObservationWarningCount < this.balanceObservationWarnings.Count)
+        {
+            Log.Warning("{Warning}", this.balanceObservationWarnings[this.loggedBalanceObservationWarningCount]);
+            this.loggedBalanceObservationWarningCount++;
         }
     }
 

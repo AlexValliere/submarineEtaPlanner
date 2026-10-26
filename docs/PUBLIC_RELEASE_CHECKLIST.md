@@ -19,6 +19,7 @@
 - [ ] Verify 100% and 150% UI scaling at the minimum window size.
 - [ ] Confirm the displayed percentile and unlock assumptions remain understandable without reading the README.
 - [ ] Check Income History and Projection, including mixed roles, insufficient samples, partial totals, FC scope, and saved display preferences; follow `docs/INCOME_PROJECTION_VERIFICATION.md` for the projection acceptance matrix.
+- [ ] Check Income Balances with several characters in one FC, an FC change, an unobserved and an empty chest, chest closure, logout/reload persistence, partial coverage, and the aligned FC chest row. Verify a closed chest does not acquire a new observation timestamp.
 
 ## Publishing
 

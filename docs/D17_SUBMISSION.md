@@ -10,7 +10,7 @@ repository = "https://github.com/AlexValliere/submarineEtaPlanner.git"
 commit = "<exact-public-release-commit>"
 owners = ["AlexValliere"]
 project_path = "src/SubmarineEtaPlanner"
-changelog = "Version 1.1.5 restores compact Operations rank groups in the original interface font, removing leading-space padding and the fixed-width font override."
+changelog = "Version 1.2.0 adds separately recorded character wallets and FC chest gil in Income → Balances, with per-FC totals, observation times, and partial coverage."
 ```
 
 Copy `images/icon.png` to the D17 submission's `images/icon.png`. The current icon is 512×512 and AI-generated; either replace it with a genuinely human-created icon or keep the disclosure below.

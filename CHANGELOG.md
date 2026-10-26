@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+- Added Income → Balances with separately recorded character wallets and FC chest gil, per-FC totals, and observation times.
+- Record gil locally while characters are played and FC chests are open, using the existing fuel-observation approach without an AutoRetainer dependency.
+- Show FC chest gil as a regular row alongside characters in each expanded balance table. Unknown balances remain distinct from recorded zeroes, and incomplete totals are labelled.
+
 ## 1.1.5
 
 - Restored compact Operations rank groups such as `[R84·88·90·90]` in the original interface font.

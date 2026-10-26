@@ -14,12 +14,13 @@ public sealed partial class PlannerWindow
         if (currentSnapshot is null)
             return;
 
-        DrawFleetNotices(currentSnapshot);
+        if (this.configuration.IncomeDisplayMode != IncomeDisplayMode.Balances)
+            DrawFleetNotices(currentSnapshot);
         if (DrawNoVisibleFreeCompanies(currentSnapshot))
             return;
-        foreach (var mode in new[] { IncomeDisplayMode.History, IncomeDisplayMode.Projection })
+        foreach (var mode in new[] { IncomeDisplayMode.History, IncomeDisplayMode.Projection, IncomeDisplayMode.Balances })
         {
-            if (mode != IncomeDisplayMode.History) PlannerUi.SameLineIfFits("Projection");
+            if (mode != IncomeDisplayMode.History) PlannerUi.SameLineIfFits(mode.ToString());
             if (PlannerUi.SegmentedButton($"income-mode-{mode}", mode.ToString(), this.configuration.IncomeDisplayMode == mode))
             {
                 this.configuration.IncomeDisplayMode = mode;
@@ -36,6 +37,11 @@ public sealed partial class PlannerWindow
                 PlannerUi.WrappedText($"FC scope: {selected.DisplayName}", PlannerUi.Teal);
                 if (ImGui.SmallButton("Show all FCs##clear-income-scope")) this.incomeFcScope = null;
             }
+        }
+        if (this.configuration.IncomeDisplayMode == IncomeDisplayMode.Balances)
+        {
+            DrawGilBalances(currentSnapshot);
+            return;
         }
         if (this.configuration.IncomeDisplayMode == IncomeDisplayMode.Projection)
         {

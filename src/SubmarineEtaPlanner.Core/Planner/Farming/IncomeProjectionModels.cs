@@ -1,6 +1,6 @@
 namespace SubmarineEtaPlanner.Planner;
 
-public enum IncomeDisplayMode { History, Projection }
+public enum IncomeDisplayMode { History = 0, Projection = 1, Balances = 2 }
 public enum IncomeProjectionHorizon { Days30 = 30, Days90 = 90, Days365 = 365 }
 public enum IncomeProjectionSampleSource { Own, Pooled }
 public enum IncomeProjectionMatchKind { ExactStats, PreviousRank }

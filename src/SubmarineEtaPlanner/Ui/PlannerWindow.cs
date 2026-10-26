@@ -35,6 +35,7 @@ public sealed partial class PlannerWindow : Window
     private readonly IRouteSelectionCatalog routeSelectionCatalog;
     private readonly Func<IReadOnlyList<CharacterFuelObservation>> getFuelObservations;
     private readonly Action<ulong> forgetFuelObservation;
+    private readonly Func<GilBalanceSnapshot> getGilBalances;
     private readonly Func<SubmarineTrackerDependencyState> getSubmarineTrackerState;
     private readonly Action<bool> openSubmarineTrackerInstaller;
     private readonly ResultsViewState viewState = new();
@@ -67,6 +68,7 @@ public sealed partial class PlannerWindow : Window
         ISubmarineCatalog catalog,
         Func<IReadOnlyList<CharacterFuelObservation>> getFuelObservations,
         Action<ulong> forgetFuelObservation,
+        Func<GilBalanceSnapshot> getGilBalances,
         Func<SubmarineTrackerDependencyState> getSubmarineTrackerState,
         Action<bool> openSubmarineTrackerInstaller)
         : base("Submarine ETA Planner###SubmarineEtaPlanner", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
@@ -82,6 +84,7 @@ public sealed partial class PlannerWindow : Window
             throw new ArgumentException("The submarine catalog must provide route selection data.", nameof(catalog));
         this.getFuelObservations = getFuelObservations ?? throw new ArgumentNullException(nameof(getFuelObservations));
         this.forgetFuelObservation = forgetFuelObservation ?? throw new ArgumentNullException(nameof(forgetFuelObservation));
+        this.getGilBalances = getGilBalances ?? throw new ArgumentNullException(nameof(getGilBalances));
         this.getSubmarineTrackerState = getSubmarineTrackerState;
         this.openSubmarineTrackerInstaller = openSubmarineTrackerInstaller;
         this.draftSettings = CloneSettings(configuration.Settings);
@@ -177,10 +180,12 @@ public sealed partial class PlannerWindow : Window
         }
 
         var refreshing = this.refreshTask is { IsCompleted: false };
+        var showingBalances = this.currentPage == PlannerPage.Income
+            && this.configuration.IncomeDisplayMode == IncomeDisplayMode.Balances;
         if (PlannerUi.DrawHeader(
                 this.typography,
-                GetPageTitle(), GetForecastStatus(),
-                this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Unlocks or PlannerPage.Income,
+                GetPageTitle(), showingBalances ? "Locally observed balances · updates while logged in" : GetForecastStatus(),
+                !showingBalances && (this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Unlocks or PlannerPage.Income),
                 refreshing))
         {
             if (refreshing)
@@ -283,7 +288,12 @@ public sealed partial class PlannerWindow : Window
         PlannerPage.Operations => "Fleet operations",
         PlannerPage.Leveling => "Leveling fleets",
         PlannerPage.Unlocks => "Sector unlocks",
-        PlannerPage.Income => this.configuration.IncomeDisplayMode == IncomeDisplayMode.Projection ? "Projected income" : "Recorded income",
+        PlannerPage.Income => this.configuration.IncomeDisplayMode switch
+        {
+            IncomeDisplayMode.Projection => "Projected income",
+            IncomeDisplayMode.Balances => "FC balances",
+            _ => "Recorded income",
+        },
         PlannerPage.FcSetup => "Free company setup",
         PlannerPage.Settings => "Settings",
         _ => "Submarine ETA Planner",
@@ -294,9 +304,12 @@ public sealed partial class PlannerWindow : Window
         PlannerPage.Operations => "Actions first, then every known return across the fleet.",
         PlannerPage.Leveling => "Every leveling FC and submarine in one progression view.",
         PlannerPage.Unlocks => "FC-wide destination progress and sector discovery paths.",
-        PlannerPage.Income => this.configuration.IncomeDisplayMode == IncomeDisplayMode.Projection
-            ? "Estimated gross NPC salvage value at your current farming pace."
-            : "Gross NPC salvage value from recorded SubmarineTracker returns.",
+        PlannerPage.Income => this.configuration.IncomeDisplayMode switch
+        {
+            IncomeDisplayMode.Projection => "Estimated gross NPC salvage value at your current farming pace.",
+            IncomeDisplayMode.Balances => "Character wallets and FC chest gil, shown separately.",
+            _ => "Gross NPC salvage value from recorded SubmarineTracker returns.",
+        },
         PlannerPage.FcSetup => "Visibility, favorites, targets, strategies, submarine roles, and pinned farming routes.",
         PlannerPage.Settings => "Global simulation, route, data, build, and display preferences.",
         _ => string.Empty,

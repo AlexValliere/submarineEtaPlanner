@@ -6,6 +6,23 @@ namespace SubmarineEtaPlanner.Tests;
 
 public sealed class IncomeProjectionConfigurationTests
 {
+    [Theory]
+    [InlineData(IncomeDisplayMode.History, 0)]
+    [InlineData(IncomeDisplayMode.Projection, 1)]
+    [InlineData(IncomeDisplayMode.Balances, 2)]
+    public void IncomeModesPreserveSavedValuesAndRoundTrip(IncomeDisplayMode mode, int storedValue)
+    {
+        var config = new Configuration { IncomeDisplayMode = mode };
+        config.Migrate();
+        var json = JsonSerializer.Serialize(config);
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(storedValue, document.RootElement.GetProperty(nameof(Configuration.IncomeDisplayMode)).GetInt32());
+
+        var restored = JsonSerializer.Deserialize<Configuration>(json)!;
+        restored.Migrate();
+        Assert.Equal(mode, restored.IncomeDisplayMode);
+    }
+
     [Fact]
     public void ExistingConfigurationDefaultsToHistoryAndPreservesHistoryPreferences()
     {

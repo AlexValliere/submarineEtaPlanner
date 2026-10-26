@@ -31,5 +31,11 @@
              Link="Runtime\Fuel\JsonFuelObservationStore.cs" />
     <Compile Include="..\..\src\SubmarineEtaPlanner\Fuel\FuelObservationCoordinator.cs"
              Link="Runtime\Fuel\FuelObservationCoordinator.cs" />
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Balances\IBalanceObservationStore.cs"
+             Link="Runtime\Balances\IBalanceObservationStore.cs" />
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Balances\JsonBalanceObservationStore.cs"
+             Link="Runtime\Balances\JsonBalanceObservationStore.cs" />
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Balances\BalanceObservationCoordinator.cs"
+             Link="Runtime\Balances\BalanceObservationCoordinator.cs" />
   </ItemGroup>
 </Project>

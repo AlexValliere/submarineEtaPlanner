@@ -1,6 +1,6 @@
 # Submarine ETA Planner user guide
 
-Detailed behavior, forecasting assumptions, and data handling for version 1.1.5. For installation and first steps, see the [README](../README.md).
+Detailed behavior, forecasting assumptions, and data handling for version 1.2.0. For installation and first steps, see the [README](../README.md).
 
 ## Defaults and saved settings
 
@@ -81,6 +81,18 @@ Submarine rows identify **Exact stats**, **Approximate**, or **Unavailable** in 
 The collapsible chart uses daily bars for 30/90 days and calendar months for 365 days. Bars distribute the same estimated daily rate across elapsed time, with partial boundary periods marked `*`; the total matches the summary, including approximations. The chart and its tooltips identify when previous-rank approximations contribute. Dates use your local timezone. Calendar months, leap days, and daylight-saving changes are prorated by elapsed time. These bars are estimates, not recorded income or scheduled collections.
 
 The projection assumes current ranks, builds, routes, and collection delays continue; fuel is replenished; and there is no additional downtime. It is independent of current fuel stock and leveling forecast completion. Future leveling, upgrades, newly unlocked routes, manual income overrides, and expenses are not modeled. Values remain gross NPC salvage value, not proof of sales or net profit. Incomplete history can affect the estimate, and all processing stays local.
+
+## Character wallets and FC chest gil
+
+Open **Income → Balances** to see character wallets and FC chest gil separately, with a combined recorded total for each visible FC. Expand an FC for a three-column table: character or source, gil, and last observed. **FC chest** uses the same row layout as the characters. Favorites, FC visibility, and selected FC scope apply to this view.
+
+Wallet gil is observed while a character is logged in. FC chest gil is recorded only when its chest is open and ready, with a valid matching FC identity. Log into each character and open each FC chest at least once to populate the view. After switching characters or closing a chest, its last recorded amount and timestamp remain available. This uses the same local observation pattern as fuel tracking; AutoRetainer is not required.
+
+An unobserved amount displays **—**, while a recorded empty wallet or chest displays **0**. Known recorded totals include only observed amounts, and partial coverage is identified. Coverage describes recorded characters, not the FC's full membership. Unassigned characters are shown separately and excluded from FC totals. Retainer gil, salvage income, and projected earnings are excluded from these balances.
+
+Snapshots may have been recorded at different times. Transfers between characters and the FC chest can temporarily make their combined recorded total inaccurate until the affected balances are observed again. Use the individual observation times when assessing freshness. Opening the planner or recalculating forecasts does not make an offline balance current.
+
+Balances are stored locally in `gil-balances.json` in the plugin configuration directory. Each character is identified by its content ID and each chest by its numeric FC ID, so observing several characters in one FC does not count the chest more than once. No balances are uploaded.
 
 ## Farming cycles and fuel runway
 
