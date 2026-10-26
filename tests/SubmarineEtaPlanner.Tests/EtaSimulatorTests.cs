@@ -1247,12 +1247,14 @@ public sealed class EtaSimulatorTests
         var repoJsonPath = FindRepoJson();
         var repositoryRoot = Path.GetDirectoryName(repoJsonPath)!;
         var sourceManifestPath = Path.Combine(repositoryRoot, "src", "SubmarineEtaPlanner", "SubmarineEtaPlanner.json");
+        var projectPath = Path.Combine(repositoryRoot, "src", "SubmarineEtaPlanner", "SubmarineEtaPlanner.csproj");
+        var projectVersion = System.Xml.Linq.XDocument.Load(projectPath).Descendants("Version").Single().Value;
         using var repoDocument = JsonDocument.Parse(File.ReadAllText(repoJsonPath));
         using var sourceDocument = JsonDocument.Parse(File.ReadAllText(sourceManifestPath));
         var repoManifest = repoDocument.RootElement[0];
         var sourceManifest = sourceDocument.RootElement;
         const string expectedPunchline = "Plan and monitor your Free Company submarine fleets.";
-        const string expectedDescription = "Plan Free Company submarine operations from local SubmarineTracker data: choose which tracked FCs to show, prioritize returns and next actions, forecast leveling and sector unlocks, review recorded salvage income and project future farming earnings, configure farming routes, and estimate ceruleum fuel runway. Requires Submarine Tracker to be installed and enabled. Open it with /seta. The installer icon was created with AI assistance.";
+        const string expectedDescription = "Plan Free Company submarine operations from local SubmarineTracker data: choose which tracked FCs to show, prioritize returns and next actions, forecast leveling and sector unlocks, review recorded salvage income and project future farming earnings, track locally observed character wallets and FC chest gil, configure farming routes, and estimate ceruleum fuel runway. Requires Submarine Tracker to be installed and enabled. Open it with /seta. The installer icon was created with AI assistance.";
 
         foreach (var propertyName in new[] { "Author", "Name", "Punchline", "Description", "InternalName", "ApplicableVersion", "RepoUrl", "IconUrl" })
             Assert.Equal(sourceManifest.GetProperty(propertyName).GetString(), repoManifest.GetProperty(propertyName).GetString());
@@ -1264,12 +1266,12 @@ public sealed class EtaSimulatorTests
         Assert.Equal("SubmarineEtaPlanner", repoManifest.GetProperty("InternalName").GetString());
         Assert.Equal(expectedPunchline, repoManifest.GetProperty("Punchline").GetString());
         Assert.Equal(expectedDescription, repoManifest.GetProperty("Description").GetString());
-        Assert.Equal("1.1.5.0", repoManifest.GetProperty("AssemblyVersion").GetString());
+        Assert.Equal(projectVersion, repoManifest.GetProperty("AssemblyVersion").GetString());
         Assert.Equal("https://github.com/AlexValliere/submarineEtaPlanner", repoManifest.GetProperty("RepoUrl").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkInstall").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/SubmarineEtaPlanner/latest.zip", repoManifest.GetProperty("DownloadLinkUpdate").GetString());
         Assert.Equal("https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png", repoManifest.GetProperty("IconUrl").GetString());
-        Assert.Contains("Operations", repoManifest.GetProperty("Changelog").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(repoManifest.GetProperty("Changelog").GetString()));
         Assert.Equal(sourceManifest.GetProperty("Changelog").GetString(), repoManifest.GetProperty("Changelog").GetString());
         Assert.Equal(15, repoManifest.GetProperty("DalamudApiLevel").GetInt32());
     }
