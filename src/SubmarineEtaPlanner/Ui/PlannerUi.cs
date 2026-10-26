@@ -2,6 +2,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility;
+using SubmarineEtaPlanner.Planner;
 using System.Numerics;
 
 namespace SubmarineEtaPlanner.Ui;
@@ -19,7 +20,8 @@ internal static class PlannerUi
     internal static readonly Vector4 Green = PlannerTheme.Green;
     internal static readonly Vector4 Red = PlannerTheme.Red;
     internal static readonly Vector4 Muted = PlannerTheme.Muted;
-    internal static bool DrawHeader(PlannerTypography typography, string title, string status, bool showRefresh, bool refreshing)
+    internal static bool DrawHeader(PlannerTypography typography, string title, string status, bool showRefresh,
+        bool refreshing, GilBalanceOverview balances, out bool balancesClicked)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var origin = ImGui.GetCursorScreenPos();
@@ -27,16 +29,46 @@ internal static class PlannerUi
         var buttonLabel = refreshing ? "Cancel" : "Refresh";
         var buttonWidth = showRefresh ? ImGui.CalcTextSize(buttonLabel).X + 50f * scale : 0;
         var padding = 12f * scale;
-        var textWidth = Math.Max(1f, width - buttonWidth - padding * (showRefresh ? 3 : 2));
+        var gap = 12f * scale;
+        var innerWidth = Math.Max(1f, width - padding * 2);
+        var amount = balances.RecordedGil is { } gil ? ResultsViewState.FormatCompactGil(gil) : "—";
+        var coverage = !balances.ScopeKnown ? (refreshing ? "Loading FC scope" : "FC scope unavailable")
+            : balances.RecordedGil is null ? "No balances recorded"
+            : $"All {balances.VisibleFcCount} visible FC{(balances.VisibleFcCount == 1 ? string.Empty : "s")}"
+                + (balances.IsPartial ? " · partial" : string.Empty);
+        const string balanceLabel = "Known recorded gil";
+        float amountWidth;
+        using (typography.Value()) amountWidth = ImGui.CalcTextSize(amount).X;
+        var balanceWidth = Math.Max(180f * scale,
+            Math.Max(ImGui.CalcTextSize(balanceLabel).X + 28f * scale,
+                Math.Max(amountWidth, ImGui.CalcTextSize(coverage).X)) + 16f * scale);
+        float titleWidth;
+        using (typography.Heading()) titleWidth = ImGui.CalcTextSize(title).X;
+        var minimumTitleWidth = Math.Max(200f * scale, Math.Min(320f * scale, titleWidth));
+        var refreshAllowance = showRefresh ? buttonWidth + gap : 0f;
+        var inline = innerWidth - refreshAllowance - balanceWidth - gap >= minimumTitleWidth;
+        var textWidth = Math.Max(1f, innerWidth - refreshAllowance - (inline ? balanceWidth + gap : 0));
+        if (!inline) balanceWidth = innerWidth;
         float titleHeight;
         using (typography.Heading())
             titleHeight = ImGui.CalcTextSize(title, false, textWidth).Y;
-        var topRowHeight = Math.Max(titleHeight, showRefresh ? ImGui.GetFrameHeight() : 0f);
-        var statusHeight = ImGui.CalcTextSize(status, false, Math.Max(1f, width - padding * 2)).Y;
-        var height = topRowHeight + statusHeight + padding * 2 + 4f * scale;
+        var statusHeight = ImGui.CalcTextSize(status, false, textWidth).Y;
+        var textHeight = titleHeight + statusHeight + 4f * scale;
+        var topRowHeight = Math.Max(textHeight, showRefresh ? ImGui.GetFrameHeight() : 0f);
+        var balanceTextWidth = Math.Max(1f, balanceWidth - 16f * scale);
+        var balanceLabelHeight = ImGui.CalcTextSize(balanceLabel, false,
+            Math.Max(1f, balanceTextWidth - 20f * scale)).Y;
+        float amountHeight;
+        using (typography.Value()) amountHeight = ImGui.CalcTextSize(amount, false, balanceTextWidth).Y;
+        var coverageHeight = ImGui.CalcTextSize(coverage, false, balanceTextWidth).Y;
+        var balanceHeight = balanceLabelHeight + amountHeight + coverageHeight + 12f * scale;
+        var contentHeight = inline ? Math.Max(topRowHeight, balanceHeight) : topRowHeight + gap + balanceHeight;
+        var height = contentHeight + padding * 2;
         var end = origin + new Vector2(width, height);
-        ImGui.GetWindowDrawList().AddRectFilled(origin, end, ColorU32(PanelBackground), PlannerTheme.PanelRounding * scale);
-        ImGui.SetCursorScreenPos(origin + new Vector2(padding, padding + (topRowHeight - titleHeight) / 2));
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRectFilled(origin, end, ColorU32(PanelBackground), PlannerTheme.PanelRounding * scale);
+        var textOrigin = origin + new Vector2(padding, padding + (inline ? (contentHeight - textHeight) / 2f : 0));
+        ImGui.SetCursorScreenPos(textOrigin);
         ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + textWidth);
         using (typography.Heading())
             ImGui.TextUnformatted(title);
@@ -49,16 +81,80 @@ internal static class PlannerUi
                 refreshing ? FontAwesomeIcon.Times : FontAwesomeIcon.SyncAlt,
                 $"{buttonLabel}##header-refresh", Vector2.Zero);
         }
-        ImGui.SetCursorScreenPos(origin + new Vector2(padding, padding + topRowHeight + 4f * scale));
+        ImGui.SetCursorScreenPos(textOrigin + new Vector2(0, titleHeight + 4f * scale));
         ImGui.PushStyleColor(ImGuiCol.Text, Muted);
-        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + Math.Max(1f, width - padding * 2));
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + textWidth);
         ImGui.TextUnformatted(status);
         ImGui.PopTextWrapPos();
         ImGui.PopStyleColor();
+
+        var balanceOrigin = inline
+            ? new Vector2(end.X - padding - refreshAllowance - balanceWidth,
+                origin.Y + padding + (contentHeight - balanceHeight) / 2f)
+            : origin + new Vector2(padding, padding + topRowHeight + gap);
+        if (inline)
+            drawList.AddLine(new Vector2(balanceOrigin.X - gap / 2f, origin.Y + padding),
+                new Vector2(balanceOrigin.X - gap / 2f, end.Y - padding), ColorU32(Border));
+        else
+            drawList.AddLine(balanceOrigin - new Vector2(0, gap / 2f),
+                balanceOrigin + new Vector2(balanceWidth, -gap / 2f), ColorU32(Border));
+
+        ImGui.SetCursorScreenPos(balanceOrigin);
+        ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, PlannerTheme.Hover);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, PlannerTheme.Selected);
+        balancesClicked = ImGui.Button("##header-gil-balances", new Vector2(balanceWidth, balanceHeight));
+        var showBalanceTooltip = ImGui.IsItemHovered() || ImGui.IsItemFocused();
+        ImGui.PopStyleColor(3);
+
+        var balanceTextOrigin = balanceOrigin + new Vector2(8f, 4f) * scale;
+        ImGui.SetCursorScreenPos(balanceTextOrigin);
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + Math.Max(1f, balanceTextWidth - 20f * scale));
+        ImGui.TextColored(Muted, balanceLabel);
+        ImGui.PopTextWrapPos();
+        ImGui.SetCursorScreenPos(new Vector2(balanceOrigin.X + balanceWidth - 18f * scale, balanceTextOrigin.Y));
+        Icon(FontAwesomeIcon.ChevronRight, Muted);
+        ImGui.SetCursorScreenPos(balanceTextOrigin + new Vector2(0, balanceLabelHeight + 2f * scale));
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + balanceTextWidth);
+        using (typography.Value()) ImGui.TextColored(balances.RecordedGil is null ? Muted : Green, amount);
+        ImGui.PopTextWrapPos();
+        ImGui.SetCursorScreenPos(balanceTextOrigin + new Vector2(0, balanceLabelHeight + amountHeight + 4f * scale));
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + balanceTextWidth);
+        ImGui.TextColored(balances.IsPartial && balances.RecordedGil is not null ? Amber : Muted, coverage);
+        ImGui.PopTextWrapPos();
+        if (showBalanceTooltip) DrawHeaderBalanceTooltip(balances, refreshing);
+
         ImGui.SetCursorScreenPos(new Vector2(origin.X, end.Y));
         ImGui.Dummy(Vector2.Zero);
         return clicked;
     }
+
+    private static void DrawHeaderBalanceTooltip(GilBalanceOverview balances, bool refreshing)
+    {
+        BeginTooltip();
+        WrappedText("Known recorded gil", Teal);
+        if (!balances.ScopeKnown)
+            WrappedText(refreshing
+                ? "Loading the visible FC list. Existing observations remain stored locally."
+                : "The visible FC list is unavailable. Open Operations and refresh fleet data; Submarine Tracker must be enabled. Existing observations remain stored locally.", Muted);
+        else
+        {
+            WrappedText($"Character wallets: {FormatHeaderGil(balances.WalletGil)} · {balances.ObservedWalletCount} observed");
+            WrappedText($"FC chests: {FormatHeaderGil(balances.ChestGil)} · {balances.ObservedChestCount} of {balances.VisibleFcCount} observed");
+            WrappedText($"Known recorded total: {FormatHeaderGil(balances.RecordedGil)}");
+            WrappedText($"{balances.ObservedFcCount} of {balances.VisibleFcCount} visible FCs have observations.", Muted);
+            if (balances.OldestObservationAtUtc is { } oldest)
+                WrappedText($"Oldest observation: {oldest.LocalDateTime:g}", Muted);
+            if (balances.RecordedGil is null)
+                WrappedText("Log in on your FC characters and open each FC chest to record gil.", Muted);
+            WrappedText("Includes all visible FCs, independent of page filters. Hidden FCs, unassigned characters, and retainers are excluded. Snapshots may have different ages; balances may have changed.", Muted);
+        }
+        ImGui.Spacing();
+        WrappedText("Open Income → Balances", Teal);
+        EndTooltip();
+    }
+
+    private static string FormatHeaderGil(long? value) => value is null ? "Unknown" : $"{value.Value:N0} gil";
 
     internal static void SameLineIfFits(string label, float extraWidth = 0)
     {

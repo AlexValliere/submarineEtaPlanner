@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Version 1.2.0 adds Income → Balances with separate character wallets and FC chest gil, recorded totals, and observation times. Balances are stored locally using the fuel-observation approach; AutoRetainer is not required. Expand an FC to inspect characters and its chest in the same table, with unknown balances and partial coverage identified.",
+  "Changelog": "Version 1.2.1 adds a Known recorded gil total in the window header across all visible FCs. Click it to open Income → Balances, or hover for separate wallet/chest amounts, observation coverage, and freshness details. The total stays independent of Operations filters, identifies partial coverage, and adapts to narrow windows.",
   "Tags": [
     "Submarine",
     "ETA",

@@ -10,7 +10,7 @@ repository = "https://github.com/AlexValliere/submarineEtaPlanner.git"
 commit = "<exact-public-release-commit>"
 owners = ["AlexValliere"]
 project_path = "src/SubmarineEtaPlanner"
-changelog = "Version 1.2.0 adds separately recorded character wallets and FC chest gil in Income → Balances, with per-FC totals, observation times, and partial coverage."
+changelog = "Version 1.2.1 adds a Known recorded gil header total across visible FCs, with a wallet/chest breakdown, partial coverage, and a shortcut to Income → Balances."
 ```
 
 Copy `images/icon.png` to the D17 submission's `images/icon.png`. The current icon is 512×512 and AI-generated; either replace it with a genuinely human-created icon or keep the disclosure below.

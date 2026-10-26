@@ -179,6 +179,7 @@ public sealed partial class PlannerWindow : Window
             return;
         }
 
+        var headerBalances = GetHeaderBalanceOverview();
         var refreshing = this.refreshTask is { IsCompleted: false };
         var showingBalances = this.currentPage == PlannerPage.Income
             && this.configuration.IncomeDisplayMode == IncomeDisplayMode.Balances;
@@ -186,7 +187,7 @@ public sealed partial class PlannerWindow : Window
                 this.typography,
                 GetPageTitle(), showingBalances ? "Locally observed balances · updates while logged in" : GetForecastStatus(),
                 !showingBalances && (this.currentPage is PlannerPage.Operations or PlannerPage.Leveling or PlannerPage.Unlocks or PlannerPage.Income),
-                refreshing))
+                refreshing, headerBalances, out var balancesClicked))
         {
             if (refreshing)
             {
@@ -198,6 +199,7 @@ public sealed partial class PlannerWindow : Window
                 QueueRefresh();
             }
         }
+        if (balancesClicked) OpenGlobalBalances();
 
         ImGui.Spacing();
         if (this.currentPage == PlannerPage.Settings)

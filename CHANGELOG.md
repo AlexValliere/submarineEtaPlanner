@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1
+
+- Added a persistent Known recorded gil total in the window header, covering character wallets and FC chests across all visible FCs.
+- Click the header total to open Income → Balances for all visible FCs. Hover for the separate wallet/chest amounts, observation coverage, and freshness details.
+- Keep the total independent of Operations search, role, and attention filters, identify partial coverage, and move the block below the title at narrow widths.
+
 ## 1.2.0
 
 - Added Income → Balances with separately recorded character wallets and FC chest gil, per-FC totals, and observation times.

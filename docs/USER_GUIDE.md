@@ -1,6 +1,6 @@
 # Submarine ETA Planner user guide
 
-Detailed behavior, forecasting assumptions, and data handling for version 1.2.0. For installation and first steps, see the [README](../README.md).
+Detailed behavior, forecasting assumptions, and data handling for version 1.2.1. For installation and first steps, see the [README](../README.md).
 
 ## Defaults and saved settings
 
@@ -9,6 +9,10 @@ Fresh installations start with target rank 90, Recommended leveling, FC-wide fle
 **Reset defaults** asks for confirmation before loading defaults across every settings category. The reset remains staged so you can inspect each tab, adjust values, select **Save changes**, or use **Discard changes** without changing the saved configuration.
 
 ## Compact fleet workspace
+
+The header shows **Known recorded gil**, the combined last observed character wallets and FC chests across all visible FCs. This total stays independent of Operations search, role, sort, attention filters, and an individual FC's Income scope. Hidden FCs and unassigned characters are excluded. Click the total to open **Income → Balances** with the individual FC scope cleared. Hover it for separate wallet/chest amounts, observed-wallet and chest coverage, and freshness details. At narrow widths, the block moves below the title.
+
+The header identifies partial coverage when amounts are missing. No recorded amounts display **—**, while an observed total of zero displays **0**. Its balance observations are separate from the forecast snapshot time: **Refresh** recalculates forecasts and does not make an offline wallet or closed chest current.
 
 Operations shows submarine, status, return time, route, and next action. Expand a submarine to inspect rank, build, expected EXP, target ETA, uncertainty, and missing-data explanations. At narrow widths, route and action move beneath the submarine row. Current voyages and proposed or pinned next routes are labeled separately; workshop actions must still be performed in game.
 
