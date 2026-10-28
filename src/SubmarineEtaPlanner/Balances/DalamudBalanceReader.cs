@@ -35,27 +35,27 @@ internal sealed unsafe class DalamudBalanceReader(
             var walletGil = inventory->GetInventoryItemCount(1, isHq: false, checkEquipped: false, checkArmory: false);
             if (walletGil < 0) return null;
 
-            ulong? freeCompanyId = null;
+            var proxy = InfoProxyFreeCompany.Instance();
+            var members = InfoProxyFreeCompanyMember.Instance();
+            // Keep only scalar copies, including the inputs rejected by the association checks.
+            var association = new BalanceAssociationDiagnostics(
+                homeWorld.RowId,
+                currentWorld.IsValid ? currentWorld.RowId : null,
+                localPlayer->HomeWorld,
+                localPlayer->CurrentWorld,
+                !string.IsNullOrEmpty(localPlayer->FreeCompanyTagString),
+                proxy is null ? null : proxy->Id,
+                proxy is null ? null : proxy->HomeWorldId,
+                proxy is not null && !string.IsNullOrEmpty(proxy->NameString),
+                members is null ? null : members->FreeCompanyId);
             // The FC proxy can retain or omit data while travelling; those states must not move a wallet.
-            if (currentWorld.IsValid && currentWorld.RowId == homeWorld.RowId &&
-                localPlayer->CurrentWorld == homeWorld.RowId && localPlayer->HomeWorld == homeWorld.RowId)
-            {
-                var proxy = InfoProxyFreeCompany.Instance();
-                if (proxy is not null)
-                {
-                    var hasTag = !string.IsNullOrEmpty(localPlayer->FreeCompanyTagString);
-                    if (hasTag && proxy->Id != 0 && !string.IsNullOrEmpty(proxy->NameString))
-                        freeCompanyId = proxy->Id;
-                    else if (!hasTag && proxy->Id == 0)
-                        freeCompanyId = 0; // Confirmed absence, distinct from an unloaded proxy.
-                }
-            }
+            var (freeCompanyId, _) = association.Resolve();
 
             var character = new CharacterGilObservation(playerState.ContentId, freeCompanyId,
                 playerState.CharacterName, homeWorld.Value.Name.ExtractText(), walletGil,
                 now.ToUniversalTime(), IsLive: true);
             var chest = freeCompanyId is > 0 ? ReadReadyChest(inventory, freeCompanyId.Value, now) : null;
-            return new(character, chest);
+            return new(character, chest, association);
         }
         catch (Exception)
         {

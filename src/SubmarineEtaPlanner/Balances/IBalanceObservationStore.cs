@@ -5,7 +5,10 @@ internal interface ICurrentBalanceReader
     BalanceReadResult? TryRead(DateTimeOffset now, ICollection<string> warnings);
 }
 
-internal sealed record BalanceReadResult(CharacterGilObservation Character, FcChestGilObservation? Chest);
+internal sealed record BalanceReadResult(
+    CharacterGilObservation Character,
+    FcChestGilObservation? Chest,
+    BalanceAssociationDiagnostics? Association = null);
 
 internal interface IBalanceObservationStore
 {

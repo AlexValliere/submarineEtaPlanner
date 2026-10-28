@@ -114,7 +114,7 @@ public sealed class Plugin : IDalamudPlugin
         Framework.Update += OnFrameworkUpdate;
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Toggle Submarine ETA Planner. Subcommands: settings, refresh, help.",
+            HelpMessage = "Toggle Submarine ETA Planner. Subcommands: settings, refresh, balance-debug, help.",
             ShowInHelp = true,
         });
     }
@@ -217,6 +217,9 @@ public sealed class Plugin : IDalamudPlugin
             case "refresh":
                 this.plannerWindow.OpenAndRefresh();
                 break;
+            case "balance-debug":
+                PrintBalanceDiagnostics();
+                break;
             case "help":
                 PrintCommandHelp();
                 break;
@@ -233,7 +236,33 @@ public sealed class Plugin : IDalamudPlugin
         ChatGui.Print("/seta — Toggle the dashboard");
         ChatGui.Print("/seta settings — Open simulation settings");
         ChatGui.Print("/seta refresh — Open the dashboard and refresh the forecast");
+        ChatGui.Print("/seta balance-debug — Show the latest wallet-to-FC association diagnostic");
         ChatGui.Print("/seta help — Show this help");
+    }
+
+    private void PrintBalanceDiagnostics()
+    {
+        var read = this.balanceObservationCoordinator.LastRead;
+        if (read?.Association is not { } association)
+        {
+            ChatGui.Print("No current balance diagnostic is available. Wait until fully logged in, then try /seta balance-debug again.");
+            return;
+        }
+
+        var character = read.Character;
+        var recordedFreeCompanyId = this.balanceObservationCoordinator.Snapshot.Characters
+            .FirstOrDefault(candidate => candidate.CharacterId == character.CharacterId)?.FreeCompanyId;
+        string[] lines =
+        [
+            $"Balance diagnostic for {character.CharacterName} @ {character.World} "
+                + $"({character.ObservedAtUtc:yyyy-MM-dd HH:mm:ss} UTC):",
+            .. association.FormatLines(recordedFreeCompanyId),
+        ];
+        foreach (var line in lines)
+        {
+            ChatGui.Print(line);
+            Log.Information("{BalanceDiagnostic}", line);
+        }
     }
 
     private static SubmarineTrackerDependencyState GetSubmarineTrackerState()

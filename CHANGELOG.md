@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.2
+
+- Added `/seta balance-debug` to identify the check preventing a character wallet from being associated with an FC.
+- Show the latest observation time, both sources of home/current world IDs, FC tag/name availability, proxy IDs, and the recorded wallet association in chat and the plugin log.
+- Added regression coverage for association decisions and diagnostic freshness. Existing association rules and saved balance data are preserved.
+
 ## 1.2.1
 
 - Added a persistent Known recorded gil total in the window header, covering character wallets and FC chests across all visible FCs.

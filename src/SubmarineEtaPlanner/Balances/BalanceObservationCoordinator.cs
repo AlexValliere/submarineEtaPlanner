@@ -24,6 +24,7 @@ internal sealed class BalanceObservationCoordinator : IDisposable
     }
 
     public GilBalanceSnapshot Snapshot { get; private set; }
+    public BalanceReadResult? LastRead { get; private set; }
 
     public void Tick(DateTimeOffset now)
     {
@@ -40,12 +41,14 @@ internal sealed class BalanceObservationCoordinator : IDisposable
 
         if (read is null || read.Character.CharacterId == 0 || read.Character.Gil is < 0 or > uint.MaxValue)
         {
+            LastRead = null;
             if (Snapshot.Characters.Any(character => character.IsLive))
                 Snapshot = Snapshot with { Characters = Snapshot.Characters.Select(character => character with { IsLive = false }).ToArray() };
             SavePending(now);
             return;
         }
 
+        LastRead = read;
         var previous = Snapshot.Characters.FirstOrDefault(character => character.CharacterId == read.Character.CharacterId);
         var current = read.Character with
         {

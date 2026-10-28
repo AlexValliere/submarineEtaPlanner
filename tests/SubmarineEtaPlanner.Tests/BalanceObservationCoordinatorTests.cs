@@ -110,16 +110,91 @@ public sealed class BalanceObservationCoordinatorTests
         Assert.Equal(200, Assert.Single(store.Saved!.Characters).Gil);
     }
 
+    [Fact]
+    public void LastReadKeepsUnknownRawAssociationSeparateFromTheRecordedMembership()
+    {
+        var reader = new FakeReader { Current = Read(1, 10, 100) };
+        using var coordinator = new BalanceObservationCoordinator(reader, new FakeStore(), []);
+        coordinator.Tick(Now);
+        var diagnostics = new BalanceAssociationDiagnostics(67, 67, 67, 67, true, 0, 67, false, null);
+        reader.Current = new(Read(1, null, 120).Character, null, diagnostics);
+
+        coordinator.Tick(Now.AddSeconds(1));
+
+        Assert.NotNull(coordinator.LastRead);
+        Assert.Null(coordinator.LastRead.Character.FreeCompanyId);
+        Assert.Equal(diagnostics, coordinator.LastRead.Association);
+        Assert.Equal(10UL, Assert.Single(coordinator.Snapshot.Characters).FreeCompanyId);
+    }
+
+    [Fact]
+    public void AReadWithoutDiagnosticsReplacesThePreviousDiagnosticSample()
+    {
+        var diagnostics = new BalanceAssociationDiagnostics(67, 67, 67, 67, true, 10, 67, true, 10);
+        var reader = new FakeReader { Current = new(Read(1, 10, 100).Character, null, diagnostics) };
+        using var coordinator = new BalanceObservationCoordinator(reader, new FakeStore(), []);
+        coordinator.Tick(Now);
+        reader.Current = Read(2, 20, 200);
+
+        coordinator.Tick(Now.AddSeconds(1));
+
+        Assert.NotNull(coordinator.LastRead);
+        Assert.Equal(2UL, coordinator.LastRead.Character.CharacterId);
+        Assert.Null(coordinator.LastRead.Association);
+    }
+
+    [Theory]
+    [InlineData(0UL, 100L)]
+    [InlineData(1UL, -1L)]
+    [InlineData(1UL, 4294967296L)]
+    public void InvalidReadClearsThePreviousDiagnosticSample(ulong characterId, long gil)
+    {
+        var reader = new FakeReader { Current = Read(1, 10, 100) };
+        using var coordinator = new BalanceObservationCoordinator(reader, new FakeStore(), []);
+        coordinator.Tick(Now);
+        Assert.NotNull(coordinator.LastRead);
+        reader.Current = Read(characterId, 10, gil);
+
+        coordinator.Tick(Now.AddSeconds(1));
+
+        Assert.Null(coordinator.LastRead);
+        Assert.Equal(100, Assert.Single(coordinator.Snapshot.Characters).Gil);
+    }
+
+    [Fact]
+    public void MissingReadOrReaderExceptionClearsThePreviousDiagnosticSample()
+    {
+        var reader = new FakeReader { Current = Read(1, 10, 100) };
+        using var coordinator = new BalanceObservationCoordinator(reader, new FakeStore(), []);
+        coordinator.Tick(Now);
+        Assert.NotNull(coordinator.LastRead);
+        reader.Current = null;
+        coordinator.Tick(Now.AddSeconds(1));
+        Assert.Null(coordinator.LastRead);
+
+        reader.Current = Read(2, 20, 200);
+        coordinator.Tick(Now.AddSeconds(2));
+        Assert.NotNull(coordinator.LastRead);
+        reader.ThrowOnRead = true;
+        coordinator.Tick(Now.AddSeconds(3));
+
+        Assert.Null(coordinator.LastRead);
+        Assert.Equal(2, coordinator.Snapshot.Characters.Count);
+        Assert.All(coordinator.Snapshot.Characters, character => Assert.False(character.IsLive));
+    }
+
     private static BalanceReadResult Read(ulong id, ulong? fc, long gil, FcChestGilObservation? chest = null)
         => new(new(id, fc, $"Character {id}", "Cerberus", gil, Now, true), chest);
 
     private sealed class FakeReader : ICurrentBalanceReader
     {
         public BalanceReadResult? Current { get; set; }
+        public bool ThrowOnRead { get; set; }
         public int ReadCount { get; private set; }
         public BalanceReadResult? TryRead(DateTimeOffset now, ICollection<string> warnings)
         {
             ReadCount++;
+            if (ThrowOnRead) throw new InvalidOperationException("Simulated reader failure.");
             return Current;
         }
     }

@@ -33,6 +33,8 @@
              Link="Runtime\Fuel\FuelObservationCoordinator.cs" />
     <Compile Include="..\..\src\SubmarineEtaPlanner\Balances\IBalanceObservationStore.cs"
              Link="Runtime\Balances\IBalanceObservationStore.cs" />
+    <Compile Include="..\..\src\SubmarineEtaPlanner\Balances\BalanceAssociationDiagnostics.cs"
+             Link="Runtime\Balances\BalanceAssociationDiagnostics.cs" />
     <Compile Include="..\..\src\SubmarineEtaPlanner\Balances\JsonBalanceObservationStore.cs"
              Link="Runtime\Balances\JsonBalanceObservationStore.cs" />
     <Compile Include="..\..\src\SubmarineEtaPlanner\Balances\BalanceObservationCoordinator.cs"

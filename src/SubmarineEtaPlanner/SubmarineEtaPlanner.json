@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Version 1.2.1 adds a Known recorded gil total in the window header across all visible FCs. Click it to open Income → Balances, or hover for separate wallet/chest amounts, observation coverage, and freshness details. The total stays independent of Operations filters, identifies partial coverage, and adapts to narrow windows.",
+  "Changelog": "Version 1.2.2 adds /seta balance-debug to diagnose characters whose wallets remain unassigned to an FC. It reports the association decision, world IDs, FC data availability, and recorded FC ID in chat and the plugin log. Existing balance tracking rules and saved data are preserved.",
   "Tags": [
     "Submarine",
     "ETA",
