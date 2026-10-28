@@ -55,12 +55,14 @@ public sealed class BalanceAssociationDiagnosticsTests
         Assert.Null(diagnostics.Resolve().FreeCompanyId);
     }
 
-    [Fact]
-    public void AnFcIdWithoutAProxyNameStillWaitsForTheExistingReadinessGuard()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AReadyFcIdIsAcceptedRegardlessOfProxyNameAvailability(bool hasProxyName)
     {
-        var diagnostics = Ready with { HasFreeCompanyName = false };
+        var diagnostics = Ready with { HasFreeCompanyName = hasProxyName };
 
-        Assert.Null(diagnostics.Resolve().FreeCompanyId);
+        Assert.Equal(Ready.ProxyFreeCompanyId, diagnostics.Resolve().FreeCompanyId);
     }
 
     [Fact]

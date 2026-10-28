@@ -7,7 +7,7 @@
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/AlexValliere/submarineEtaPlanner",
   "IconUrl": "https://alexvalliere.github.io/submarineEtaPlanner/images/icon.png",
-  "Changelog": "Version 1.2.2 adds /seta balance-debug to diagnose characters whose wallets remain unassigned to an FC. It reports the association decision, world IDs, FC data availability, and recorded FC ID in chat and the plugin log. Existing balance tracking rules and saved data are preserved.",
+  "Changelog": "Version 1.2.3 fixes character wallets remaining unassigned when the game provides an FC ID but no FC name. The next valid home-world observation repairs the association automatically. Existing world, character-tag, and FC-ID checks remain in place; saved balances and diagnostic support are preserved.",
   "Tags": [
     "Submarine",
     "ETA",

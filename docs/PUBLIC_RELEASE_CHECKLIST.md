@@ -21,6 +21,7 @@
 - [ ] Check Income History and Projection, including mixed roles, insufficient samples, partial totals, FC scope, and saved display preferences; follow `docs/INCOME_PROJECTION_VERIFICATION.md` for the projection acceptance matrix.
 - [ ] Check Income Balances with several characters in one FC, an FC change, an unobserved and an empty chest, chest closure, logout/reload persistence, partial coverage, and the aligned FC chest row. Verify a closed chest does not acquire a new observation timestamp.
 - [ ] Run `/seta balance-debug` on an associated and an unassigned character. Verify the character and observation time, failed association check, and world/FC values are printed in chat and the plugin log; logout should clear the current diagnostic sample.
+- [ ] Verify an empty FC name does not block association when the character is on its home world with an FC tag and nonzero FC ID. Confirm a previously unassigned wallet moves into the FC total without resetting balances.
 - [ ] Check the Known recorded gil header at minimum window size and 150% scaling. Verify Operations filters do not change its total, hidden FCs are excluded, and clicking it clears an individual Income FC scope before opening Balances. Confirm wallet/chest tooltip values and unknown/zero/partial states agree with the Balances view.
 
 ## Publishing

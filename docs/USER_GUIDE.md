@@ -1,6 +1,6 @@
 # Submarine ETA Planner user guide
 
-Detailed behavior, forecasting assumptions, and data handling for version 1.2.2. For installation and first steps, see the [README](../README.md).
+Detailed behavior, forecasting assumptions, and data handling for version 1.2.3. For installation and first steps, see the [README](../README.md).
 
 ## Defaults and saved settings
 
@@ -99,6 +99,8 @@ Snapshots may have been recorded at different times. Transfers between character
 Balances are stored locally in `gil-balances.json` in the plugin configuration directory. Each character is identified by its content ID and each chest by its numeric FC ID, so observing several characters in one FC does not count the chest more than once. No balances are uploaded.
 
 If a character stays unassigned despite being in a tracked FC, run `/seta balance-debug` while logged in on that character. It prints the latest observation time, the FC-association decision, both sources of home/current world IDs, FC tag/name availability, and the proxy and recorded FC IDs to chat and the plugin log. Share that output with a bug report to identify the failing check. This command does not change the recorded association or request game data.
+
+FC matching does not require the game's FC name to be loaded. If a wallet was previously left unassigned for that reason, its association updates automatically when the character is on its home world with an FC tag and a valid FC ID. No balance reset is needed.
 
 ## Farming cycles and fuel runway
 

@@ -28,8 +28,8 @@ internal sealed record BalanceAssociationDiagnostics(
                 : (null, "The character FC tag is empty although the proxy FC ID is nonzero.");
         if (ProxyFreeCompanyId == 0)
             return (null, "The character has an FC tag but the proxy FC ID is zero.");
-        if (!HasFreeCompanyName)
-            return (null, "The proxy FC ID is nonzero but the FC name is empty.");
+        // The game can provide the numeric FC ID while its descriptive name is still empty.
+        // Balances are grouped by ID; the name is useful diagnostic metadata, not membership evidence.
         return (ProxyFreeCompanyId, "The current reader checks accept the FC association.");
     }
 

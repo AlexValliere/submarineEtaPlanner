@@ -127,6 +127,36 @@ public sealed class BalanceObservationCoordinatorTests
         Assert.Equal(10UL, Assert.Single(coordinator.Snapshot.Characters).FreeCompanyId);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0UL)]
+    public void MissingFcNameDoesNotPreventRepairingAndSavingAnUnassignedWalletWithUnchangedGil(
+        ulong? previouslyRecordedFreeCompanyId)
+    {
+        var character = new CharacterGilObservation(1, previouslyRecordedFreeCompanyId,
+            "Character", "World", 100, Now, false);
+        var store = new FakeStore { Loaded = new([character], []) };
+        var reader = new FakeReader { Current = new(character with { IsLive = true }, null) };
+        using var coordinator = new BalanceObservationCoordinator(reader, store, []);
+        coordinator.Tick(Now);
+        Assert.Equal(1, store.SaveCount);
+        Assert.Equal(previouslyRecordedFreeCompanyId,
+            Assert.Single(coordinator.Snapshot.Characters).FreeCompanyId);
+        var diagnostics = new BalanceAssociationDiagnostics(1, 1, 1, 1, true, 10, 1, false, 10);
+        var (freeCompanyId, _) = diagnostics.Resolve();
+        reader.Current = new(character with { FreeCompanyId = freeCompanyId, IsLive = true },
+            null, diagnostics);
+
+        coordinator.Tick(Now.AddSeconds(1));
+
+        Assert.Equal(10UL, Assert.Single(coordinator.Snapshot.Characters).FreeCompanyId);
+        Assert.Equal(100, GilBalanceCalculator.ForFreeCompany(10, coordinator.Snapshot).WalletGil);
+        Assert.Empty(GilBalanceCalculator.UnassignedCharacters(coordinator.Snapshot));
+        Assert.Equal(2, store.SaveCount);
+        Assert.Equal(10UL, Assert.Single(store.Saved!.Characters).FreeCompanyId);
+        Assert.Equal(100, Assert.Single(store.Saved.Characters).Gil);
+    }
+
     [Fact]
     public void AReadWithoutDiagnosticsReplacesThePreviousDiagnosticSample()
     {

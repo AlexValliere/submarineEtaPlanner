@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.3
+
+- Fixed character wallets remaining unassigned when the game provides an FC ID and character tag but leaves the FC name empty.
+- Repair previously unassigned wallets on the next valid home-world observation, without resetting recorded balances.
+- Preserve the existing world, character-tag, and FC-ID checks and add regression coverage for missing names and automatic association recovery.
+
 ## 1.2.2
 
 - Added `/seta balance-debug` to identify the check preventing a character wallet from being associated with an FC.
